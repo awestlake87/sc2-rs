@@ -1,0 +1,6 @@
+[package]
+name = "nuro-sc2"
+version = "0.1.0"
+authors = ["najen"]
+
+[dependencies]
