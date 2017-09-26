@@ -4,14 +4,10 @@ use std::path::{ PathBuf };
 use std::process;
 use std::io;
 use std::thread;
-use std::time;
-
-use ws::{ connect };
 
 use utils::Rect;
 
 use agent::Agent;
-use client::Client;
 
 pub struct CoordinatorSettings {
     pub starcraft_exe:      Option<PathBuf>,
@@ -65,6 +61,10 @@ pub struct Coordinator {
     starcraft_thread:   Option<
         thread::JoinHandle<io::Result<process::ExitStatus>>
     >,
+}
+
+pub struct StarCraftFuture {
+
 }
 
 impl Coordinator {
@@ -135,28 +135,13 @@ impl Coordinator {
                         Err(e) => return Err(e)
                     };
 
+                    println!("lalalsldasldasjakd");
+
                     child.wait()
                 }
             )
         );
 
-        thread::sleep(time::Duration::from_millis(5000));
-
-        let result = match
-            connect(
-                format!("ws://localhost:{}/{}", port, "sc2api"),
-                |out| Client { out: out }
-            )
-        {
-            Ok(_) => Ok(()),
-            Err(_) => Err(
-                CoordinatorErr::Todo("unable to open websocket")
-            )
-        };
-
-        self.starcraft_thread.take().unwrap().join().unwrap();
-        self.starcraft_thread = None;
-
-        result
+        Ok(())
     }
 }

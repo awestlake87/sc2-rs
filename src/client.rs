@@ -1,18 +1,60 @@
 
+use std::fmt;
+
 use ws;
+use bytes::{ BufMut };
+use protobuf::{ CodedOutputStream, Message };
+use nuro_sc2_proto::sc2api::Request;
+
+pub enum ClientErr {
+    SendFailed
+}
+
+impl fmt::Debug for ClientErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ClientErr::SendFailed => write!(f, "send failed")
+        }
+    }
+}
 
 pub struct Client {
-    pub out: ws::Sender
+    pub out:        ws::Sender,
 }
 
 impl ws::Handler for Client {
-    fn on_open(&mut self, _: ws::Handshake) -> ws::Result<()> {
-        self.out.send("Hello WebSocket")
+    fn on_message(&mut self, _: ws::Message) -> ws::Result<()> {
+        println!("received response");
+
+        Ok(())
     }
+}
 
-    fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
-        println!("Got Message: {}", msg);
+impl Client {
+    // TODO: error specificity
+    pub fn call_api(&self, req: Request) -> Result<(), ClientErr> {
+        let buf = Vec::new();
+        let mut writer = buf.writer();
 
-        self.out.close(ws::CloseCode::Normal)
+        {
+            let mut cos = CodedOutputStream::new(&mut writer);
+
+            match req.write_to(&mut cos) {
+                Ok(_) => { }
+                Err(_) => return Err(ClientErr::SendFailed)
+            }
+            match cos.flush() {
+                Ok(_) => { }
+                Err(_) => return Err(ClientErr::SendFailed)
+            }
+        }
+
+        match self.out.send(ws::Message::Binary(writer.into_inner())) {
+            Ok(_) => {
+                println!("sent payload");
+                Ok(())
+            }
+            Err(_) => Err(ClientErr::SendFailed)
+        }
     }
 }
