@@ -1,11 +1,8 @@
 
-extern crate protobuf;
+extern crate ws;
 
-mod proto;
+pub mod utils;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
-}
+pub mod agent;
+pub mod client;
+pub mod coordinator;
