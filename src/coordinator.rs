@@ -1,12 +1,11 @@
 
-use std::fmt;
 use std::path::{ PathBuf };
 use std::process;
 use std::io;
 use std::thread;
 
 use utils::Rect;
-
+use result::{ Result, Error };
 use agent::Agent;
 
 pub struct CoordinatorSettings {
@@ -27,32 +26,6 @@ impl Default for CoordinatorSettings {
     }
 }
 
-pub enum CoordinatorErr {
-    ExeDoesNotExist(Option<PathBuf>),
-    ExeNotSpecified,
-
-    UnableToStartProcess(io::Error),
-
-    Todo(&'static str),
-}
-
-impl fmt::Debug for CoordinatorErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            CoordinatorErr::ExeDoesNotExist(ref path) => write!(
-                f, "starcraft exe {:?} does not exist", path
-            ),
-            CoordinatorErr::ExeNotSpecified => write!(
-                f, "starcraft exe not specified"
-            ),
-            CoordinatorErr::UnableToStartProcess(ref err) => write!(
-                f, "unable to start process {:?}", *err
-            ),
-            CoordinatorErr::Todo(ref msg) => write!(f, "todo {:?}", *msg)
-        }
-    }
-}
-
 type AgentList = Vec<Box<Agent>>;
 
 pub struct Coordinator {
@@ -63,13 +36,9 @@ pub struct Coordinator {
     >,
 }
 
-pub struct StarCraftFuture {
-
-}
-
 impl Coordinator {
     pub fn from_settings(settings: CoordinatorSettings)
-        -> Result<Self, CoordinatorErr>
+        -> Result<Self>
     {
         Ok(
             Self {
@@ -84,7 +53,7 @@ impl Coordinator {
         self.participants = participants;
     }
 
-    pub fn launch_starcraft(&mut self) -> Result<(), CoordinatorErr> {
+    pub fn launch_starcraft(&mut self) -> Result<()> {
         let exe_file = match self.settings.starcraft_exe {
             Some(ref file) => {
                 if file.as_path().is_file() {
@@ -92,22 +61,22 @@ impl Coordinator {
                 }
                 else {
                     return Err(
-                        CoordinatorErr::ExeDoesNotExist(Some(file.clone()))
+                        Error::ExeDoesNotExist(Some(file.clone()))
                     )
                 }
             }
-            None => return Err(CoordinatorErr::ExeNotSpecified)
+            None => return Err(Error::ExeNotSpecified)
         };
 
         self.launch_process(exe_file)
     }
 
-    pub fn start_game(&mut self) -> Result<(), CoordinatorErr> {
-        Err(CoordinatorErr::Todo("start game"))
+    pub fn start_game(&mut self) -> Result<()> {
+        Err(Error::Todo("start game"))
     }
 
     fn launch_process(&mut self, exe_file: PathBuf)
-        -> Result<(), CoordinatorErr>
+        -> Result<()>
     {
         let port = match self.settings.port {
             Some(port) => port,

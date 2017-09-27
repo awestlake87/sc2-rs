@@ -1,22 +1,10 @@
 
-use std::fmt;
-
 use ws;
 use bytes::{ BufMut };
 use protobuf::{ CodedOutputStream, Message };
 use nuro_sc2_proto::sc2api::Request;
 
-pub enum ClientErr {
-    SendFailed
-}
-
-impl fmt::Debug for ClientErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ClientErr::SendFailed => write!(f, "send failed")
-        }
-    }
-}
+use result::{ Result, Error };
 
 pub struct Client {
     pub out:        ws::Sender,
@@ -32,7 +20,7 @@ impl ws::Handler for Client {
 
 impl Client {
     // TODO: error specificity
-    pub fn call_api(&self, req: Request) -> Result<(), ClientErr> {
+    pub fn call_api(&self, req: Request) -> Result<()> {
         let buf = Vec::new();
         let mut writer = buf.writer();
 
@@ -41,11 +29,11 @@ impl Client {
 
             match req.write_to(&mut cos) {
                 Ok(_) => { }
-                Err(_) => return Err(ClientErr::SendFailed)
+                Err(_) => return Err(Error::WebsockSendFailed)
             }
             match cos.flush() {
                 Ok(_) => { }
-                Err(_) => return Err(ClientErr::SendFailed)
+                Err(_) => return Err(Error::WebsockSendFailed)
             }
         }
 
@@ -54,7 +42,7 @@ impl Client {
                 println!("sent payload");
                 Ok(())
             }
-            Err(_) => Err(ClientErr::SendFailed)
+            Err(_) => Err(Error::WebsockSendFailed)
         }
     }
 }
