@@ -2,12 +2,11 @@
 use std::path::{ PathBuf };
 
 use futures::{ Future };
+use futures::sync::{ oneshot };
 use tokio_core::reactor;
 
 use super::{ Result, Error };
 use utils::Rect;
-use agent::Agent;
-use client::{ Client };
 use instance::{ Instance, InstanceSettings };
 
 #[derive(Clone)]
@@ -30,20 +29,21 @@ impl Default for CoordinatorSettings {
 }
 
 pub struct Coordinator {
-    core:               reactor::Core,
-    instance:           Instance,
-    client:             Option<Client>,
+    reactor:               reactor::Handle,
+    instance:           Instance
 }
 
 impl Coordinator {
     pub fn from_settings(settings: CoordinatorSettings) -> Result<Self> {
-        let core = reactor::Core::new().unwrap();
-
+        let reactor = match settings.reactor {
+            Some(reactor) => reactor,
+            None => return Err(Error::ReactorNotSpecified)
+        };
         // will probably add some auto-detect later
         let instance = match settings.starcraft_exe {
             Some(ref exe) => Instance::from_settings(
                 InstanceSettings {
-                    reactor: core.handle(),
+                    reactor: reactor.clone(),
                     starcraft_exe: exe.clone(),
                     port: settings.port,
                     window_rect: settings.window_rect
@@ -54,21 +54,55 @@ impl Coordinator {
 
         Ok(
             Self {
-                core: core,
+                reactor: reactor,
                 instance: instance,
-                client: None,
             }
         )
     }
 
-    pub fn run(&mut self) {
-        self.core.run(self.instance.run()).unwrap();
-        /*match self.core {
-            Some(core) => {
-                core.run(self.instance.run())
-                Ok()
-            },
-            None => self.instance.run()
-        }*/
+    pub fn run(&mut self) -> oneshot::Receiver<Result<()>> {
+        let (tx, rx) = oneshot::channel::<Result<()>>();
+
+        self.reactor.spawn(
+            self.instance.run().then(
+                move |result| match result {
+                    Ok(run_result) => match run_result {
+                        Ok(status) => {
+                            if status.success() {
+                                tx.send(Ok(()))
+                            }
+                            else {
+                                tx.send(
+                                    Err(
+                                        Error::InstanceExitedWithError(
+                                            status
+                                        )
+                                    )
+                                )
+                            }
+                        },
+                        Err(_) => tx.send(Err(Error::UnableToStopInstance))
+                    }
+                    Err(_) => tx.send(Err(Error::UnableToStartInstance))
+                }
+            ).then(
+                |_| Ok(())
+            )
+        );
+
+        self.reactor.spawn(
+            self.instance.connect().then(
+                |result| match result {
+                    Ok(mut client) => {
+                        client.quit()
+                    }
+                    Err(_) => Err(Error::WebsockSendFailed)
+                }
+            ).map_err(
+                |e| eprintln!("client failed {}", e)
+            )
+        );
+
+        rx
     }
 }

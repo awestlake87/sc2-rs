@@ -1,4 +1,3 @@
-#![feature(conservative_impl_trait)]
 
 extern crate bytes;
 extern crate futures;
@@ -19,19 +18,21 @@ mod instance;
 
 
 use std::result;
-use std::io;
 use std::fmt;
 use std::path::PathBuf;
-use std::any::Any;
+use std::process;
 
 pub type Result<T> = result::Result<T, Error>;
 
+#[derive(Debug)]
 pub enum Error {
     ExeDoesNotExist(PathBuf),
     ExeNotSpecified,
+    ReactorNotSpecified,
 
-    UnableToStartInstance(io::Error),
-    UnableToStopInstance(Box<Any + Send + 'static>),
+    UnableToStartInstance,
+    UnableToStopInstance,
+    InstanceExitedWithError(process::ExitStatus),
 
     WebsockOpenFailed,
     WebsockSendFailed,
@@ -39,7 +40,7 @@ pub enum Error {
     Todo(&'static str),
 }
 
-impl fmt::Debug for Error {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::ExeDoesNotExist(ref path) => write!(
@@ -48,13 +49,22 @@ impl fmt::Debug for Error {
             Error::ExeNotSpecified => write!(
                 f, "starcraft exe not specified"
             ),
+            Error::ReactorNotSpecified => write!(
+                f, "reactor not specified"
+            ),
 
-            Error::UnableToStartInstance(ref e) => write!(
-                f, "unable to launch instance {:?}", *e
+            Error::UnableToStartInstance => write!(
+                f, "unable to start instance"
             ),
-            Error::UnableToStopInstance(ref e) => write!(
-                f, "unable to stop instance {:?}", *e
+            Error::UnableToStopInstance => write!(
+                f, "unable to stop instance"
             ),
+            Error::InstanceExitedWithError(status) => match status.code() {
+                Some(code) => write!(
+                    f, "instance exited with status: {}", code
+                ),
+                None => write!(f, "instance exited with error")
+            },
 
             Error::WebsockOpenFailed => write!(f, "websocket open failed"),
             Error::WebsockSendFailed => write!(f, "websocket send failed"),
