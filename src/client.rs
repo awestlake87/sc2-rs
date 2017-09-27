@@ -4,7 +4,7 @@ use bytes::{ BufMut };
 use protobuf::{ CodedOutputStream, Message };
 use sc2_proto::sc2api::Request;
 
-use result::{ Result, Error };
+use super::{ Result, Error };
 
 pub struct Client {
     pub out:        ws::Sender,
