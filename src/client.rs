@@ -1,5 +1,17 @@
 
-use ws;
+use tungstenite::client::client;
+use tungstenite::protocol::WebSocket;
+use url::Url;
+
+use super::{ Result, Error };
+
+pub struct Client {
+}
+
+impl Client {
+}
+
+/*use ws;
 use bytes::{ BufMut };
 use protobuf::{ CodedOutputStream, Message };
 use sc2_proto::sc2api::Request;
@@ -45,4 +57,4 @@ impl Client {
             Err(_) => Err(Error::WebsockSendFailed)
         }
     }
-}
+}*/

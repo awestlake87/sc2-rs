@@ -1,8 +1,11 @@
+#![feature(conservative_impl_trait)]
 
-extern crate bytes;
-extern crate sc2_proto;
-extern crate protobuf;
-extern crate ws;
+extern crate futures;
+extern crate tokio_core;
+extern crate tokio_timer;
+extern crate tokio_tungstenite;
+extern crate tungstenite;
+extern crate url;
 
 pub mod utils;
 
@@ -27,6 +30,7 @@ pub enum Error {
     UnableToStartInstance(io::Error),
     UnableToStopInstance(Box<Any + Send + 'static>),
 
+    WebsockOpenFailed,
     WebsockSendFailed,
 
     Todo(&'static str),
@@ -49,6 +53,7 @@ impl fmt::Debug for Error {
                 f, "unable to stop instance {:?}", *e
             ),
 
+            Error::WebsockOpenFailed => write!(f, "websocket open failed"),
             Error::WebsockSendFailed => write!(f, "websocket send failed"),
 
             Error::Todo(ref msg) => write!(f, "todo {:?}", *msg)
