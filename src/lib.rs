@@ -1,6 +1,9 @@
 #![feature(conservative_impl_trait)]
 
+extern crate bytes;
 extern crate futures;
+extern crate protobuf;
+extern crate sc2_proto;
 extern crate tokio_core;
 extern crate tokio_timer;
 extern crate tokio_tungstenite;

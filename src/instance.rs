@@ -5,11 +5,15 @@ use std::thread;
 use std::time;
 use std::process;
 
+use bytes::{ Buf, BufMut };
 use futures::{ Future, Stream, Sink };
 use futures::sync::{ oneshot };
+use protobuf::{ CodedOutputStream, Message };
+use sc2_proto::sc2api::{ Request };
 use tokio_core::reactor;
 use tokio_timer::Timer;
-use tokio_tungstenite::connect_async;
+use tokio_tungstenite::{ connect_async };
+use tungstenite::{ Message as WebsockMessage };
 use url::Url;
 
 use super::{ Result, Error };
@@ -79,12 +83,43 @@ impl Instance {
     }
 
     pub fn spawn_client(reactor: reactor::Handle, url: Url) {
-        reactor.clone().spawn(
+        let ok_reactor = reactor.clone();
+        let err_reactor = reactor.clone();
+
+        reactor.spawn(
             connect_async(url.clone(), reactor.remote().clone()).and_then(
-                |ws_stream| {
+                move |(ws_stream, _)| {
                     println!("websocket handshake completed successfully");
 
-                    
+                    let mut req = Request::new();
+
+                    req.mut_quit();
+
+                    let buf = Vec::new();
+                    let mut writer = buf.writer();
+
+                    {
+                        let mut cos = CodedOutputStream::new(&mut writer);
+
+                        req.write_to(&mut cos).unwrap();
+                        cos.flush().unwrap();
+                    }
+
+                    ok_reactor.spawn(
+                        ws_stream.send(
+                            WebsockMessage::Binary(writer.into_inner())
+                        ).and_then(
+                            |_| {
+                                println!("yay!");
+
+                                Ok(())
+                            }
+                        ).map_err(
+                            |e| {
+                                println!("websocket send failed: {}", e);
+                            }
+                        )
+                    );
 
                     Ok(())
                 }
@@ -95,10 +130,10 @@ impl Instance {
 
                     let timer = Timer::default();
 
-                    reactor.clone().spawn(
+                    err_reactor.clone().spawn(
                         timer.sleep(time::Duration::from_millis(1000)).then(
                             move |_| {
-                                Self::spawn_client(reactor, url);
+                                Self::spawn_client(err_reactor, url);
 
                                 Ok(())
                             }

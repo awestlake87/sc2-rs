@@ -4,7 +4,9 @@ version = "0.1.0"
 authors = ["najen"]
 
 [dependencies]
+bytes = "*"
 futures = "*"
+protobuf = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
 tokio-core = "*"
 tokio-timer = "*"
