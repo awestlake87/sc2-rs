@@ -2,7 +2,7 @@
 use ws;
 use bytes::{ BufMut };
 use protobuf::{ CodedOutputStream, Message };
-use nuro_sc2_proto::sc2api::Request;
+use sc2_proto::sc2api::Request;
 
 use result::{ Result, Error };
 
