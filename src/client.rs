@@ -1,14 +1,12 @@
 
 use std::io;
-use std::time;
 
 use bytes::{ Buf, BufMut };
 use futures::prelude::*;
-use futures::sync::{ mpsc, oneshot };
+use futures::sync::{ mpsc };
 use protobuf::{ CodedOutputStream, Message, parse_from_reader  };
 use sc2_proto::sc2api::{ Request, Response };
 use tokio_core::{ reactor };
-use tokio_timer::Timer;
 use tokio_tungstenite::{ connect_async };
 use tungstenite;
 use url::Url;
@@ -22,14 +20,60 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn connect(reactor: reactor::Handle, url: Url)
-        -> oneshot::Receiver<Self>
-    {
-        let (tx, rx) = oneshot::channel::<Self>();
+    #[async]
+    pub fn connect(reactor: reactor::Handle, url: Url) -> Result<Self> {
+        match await!(connect_async(url.clone(), reactor.remote().clone())) {
+            Ok((ws_stream, _)) => {
+                println!("websocket connected");
 
-        attempt_connect(reactor, url, tx);
+                let (sink, stream) = ws_stream.split();
+                let (req_tx, req_rx) = mpsc::channel(1);
+                let (rsp_tx, rsp_rx) = mpsc::channel(1);
 
-        rx
+                // forward the requests to the websocket's sink
+                reactor.spawn(
+                    req_rx.map_err(
+                        |_| tungstenite::Error::Io(
+                            io::Error::new(
+                                io::ErrorKind::Other,
+                                "websocket failed to queue message"
+                            )
+                        )
+                    ).forward(sink).then(
+                        |_| Ok(())
+                    )
+                );
+
+                let client_reactor = reactor.clone();
+
+                // create a task to channel websocket messages to client
+                reactor.clone().spawn(
+                    stream.for_each(
+                        move |msg| {
+                            reactor.spawn(
+                                rsp_tx.clone().send(msg).then(
+                                    |_| Ok(())
+                                )
+                            );
+                            Ok(())
+                        }
+                    ).then(|_| Ok(()))
+                );
+
+                Ok(
+                    Client {
+                        reactor: client_reactor,
+                        sender: req_tx,
+                        receiver: rsp_rx
+                    }
+                )
+            },
+            Err(e) => {
+                println!("websocket handshaked failed: {}", e);
+
+                Err(Error::WebsockOpenFailed)
+            }
+        }
     }
 
     #[async]
@@ -146,80 +190,4 @@ impl Client {
             }
         }
     }
-}
-
-fn attempt_connect(
-    reactor: reactor::Handle, url: Url, tx: oneshot::Sender<Client>
-) {
-    reactor.clone().spawn(
-        connect_async(url.clone(), reactor.remote().clone()).then(
-            move |result| {
-                match result {
-                    Ok((ws_stream, _)) => {
-                        println!("websocket handshake completed successfully");
-
-                        let (sink, stream) = ws_stream.split();
-                        let (req_tx, req_rx) = mpsc::channel(1);
-                        let (rsp_tx, rsp_rx) = mpsc::channel(1);
-
-                        reactor.spawn(
-                            req_rx.map_err(
-                                |_| tungstenite::Error::Io(
-                                    io::Error::new(
-                                        io::ErrorKind::Other,
-                                        "websocket failed to queue message"
-                                    )
-                                )
-                            ).forward(sink).then(
-                                |_| Ok(())
-                            )
-                        );
-
-                        let client_reactor = reactor.clone();
-
-                        reactor.clone().spawn(
-                            stream.for_each(
-                                move |msg| {
-                                    reactor.spawn(
-                                        rsp_tx.clone().send(msg).then(
-                                            |_| Ok(())
-                                        )
-                                    );
-                                    Ok(())
-                                }
-                            ).then(|_| Ok(()))
-                        );
-
-                        tx.send(
-                            Client {
-                                reactor: client_reactor,
-                                sender: req_tx,
-                                receiver: rsp_rx
-                            }
-                        )
-                    }
-                    Err(e) => {
-                        println!("websocket handshaked failed: {}", e);
-                        println!("retrying...");
-
-                        let timer = Timer::default();
-
-                        reactor.clone().spawn(
-                            timer.sleep(
-                                time::Duration::from_millis(1000)
-                            ).then(
-                                move |_| {
-                                    attempt_connect(reactor, url, tx);
-
-                                    Ok(())
-                                }
-                            )
-                        );
-
-                        Ok(())
-                    }
-                }
-            }
-        ).then(|_| Ok(()))
-    );
 }

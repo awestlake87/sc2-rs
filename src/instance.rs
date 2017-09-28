@@ -1,12 +1,15 @@
 
 use std::path::PathBuf;
 use std::io;
+use std::time;
 use std::thread;
 use std::result;
 use std::process;
 
+use futures::prelude::*;
 use futures::sync::{ oneshot };
 use tokio_core::reactor;
+use tokio_timer::Timer;
 use url::Url;
 
 use super::{ Result, Error };
@@ -35,10 +38,8 @@ impl Instance {
         }
     }
 
-    pub fn run(&self)
-        -> oneshot::Receiver<
-            result::Result<process::ExitStatus, io::Error>
-        >
+    pub fn start(self)
+        -> Result<(oneshot::Receiver<io::Result<process::ExitStatus>>, Self)>
     {
         let exe = self.settings.starcraft_exe.clone();
         let port = self.settings.port;
@@ -72,16 +73,41 @@ impl Instance {
             }
         );
 
-        rx
+        Ok((rx, self))
     }
 
-    pub fn connect(&self) -> oneshot::Receiver<Client> {
+    #[async]
+    pub fn connect(self) -> Result<Client> {
         let url = Url::parse(
             &format!("ws://localhost:{}/sc2api", self.settings.port)[..]
         ).expect("somehow I fucked up the URL");
 
         println!("attempting connection to {:?}", url);
 
-        Client::connect(self.settings.reactor.clone(), url)
+        for i in 0..10 {
+            match
+                await!(
+                    Client::connect(self.settings.reactor.clone(), url.clone())
+                )
+            {
+                Ok(client) => return Ok(client),
+                Err(_) => {
+                    let timer = Timer::default();
+
+                    match
+                        await!(timer.sleep(time::Duration::from_millis(1000)))
+                    {
+                        Ok(_) => (),
+                        Err(e) => {
+                            eprintln!("timeout failed: {}", e);
+                        }
+                    }
+                }
+            };
+
+            println!("retrying {}...", i);
+        };
+
+        Err(Error::WebsockOpenFailed)
     }
 }

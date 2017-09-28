@@ -1,7 +1,9 @@
 
+use std::io;
+use std::process;
 use std::path::{ PathBuf };
 
-use futures::{ Future };
+use futures::prelude::*;
 use futures::sync::{ oneshot };
 use tokio_core::reactor;
 
@@ -20,16 +22,15 @@ pub struct CoordinatorSettings {
 impl Default for CoordinatorSettings {
     fn default() -> Self {
         Self {
-            reactor: None,
-            starcraft_exe: None,
-            port: 9168,
-            window_rect: Rect::<u32> { x: 120, y: 100, w: 1024, h: 768 }
+            reactor:        None,
+            starcraft_exe:  None,
+            port:           9168,
+            window_rect:    Rect::<u32> { x: 120, y: 100, w: 1024, h: 768 }
         }
     }
 }
 
 pub struct Coordinator {
-    reactor:               reactor::Handle,
     instance:           Instance
 }
 
@@ -43,7 +44,7 @@ impl Coordinator {
         let instance = match settings.starcraft_exe {
             Some(ref exe) => Instance::from_settings(
                 InstanceSettings {
-                    reactor: reactor.clone(),
+                    reactor: reactor,
                     starcraft_exe: exe.clone(),
                     port: settings.port,
                     window_rect: settings.window_rect
@@ -52,63 +53,53 @@ impl Coordinator {
             None => return Err(Error::ExeNotSpecified)
         };
 
-        Ok(
-            Self {
-                reactor: reactor,
-                instance: instance,
-            }
-        )
+        Ok(Self { instance: instance })
     }
 
-    pub fn run(&mut self) -> oneshot::Receiver<Result<()>> {
-        let (tx, rx) = oneshot::channel::<Result<()>>();
-
-        self.reactor.spawn(
-            self.instance.run().then(
-                move |result| match result {
-                    Ok(run_result) => match run_result {
-                        Ok(status) => {
-                            if status.success() {
-                                tx.send(Ok(()))
-                            }
-                            else {
-                                tx.send(
-                                    Err(
-                                        Error::InstanceExitedWithError(
-                                            status
-                                        )
-                                    )
-                                )
-                            }
+    #[async]
+    fn launch(self)
+        -> Result<Option<oneshot::Receiver<io::Result<process::ExitStatus>>>>
+    {
+        match self.instance.start() {
+            Ok((cleanup, instance)) => {
+                match await!(instance.connect()) {
+                    Ok(client) => match await!(client.create_game()) {
+                        Ok(client) => match await!(client.quit()) {
+                            Ok(_) => Ok(Some(cleanup)),
+                            Err(e) => Err(e)
                         },
-                        Err(_) => tx.send(Err(Error::UnableToStopInstance))
-                    }
-                    Err(_) => tx.send(Err(Error::UnableToStartInstance))
+                        Err(e) => Err(e)
+                    },
+                    Err(e) => Err(e)
                 }
-            ).then(
-                |_| Ok(())
-            )
-        );
+            }
+            Err(e) => Err(e)
+        }
+    }
 
-        let reactor = self.reactor.clone();
+    #[async]
+    pub fn run(self) -> Result<()> {
+        match await!(self.launch()) {
+            Ok(Some(cleanup)) => match await!(cleanup) {
+                Ok(result) => match result {
+                    Ok(status) => {
+                        if status.success() {
+                            Ok(())
+                        }
+                        else {
+                            Err(Error::InstanceExitedWithError(status))
+                        }
+                    },
+                    Err(e) => {
+                        println!("error while cleaning up instance: {}", e);
 
-        self.reactor.spawn(
-            self.instance.connect().then(
-                move |result| match result {
-                    Ok(client) => {
-                        reactor.spawn(
-                            client.create_game().then(|_| Ok(()))
-                        );
-
-                        Ok(())
+                        Err(Error::UnableToStopInstance)
                     }
-                    Err(_) => Err(Error::WebsockSendFailed)
-                }
-            ).map_err(
-                |e| eprintln!("client failed {}", e)
-            )
-        );
-
-        rx
+                },
+                Err(_) => Err(Error::UnableToStopInstance)
+            },
+            Ok(None) => Ok(()),
+            Err(e) => Err(e)
+        }
     }
 }
