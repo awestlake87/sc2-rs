@@ -36,6 +36,7 @@ pub enum Error {
 
     WebsockOpenFailed,
     WebsockSendFailed,
+    WebsockRecvFailed,
 
     Todo(&'static str),
 }
@@ -68,6 +69,7 @@ impl fmt::Display for Error {
 
             Error::WebsockOpenFailed => write!(f, "websocket open failed"),
             Error::WebsockSendFailed => write!(f, "websocket send failed"),
+            Error::WebsockRecvFailed => write!(f, "websocket recv failed"),
 
             Error::Todo(ref msg) => write!(f, "todo {:?}", *msg)
         }

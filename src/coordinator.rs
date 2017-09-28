@@ -90,11 +90,17 @@ impl Coordinator {
             )
         );
 
+        let reactor = self.reactor.clone();
+
         self.reactor.spawn(
             self.instance.connect().then(
-                |result| match result {
-                    Ok(mut client) => {
-                        client.quit()
+                move |result| match result {
+                    Ok(client) => {
+                        reactor.spawn(
+                            client.create_game().then(|_| Ok(()))
+                        );
+
+                        Ok(())
                     }
                     Err(_) => Err(Error::WebsockSendFailed)
                 }
