@@ -1,6 +1,7 @@
+#![feature(proc_macro, conservative_impl_trait, generators)]
 
 extern crate bytes;
-extern crate futures;
+extern crate futures_await as futures;
 extern crate protobuf;
 extern crate sc2_proto;
 extern crate tokio_core;

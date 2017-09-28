@@ -3,8 +3,8 @@ use std::io;
 use std::time;
 
 use bytes::{ Buf, BufMut };
-use futures::{ Future, Stream, Sink };
-use futures::sync::{ oneshot, mpsc };
+use futures::prelude::*;
+use futures::sync::{ mpsc, oneshot };
 use protobuf::{ CodedOutputStream, Message, parse_from_reader  };
 use sc2_proto::sc2api::{ Request, Response };
 use tokio_core::{ reactor };
@@ -32,9 +32,8 @@ impl Client {
         rx
     }
 
-    pub fn send(self, req: Request) -> oneshot::Receiver<Result<Self>> {
-        let (tx, rx) = oneshot::channel::<Result<Self>>();
-
+    #[async]
+    pub fn send(self, req: Request) -> Result<Self> {
         let buf = Vec::new();
         let mut writer = buf.writer();
 
@@ -47,134 +46,105 @@ impl Client {
 
         let Self { reactor, sender, receiver } = self;
 
-        reactor.clone().spawn(
-            sender.send(
-                tungstenite::Message::Binary(writer.into_inner())
-            ).then(
-                move |result| tx.send(
-                    match result {
-                        Ok(sender) => Ok(
-                            Self {
-                                reactor: reactor,
-                                sender: sender,
-                                receiver: receiver
-                            }
-                        ),
-                        Err(_) => Err(Error::WebsockSendFailed)
-                    }
+        match
+            await!(
+                sender.send(
+                    tungstenite::Message::Binary(writer.into_inner())
                 )
-            ).then(|_| Ok(()))
-        );
-
-        rx
+            )
+        {
+            Ok(sender) => Ok(
+                Self {
+                    reactor: reactor,
+                    sender: sender,
+                    receiver: receiver
+                }
+            ),
+            Err(_) => Err(Error::WebsockSendFailed)
+        }
     }
 
-    pub fn recv(self) -> oneshot::Receiver<Result<(Response, Self)>> {
-        let (tx, rx) = oneshot::channel::<Result<(Response, Self)>>();
-
+    #[async]
+    pub fn recv(self) -> Result<(Response, Self)> {
         let Self { reactor, sender, receiver } = self;
 
-        reactor.clone().spawn(
-            receiver.into_future().then(
-                move |result| match result {
-                    Ok((
-                        Some(tungstenite::Message::Binary(buf)), receiver
-                    )) => {
-                        let cursor = io::Cursor::new(buf);
+        match await!(receiver.into_future()) {
+            Ok((Some(tungstenite::Message::Binary(buf)), receiver)) => {
+                let cursor = io::Cursor::new(buf);
 
-                        tx.send(
-                            match
-                                parse_from_reader::<Response>(
-                                    &mut cursor.reader()
-                                )
-                            {
-                                Ok(rsp) => Ok((
-                                    rsp,
-                                    Self {
-                                        sender: sender,
-                                        reactor: reactor,
-                                        receiver: receiver
-                                    }
-                                )),
-                                Err(e) => {
-                                    eprintln!(
-                                        "unable to parse response: {}", e
-                                    );
-
-                                    Err(Error::WebsockRecvFailed)
-                                }
-                            }
+                match
+                    parse_from_reader::<Response>(
+                        &mut cursor.reader()
+                    )
+                {
+                    Ok(rsp) => Ok((
+                        rsp,
+                        Self {
+                            sender: sender,
+                            reactor: reactor,
+                            receiver: receiver
+                        }
+                    )),
+                    Err(e) => {
+                        eprintln!(
+                            "unable to parse response: {}", e
                         );
 
-                        Ok(())
-                    },
-                    _ => {
-                        tx.send(Err(Error::WebsockRecvFailed));
-                        Ok(())
+                        Err(Error::WebsockRecvFailed)
                     }
                 }
-            )
-        );
-
-        rx
+            }
+            Ok((Some(_), _)) => {
+                eprintln!("unexpected non-binary message, retrying recv");
+                Err(Error::WebsockRecvFailed)
+            }
+            Ok((None, _)) => {
+                eprintln!("nothing received");
+                Err(Error::WebsockRecvFailed)
+            }
+            Err(_) => {
+                eprintln!("unable to receive message");
+                Err(Error::WebsockRecvFailed)
+            }
+        }
     }
 
-    pub fn quit(self) -> oneshot::Receiver<Result<Self>> {
+    #[async]
+    pub fn call(self, req: Request) -> Result<(Response, Self)>
+    {
+        match await!(self.send(req)) {
+            Ok(client) => await!(client.recv()),
+            Err(e) => Err(e)
+        }
+    }
+
+    #[async]
+    pub fn quit(self) -> Result<Self> {
         let mut req = Request::new();
 
         req.mut_quit();
 
-        self.send(req)
+        await!(self.send(req))
     }
 
-    pub fn create_game(self) -> oneshot::Receiver<Result<Self>> {
-        let (tx, rx) = oneshot::channel::<Result<Self>>();
-
+    #[async]
+    pub fn create_game(self) -> Result<Self> {
         let mut req = Request::new();
 
         req.mut_create_game().mut_local_map().set_map_path(
             "/home/najen/StarCraftII/Maps/AbyssalReefLE.SC2Map".to_string()
         );
 
-        self.reactor.clone().spawn(
-            self.send(req).then(
-                move |fut_result| match fut_result {
-                    Ok(result) => match result {
-                        Ok(client) => {
-                            client.reactor.clone().spawn(
-                                client.recv().then(
-                                    move |fut_result| match fut_result {
-                                        Ok(result) => match result {
-                                            Ok((rsp, client)) => {
-                                                println!("parsed rsp {:#?}", rsp);
+        match await!(self.call(req)) {
+            Ok((rsp, client)) => {
+                println!("parsed rsp {:#?}", rsp);
 
-                                                tx.send(Ok(client))
-                                            }
-                                            Err(e) => {
-                                                eprintln!("receive failed! {}", e);
-
-                                                tx.send(Err(e))
-                                            }
-                                        },
-                                        Err(_) => tx.send(Err(Error::WebsockRecvFailed))
-                                    }
-                                ).then(|_| Ok(()))
-                            );
-
-                            Ok(())
-                        },
-                        Err(e) => {
-                            tx.send(Err(e));
-
-                            Ok(())
-                        }
-                    },
-                    Err(_) => tx.send(Err(Error::WebsockRecvFailed))
-                }
-            ).then(|_| Ok(()))
-        );
-
-        rx
+                await!(client.quit())
+            },
+            Err(e) => {
+                Err(e)
+            }
+        }
     }
 }
 

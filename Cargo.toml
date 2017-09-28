@@ -5,7 +5,7 @@ authors = ["najen"]
 
 [dependencies]
 bytes = "*"
-futures = "*"
+futures-await = { git = "https://github.com/alexcrichton/futures-await" }
 protobuf = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
 tokio-core = "0.1.9"
