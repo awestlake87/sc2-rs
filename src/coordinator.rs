@@ -14,24 +14,30 @@ use instance::{ Instance, InstanceSettings };
 #[derive(Clone)]
 pub struct CoordinatorSettings {
     pub reactor:            Option<reactor::Handle>,
-    pub starcraft_exe:      Option<PathBuf>,
+    pub exe:                Option<PathBuf>,
     pub port:               u16,
-    pub window_rect:        Rect<u32>,
+    pub window:             Rect<u32>,
 }
 
 impl Default for CoordinatorSettings {
     fn default() -> Self {
         Self {
             reactor:        None,
-            starcraft_exe:  None,
+            exe:            None,
             port:           9168,
-            window_rect:    Rect::<u32> { x: 120, y: 100, w: 1024, h: 768 }
+            window:         Rect::<u32> { x: 120, y: 100, w: 1024, h: 768 }
         }
     }
 }
 
 pub struct Coordinator {
-    instance:           Instance
+    reactor:                reactor::Handle,
+    exe:                    PathBuf,
+    port:                   u16,
+    window:                 Rect<u32>,
+    cleanups:               Vec<
+        oneshot::Receiver<io::Result<process::ExitStatus>>
+    >
 }
 
 impl Coordinator {
@@ -40,66 +46,52 @@ impl Coordinator {
             Some(reactor) => reactor,
             None => return Err(Error::ReactorNotSpecified)
         };
-        // will probably add some auto-detect later
-        let instance = match settings.starcraft_exe {
-            Some(ref exe) => Instance::from_settings(
-                InstanceSettings {
-                    reactor: reactor,
-                    starcraft_exe: exe.clone(),
-                    port: settings.port,
-                    window_rect: settings.window_rect
-                }
-            )?,
+
+        let exe = match settings.exe {
+            Some(exe) => exe,
             None => return Err(Error::ExeNotSpecified)
         };
 
-        Ok(Self { instance: instance })
-    }
-
-    #[async]
-    fn launch(self)
-        -> Result<Option<oneshot::Receiver<io::Result<process::ExitStatus>>>>
-    {
-        match self.instance.start() {
-            Ok((cleanup, instance)) => {
-                match await!(instance.connect()) {
-                    Ok(client) => match await!(client.create_game()) {
-                        Ok(client) => match await!(client.quit()) {
-                            Ok(_) => Ok(Some(cleanup)),
-                            Err(e) => Err(e)
-                        },
-                        Err(e) => Err(e)
-                    },
-                    Err(e) => Err(e)
-                }
+        Ok(
+            Self {
+                reactor: reactor,
+                exe: exe,
+                port: settings.port,
+                window: settings.window,
+                cleanups:       vec![ ]
             }
+        )
+    }
+
+    pub fn launch(&mut self) -> Result<Instance> {
+        let instance = Instance::from_settings(
+            InstanceSettings {
+                reactor: self.reactor.clone(),
+                starcraft_exe: self.exe.clone(),
+                port: self.port,
+                window_rect: self.window
+            }
+        )?;
+
+        match instance.start() {
+            Ok((cleanup, instance)) => {
+                self.port += 1;
+                self.cleanups.push(cleanup);
+                Ok(instance)
+            },
             Err(e) => Err(e)
         }
     }
 
     #[async]
-    pub fn run(self) -> Result<()> {
-        match await!(self.launch()) {
-            Ok(Some(cleanup)) => match await!(cleanup) {
-                Ok(result) => match result {
-                    Ok(status) => {
-                        if status.success() {
-                            Ok(())
-                        }
-                        else {
-                            Err(Error::InstanceExitedWithError(status))
-                        }
-                    },
-                    Err(e) => {
-                        println!("error while cleaning up instance: {}", e);
-
-                        Err(Error::UnableToStopInstance)
-                    }
-                },
-                Err(_) => Err(Error::UnableToStopInstance)
-            },
-            Ok(None) => Ok(()),
-            Err(e) => Err(e)
+    pub fn cleanup(self) -> Result<()> {
+        for cleanup in self.cleanups {
+            match await!(cleanup) {
+                Ok(_) => (),
+                Err(e) => eprintln!("unable to stop process {}", e)
+            }
         }
+
+        Ok(())
     }
 }
