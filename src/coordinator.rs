@@ -15,7 +15,7 @@ use super::{ Result, Error };
 use utils::Rect;
 use client::{ Client };
 use game::{ GameSettings };
-use instance::{ Instance, InstanceSettings };
+use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player };
 
 #[derive(Copy, Clone)]
@@ -141,8 +141,8 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
             "{}/Support{}",
             dir.to_str().unwrap(),
             match arch {
-                X64 => "_x64",
-                X32 => ""
+                ExeArch::X64 => "_x64",
+                ExeArch::X32 => ""
             }
         )[..]
     );
@@ -179,28 +179,54 @@ impl Coordinator {
         )
     }
 
+    pub fn start_instance(&mut self, instance: Instance) -> Result<Instance> {
+        let (cleanup, instance) = instance.start()?;
+
+        match cleanup {
+            Some(cleanup) => {
+                self.cleanups.push(cleanup);
+            }
+            _ => ()
+        };
+
+        Ok(instance)
+    }
+
     pub fn launch(&mut self) -> Result<Instance> {
         let instance = Instance::from_settings(
             InstanceSettings {
+                kind: InstanceKind::Local,
                 reactor: match self.core {
                     Some(ref mut core) => core.handle(),
                     None => return Err(Error::Todo("jkasdfjsd"))
                 },
-                exe: self.exe.clone(),
+                exe: Some(self.exe.clone()),
                 pwd: self.pwd.clone(),
-                port: self.port,
+                address: ("127.0.0.1".to_string(), self.port),
                 window_rect: self.window
             }
         )?;
 
-        match instance.start() {
-            Ok((cleanup, instance)) => {
-                self.port += 1;
-                self.cleanups.push(cleanup);
-                Ok(instance)
-            },
-            Err(e) => Err(e)
-        }
+        self.port += 1;
+        self.start_instance(instance)
+    }
+
+    pub fn remote(&mut self, host: String, port: u16) -> Result<Instance> {
+        let instance = Instance::from_settings(
+            InstanceSettings {
+                kind: InstanceKind::Remote,
+                reactor: match self.core {
+                    Some(ref mut core) => core.handle(),
+                    None => return Err(Error::Todo("lalsldas"))
+                },
+                address: (host, port),
+                exe: None,
+                pwd: None,
+                window_rect: self.window
+            }
+        )?;
+
+        self.start_instance(instance)
     }
 
     pub fn start_game(&mut self, players: Vec<Player>, settings: GameSettings)

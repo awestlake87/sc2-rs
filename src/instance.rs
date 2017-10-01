@@ -16,35 +16,58 @@ use super::{ Result, Error };
 use utils::Rect;
 use client::{ Client };
 
+#[derive(Copy, Clone)]
+pub enum InstanceKind {
+    Remote,
+    Local
+}
+
 #[derive(Clone)]
 pub struct InstanceSettings {
+    pub kind:               InstanceKind,
     pub reactor:            reactor::Handle,
-    pub exe:                PathBuf,
+    pub exe:                Option<PathBuf>,
     pub pwd:                Option<PathBuf>,
-    pub port:               u16,
+    pub address:            (String, u16),
     pub window_rect:        Rect<u32>
 }
 
 pub struct Instance {
-    settings:           InstanceSettings,
+    settings:               InstanceSettings
 }
 
 impl Instance {
     pub fn from_settings(settings: InstanceSettings) -> Result<Self> {
-        if settings.exe.as_path().is_file() {
-            Ok(Self { settings: settings })
-        }
-        else {
-            Err(Error::ExeDoesNotExist(settings.exe))
+        match settings.kind {
+            InstanceKind::Local => {
+                match settings.exe {
+                    Some(ref exe) => {
+                        if !exe.as_path().is_file() {
+                            return Err(Error::ExeDoesNotExist(exe.clone()))
+                        }
+                    }
+                    None => return Err(Error::ExeNotSpecified)
+                }
+
+                Ok(Self { settings: settings })
+            },
+            InstanceKind::Remote => Ok(Self { settings: settings })
         }
     }
 
     pub fn start(self)
-        -> Result<(oneshot::Receiver<io::Result<process::ExitStatus>>, Self)>
+        -> Result<
+            (Option<oneshot::Receiver<io::Result<process::ExitStatus>>>, Self)
+        >
     {
-        let exe = self.settings.exe.clone();
+        match self.settings.kind {
+            InstanceKind::Remote => return Ok((None, self)),
+            _ => ()
+        }
+
+        let exe = self.settings.exe.clone().unwrap().clone();
         let pwd = self.settings.pwd.clone();
-        let port = self.settings.port;
+        let (_, port) = self.settings.address;
         let window = self.settings.window_rect;
 
         let (tx, rx) = oneshot::channel::<
@@ -91,13 +114,15 @@ impl Instance {
             }
         );
 
-        Ok((rx, self))
+        Ok((Some(rx), self))
     }
 
     #[async]
     pub fn connect(self) -> Result<Client> {
+        let (host, port) = self.settings.address;
+
         let url = Url::parse(
-            &format!("ws://localhost:{}/sc2api", self.settings.port)[..]
+            &format!("ws://{}:{}/sc2api", host, port)[..]
         ).expect("somehow I fucked up the URL");
 
         println!("attempting connection to {:?}", url);
