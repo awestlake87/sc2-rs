@@ -277,7 +277,7 @@ impl Coordinator {
         let cleanup = async_block! {
             for client in clients {
                 match client {
-                    Some(client) => match await!(client.quit()) {
+                    Some(mut client) => match client.quit() {
                         Ok(_) => (),
                         Err(e) => return Err(e)
                     },

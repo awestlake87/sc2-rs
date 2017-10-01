@@ -1,5 +1,6 @@
 
 use std::io;
+use std::mem;
 
 use bytes::{ Buf, BufMut };
 use futures::prelude::*;
@@ -16,9 +17,8 @@ use game::{ GameSettings, Map };
 use player::{ Player };
 
 pub struct Client {
-    reactor:        reactor::Handle,
-    sender:         mpsc::Sender<tungstenite::Message>,
-    receiver:       mpsc::Receiver<tungstenite::Message>,
+    sender:         Option<mpsc::Sender<tungstenite::Message>>,
+    receiver:       Option<mpsc::Receiver<tungstenite::Message>>,
 }
 
 impl Client {
@@ -46,8 +46,6 @@ impl Client {
                     )
                 );
 
-                let client_reactor = reactor.clone();
-
                 // create a task to channel websocket messages to client
                 reactor.clone().spawn(
                     stream.for_each(
@@ -64,9 +62,8 @@ impl Client {
 
                 Ok(
                     Client {
-                        reactor: client_reactor,
-                        sender: req_tx,
-                        receiver: rsp_rx
+                        sender: Some(req_tx),
+                        receiver: Some(rsp_rx)
                     }
                 )
             },
@@ -78,8 +75,7 @@ impl Client {
         }
     }
 
-    #[async]
-    pub fn send(self, req: Request) -> Result<Self> {
+    pub fn send(&mut self, req: Request) -> Result<()> {
         let buf = Vec::new();
         let mut writer = buf.writer();
 
@@ -90,92 +86,98 @@ impl Client {
             cos.flush().unwrap();
         }
 
-        let Self { reactor, sender, receiver } = self;
+        let sender = match mem::replace(&mut self.sender, None) {
+            Some(sender) => sender,
+            None => return Err(Error::WebsockSendFailed)
+        };
 
-        match
-            await!(
+        let send_op = async_block! {
+            match await!(
                 sender.send(
                     tungstenite::Message::Binary(writer.into_inner())
                 )
-            )
-        {
-            Ok(sender) => Ok(
-                Self {
-                    reactor: reactor,
-                    sender: sender,
-                    receiver: receiver
-                }
-            ),
+            ) {
+                Ok(sender) => Ok(sender),
+                Err(_) => Err(Error::WebsockSendFailed)
+            }
+        };
+
+        match send_op.wait() {
+            Ok(sender) => {
+                mem::replace(&mut self.sender, Some(sender));
+                Ok(())
+            },
             Err(_) => Err(Error::WebsockSendFailed)
         }
     }
 
-    #[async]
-    pub fn recv(self) -> Result<(Response, Self)> {
-        let Self { reactor, sender, receiver } = self;
+    pub fn recv(&mut self) -> Result<Response> {
+        let receiver = match mem::replace(&mut self.receiver, None) {
+            Some(receiver) => receiver,
+            None => return Err(Error::WebsockRecvFailed)
+        };
 
-        match await!(receiver.into_future()) {
-            Ok((Some(tungstenite::Message::Binary(buf)), receiver)) => {
-                let cursor = io::Cursor::new(buf);
+        let recv_op = async_block! {
+            match await!(receiver.into_future()) {
+                Ok((Some(tungstenite::Message::Binary(buf)), receiver)) => {
+                    let cursor = io::Cursor::new(buf);
 
-                match
-                    parse_from_reader::<Response>(
-                        &mut cursor.reader()
-                    )
-                {
-                    Ok(rsp) => Ok((
-                        rsp,
-                        Self {
-                            sender: sender,
-                            reactor: reactor,
-                            receiver: receiver
+                    match
+                        parse_from_reader::<Response>(
+                            &mut cursor.reader()
+                        )
+                    {
+                        Ok(rsp) => Ok((rsp, receiver)),
+                        Err(e) => {
+                            eprintln!(
+                                "unable to parse response: {}", e
+                            );
+
+                            Err(Error::WebsockRecvFailed)
                         }
-                    )),
-                    Err(e) => {
-                        eprintln!(
-                            "unable to parse response: {}", e
-                        );
-
-                        Err(Error::WebsockRecvFailed)
                     }
                 }
+                Ok((Some(_), _)) => {
+                    eprintln!("unexpected non-binary message, retrying recv");
+                    Err(Error::WebsockRecvFailed)
+                }
+                Ok((None, _)) => {
+                    eprintln!("nothing received");
+                    Err(Error::WebsockRecvFailed)
+                }
+                Err(_) => {
+                    eprintln!("unable to receive message");
+                    Err(Error::WebsockRecvFailed)
+                }
             }
-            Ok((Some(_), _)) => {
-                eprintln!("unexpected non-binary message, retrying recv");
-                Err(Error::WebsockRecvFailed)
-            }
-            Ok((None, _)) => {
-                eprintln!("nothing received");
-                Err(Error::WebsockRecvFailed)
-            }
-            Err(_) => {
-                eprintln!("unable to receive message");
-                Err(Error::WebsockRecvFailed)
-            }
-        }
-    }
+        };
 
-    #[async]
-    pub fn call(self, req: Request) -> Result<(Response, Self)>
-    {
-        match await!(self.send(req)) {
-            Ok(client) => await!(client.recv()),
+        match recv_op.wait() {
+            Ok((rsp, receiver)) => {
+                mem::replace(&mut self.receiver, Some(receiver));
+                Ok(rsp)
+            }
             Err(e) => Err(e)
         }
     }
 
-    #[async]
-    pub fn quit(self) -> Result<Self> {
+    pub fn call(&mut self, req: Request) -> Result<Response> {
+        self.send(req)?;
+        self.recv()
+    }
+
+    pub fn quit(&mut self) -> Result<()> {
         let mut req = Request::new();
 
         req.mut_quit();
 
-        await!(self.send(req))
+        self.send(req)
     }
 
-    #[async]
-    pub fn create_game(self, settings: GameSettings, players: &Vec<Player>)
-        -> Result<Self>
+    pub fn create_game(
+        &mut self, settings: GameSettings, players: &Vec<Player>
+    )
+        -> Result<()>
     {
         let mut req = Request::new();
 
@@ -192,11 +194,11 @@ impl Client {
             }
         };
 
-        match await!(self.call(req)) {
-            Ok((rsp, client)) => {
+        match self.call(req) {
+            Ok(rsp) => {
                 println!("parsed rsp {:#?}", rsp);
 
-                await!(client.quit())
+                Ok(())
             },
             Err(e) => {
                 Err(e)
