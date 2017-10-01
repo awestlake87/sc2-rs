@@ -2,7 +2,9 @@
 
 extern crate bytes;
 extern crate futures_await as futures;
+extern crate glob;
 extern crate protobuf;
+extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
 extern crate tokio_timer;
@@ -12,10 +14,11 @@ extern crate url;
 
 pub mod utils;
 
-pub mod agent;
 pub mod client;
 pub mod coordinator;
+pub mod game;
 mod instance;
+pub mod player;
 
 
 use std::result;

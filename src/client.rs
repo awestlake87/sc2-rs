@@ -12,6 +12,8 @@ use tungstenite;
 use url::Url;
 
 use super::{ Result, Error };
+use game::{ GameSettings, Map };
+use player::{ Player };
 
 pub struct Client {
     reactor:        reactor::Handle,
@@ -172,12 +174,23 @@ impl Client {
     }
 
     #[async]
-    pub fn create_game(self) -> Result<Self> {
+    pub fn create_game(self, settings: GameSettings, players: &Vec<Player>)
+        -> Result<Self>
+    {
         let mut req = Request::new();
 
-        req.mut_create_game().mut_local_map().set_map_path(
-            "/home/najen/StarCraftII/Maps/AbyssalReefLE.SC2Map".to_string()
-        );
+        match settings.map {
+            Map::LocalMap(path) => {
+                req.mut_create_game().mut_local_map().set_map_path(
+                    match path.into_os_string().into_string() {
+                        Ok(s) => s,
+                        Err(_) => return Err(
+                            Error::Todo("invalid path string")
+                        )
+                    }
+                );
+            }
+        };
 
         match await!(self.call(req)) {
             Ok((rsp, client)) => {
