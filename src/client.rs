@@ -1,13 +1,17 @@
 
 use std::io;
 use std::mem;
+use std::time;
 
 use bytes::{ Buf, BufMut };
 use futures::prelude::*;
+use futures::future::{ Either };
+use futures::stream::{ StreamFuture };
 use futures::sync::{ mpsc };
 use protobuf::{ CodedOutputStream, Message, parse_from_reader  };
 use sc2_proto::sc2api::{ Request, Response };
 use tokio_core::{ reactor };
+use tokio_timer::{ Timer };
 use tokio_tungstenite::{ connect_async };
 use tungstenite;
 use url::Url;
@@ -18,7 +22,7 @@ use player::{ Player };
 
 pub struct Client {
     sender:         Option<mpsc::Sender<tungstenite::Message>>,
-    receiver:       Option<mpsc::Receiver<tungstenite::Message>>,
+    receiver:       Option<StreamFuture<mpsc::Receiver<tungstenite::Message>>>,
 }
 
 impl Client {
@@ -63,7 +67,7 @@ impl Client {
                 Ok(
                     Client {
                         sender: Some(req_tx),
-                        receiver: Some(rsp_rx)
+                        receiver: Some(rsp_rx.into_future())
                     }
                 )
             },
@@ -97,7 +101,7 @@ impl Client {
                     tungstenite::Message::Binary(writer.into_inner())
                 )
             ) {
-                Ok(sender) => Ok(sender),
+                Ok(sender) =>  Ok(sender),
                 Err(_) => Err(Error::WebsockSendFailed)
             }
         };
@@ -118,46 +122,75 @@ impl Client {
         };
 
         let recv_op = async_block! {
-            match await!(receiver.into_future()) {
-                Ok((Some(tungstenite::Message::Binary(buf)), receiver)) => {
-                    let cursor = io::Cursor::new(buf);
+            let timer = Timer::default();
 
-                    match
-                        parse_from_reader::<Response>(
-                            &mut cursor.reader()
-                        )
-                    {
-                        Ok(rsp) => Ok((rsp, receiver)),
-                        Err(e) => {
-                            eprintln!(
-                                "unable to parse response: {}", e
-                            );
+            match await!(
+                receiver.select2(
+                    timer.sleep(time::Duration::from_millis(3000))
+                )
+            ) {
+                Ok(Either::A((result, _))) => match result {
+                    (Some(tungstenite::Message::Binary(buf)), receiver) => {
+                        let cursor = io::Cursor::new(buf);
 
-                            Err(Error::WebsockRecvFailed)
+                        match
+                            parse_from_reader::<Response>(
+                                &mut cursor.reader()
+                            )
+                        {
+                            Ok(rsp) => Ok((rsp, Some(receiver.into_future()))),
+                            Err(e) => {
+                                eprintln!(
+                                    "unable to parse response: {}", e
+                                );
+
+                                Err((
+                                    Error::WebsockRecvFailed,
+                                    Some(receiver.into_future())
+                                ))
+                            }
                         }
                     }
-                }
-                Ok((Some(_), _)) => {
-                    eprintln!("unexpected non-binary message, retrying recv");
-                    Err(Error::WebsockRecvFailed)
-                }
-                Ok((None, _)) => {
-                    eprintln!("nothing received");
-                    Err(Error::WebsockRecvFailed)
+                    (Some(_), receiver) => {
+                        eprintln!(
+                            "unexpected non-binary message, retrying recv"
+                        );
+                        Err((
+                            Error::WebsockRecvFailed,
+                            Some(receiver.into_future())
+                        ))
+                    }
+                    (None, receiver) => {
+                        eprintln!("nothing received");
+                        Err((
+                            Error::WebsockRecvFailed,
+                            Some(receiver.into_future())
+                        ))
+                    }
+                },
+                Ok(Either::B((result, stream_future))) => {
+                    match result {
+                        _ => println!("receive timed out")
+                    };
+
+                    Err((Error::WebsockRecvFailed, Some(stream_future)))
                 }
                 Err(_) => {
                     eprintln!("unable to receive message");
-                    Err(Error::WebsockRecvFailed)
+                    Err((Error::WebsockRecvFailed, None))
                 }
             }
         };
 
         match recv_op.wait() {
-            Ok((rsp, receiver)) => {
-                mem::replace(&mut self.receiver, Some(receiver));
+            Ok((rsp, stream_future)) => {
+                mem::replace(&mut self.receiver, stream_future);
                 Ok(rsp)
             }
-            Err(e) => Err(e)
+            Err((e, stream_future)) => {
+                mem::replace(&mut self.receiver, stream_future);
+                Err(e)
+            }
         }
     }
 

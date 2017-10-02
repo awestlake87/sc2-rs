@@ -1,5 +1,4 @@
 
-use std::cmp;
 use std::io;
 use std::mem;
 use std::path::{ PathBuf };
@@ -42,7 +41,7 @@ impl Default for CoordinatorSettings {
 }
 
 pub struct Coordinator {
-    core:                   Option<reactor::Core>,
+    core:                   reactor::Core,
     dir:                    PathBuf,
     exe:                    PathBuf,
     pwd:                    Option<PathBuf>,
@@ -51,7 +50,7 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    clients:                Vec<Option<Client>>
+    clients:                Vec<Client>
 }
 
 fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
@@ -167,7 +166,7 @@ impl Coordinator {
 
         Ok(
             Self {
-                core: Some(reactor::Core::new().unwrap()),
+                core: reactor::Core::new().unwrap(),
                 dir: dir,
                 exe: exe,
                 pwd: pwd,
@@ -196,10 +195,7 @@ impl Coordinator {
         let instance = Instance::from_settings(
             InstanceSettings {
                 kind: InstanceKind::Local,
-                reactor: match self.core {
-                    Some(ref mut core) => core.handle(),
-                    None => return Err(Error::Todo("jkasdfjsd"))
-                },
+                reactor: self.core.handle(),
                 exe: Some(self.exe.clone()),
                 pwd: self.pwd.clone(),
                 address: ("127.0.0.1".to_string(), self.port),
@@ -215,10 +211,7 @@ impl Coordinator {
         let instance = Instance::from_settings(
             InstanceSettings {
                 kind: InstanceKind::Remote,
-                reactor: match self.core {
-                    Some(ref mut core) => core.handle(),
-                    None => return Err(Error::Todo("lalsldas"))
-                },
+                reactor: self.core.handle(),
                 address: (host, port),
                 exe: None,
                 pwd: None,
@@ -229,35 +222,38 @@ impl Coordinator {
         self.start_instance(instance)
     }
 
-    pub fn start_game(&mut self, players: Vec<Player>, settings: GameSettings)
+    pub fn start_game(
+        &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
+    )
         -> Result<()>
     {
-        let mut core = match mem::replace(&mut self.core, None) {
-            Some(core) => core,
-            None => return Err(Error::Todo("ajaksjdask"))
-        };
         let mut clients = mem::replace(&mut self.clients, vec! [ ]);
 
-        if players.len() < 1 {
-            return Err(Error::Todo("expected at least one player"))
+        if instances.len() < 1 {
+            return Err(Error::Todo("expected at least one instance"))
         }
 
         let start_game = async_block! {
-            for player in players {
-                let client = match await!(player.instance.connect()) {
-                    Ok(client) => Some(client),
+            let mut players = vec![ ];
+
+            for (instance, player) in instances {
+                let client = match await!(instance.connect()) {
+                    Ok(client) => client,
                     Err(e) => return Err(e)
                 };
 
                 clients.push(client);
+                players.push(player);
             };
 
-            Ok(clients)
+            match clients[0].create_game(settings, &players) {
+                Ok(_) => Ok(clients),
+                Err(e) => Err(e)
+            }
         };
 
-        match core.run(start_game) {
+        match self.core.run(start_game) {
             Ok(clients) => {
-                mem::replace(&mut self.core, Some(core));
                 mem::replace(&mut self.clients, clients);
 
                 Ok(())
@@ -267,22 +263,15 @@ impl Coordinator {
     }
 
     pub fn cleanup(&mut self) -> Result<()> {
-        let mut core = match mem::replace(&mut self.core, None) {
-            Some(core) => core,
-            None => return Err(Error::Todo("ajaksjdask"))
-        };
         let clients = mem::replace(&mut self.clients, vec! [ ]);
         let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
 
         let cleanup = async_block! {
-            for client in clients {
-                match client {
-                    Some(mut client) => match client.quit() {
-                        Ok(_) => (),
-                        Err(e) => return Err(e)
-                    },
-                    None => ()
-                };
+            for mut client in clients {
+                 match client.quit() {
+                    Ok(_) => (),
+                    Err(e) => return Err(e)
+                }
             };
 
             for cleanup in cleanups {
@@ -295,6 +284,6 @@ impl Coordinator {
             Ok(())
         };
 
-        core.run(cleanup)
+        self.core.run(cleanup)
     }
 }

@@ -1,7 +1,4 @@
 
-use super::{ Result, Error };
-use instance::Instance;
-
 pub enum PlayerType {
     Computer,
     Participant
@@ -27,8 +24,6 @@ pub enum Difficulty {
 }
 
 pub struct Player {
-    pub instance:       Instance,
-
     pub player_type:    PlayerType,
     pub race:           Race,
     pub difficulty:     Option<Difficulty>
@@ -36,23 +31,20 @@ pub struct Player {
 
 impl Player {
     pub fn new_computer(
-        instance: Instance,
         race: Race,
         difficulty: Difficulty
     )
         -> Self
     {
         Self {
-            instance: instance,
             player_type: PlayerType::Computer,
             race: race,
             difficulty: Some(difficulty)
         }
     }
 
-    pub fn new_participant(instance: Instance, race: Race) -> Self {
+    pub fn new_participant(race: Race) -> Self {
         Self {
-            instance: instance,
             player_type: PlayerType::Participant,
             race: race,
             difficulty: None
