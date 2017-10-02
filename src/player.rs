@@ -1,22 +1,25 @@
 
-pub enum PlayerType {
+#[derive(Copy, Clone)]
+pub enum PlayerKind {
     Computer,
     Participant
 }
 
+#[derive(Copy, Clone)]
 pub enum Race {
     Terran,
     Zerg,
     Protoss
 }
 
+#[derive(Copy, Clone)]
 pub enum Difficulty {
     VeryEasy,
     Easy,
     Medium,
     MediumHard,
     Hard,
-    HardVeryHard,
+    Harder,
     VeryHard,
     CheatVision,
     CheatMoney,
@@ -24,7 +27,7 @@ pub enum Difficulty {
 }
 
 pub struct Player {
-    pub player_type:    PlayerType,
+    pub kind:           PlayerKind,
     pub race:           Race,
     pub difficulty:     Option<Difficulty>
 }
@@ -37,7 +40,7 @@ impl Player {
         -> Self
     {
         Self {
-            player_type: PlayerType::Computer,
+            kind: PlayerKind::Computer,
             race: race,
             difficulty: Some(difficulty)
         }
@@ -45,7 +48,7 @@ impl Player {
 
     pub fn new_participant(race: Race) -> Self {
         Self {
-            player_type: PlayerType::Participant,
+            kind: PlayerKind::Participant,
             race: race,
             difficulty: None
         }

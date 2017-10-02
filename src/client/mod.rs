@@ -1,4 +1,6 @@
 
+mod control;
+
 use std::io;
 use std::mem;
 use std::time;
@@ -17,8 +19,8 @@ use tungstenite;
 use url::Url;
 
 use super::{ Result, Error };
-use game::{ GameSettings, Map };
-use player::{ Player };
+
+pub use self::control::{ Control };
 
 pub struct Client {
     sender:         Option<mpsc::Sender<tungstenite::Message>>,
@@ -197,45 +199,5 @@ impl Client {
     pub fn call(&mut self, req: Request) -> Result<Response> {
         self.send(req)?;
         self.recv()
-    }
-
-    pub fn quit(&mut self) -> Result<()> {
-        let mut req = Request::new();
-
-        req.mut_quit();
-
-        self.send(req)
-    }
-
-    pub fn create_game(
-        &mut self, settings: GameSettings, players: &Vec<Player>
-    )
-        -> Result<()>
-    {
-        let mut req = Request::new();
-
-        match settings.map {
-            Map::LocalMap(path) => {
-                req.mut_create_game().mut_local_map().set_map_path(
-                    match path.into_os_string().into_string() {
-                        Ok(s) => s,
-                        Err(_) => return Err(
-                            Error::Todo("invalid path string")
-                        )
-                    }
-                );
-            }
-        };
-
-        match self.call(req) {
-            Ok(rsp) => {
-                println!("parsed rsp {:#?}", rsp);
-
-                Ok(())
-            },
-            Err(e) => {
-                Err(e)
-            }
-        }
     }
 }

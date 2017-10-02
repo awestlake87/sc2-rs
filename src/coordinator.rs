@@ -12,7 +12,7 @@ use tokio_core::reactor;
 
 use super::{ Result, Error };
 use utils::Rect;
-use client::{ Client };
+use client::{ Client, Control };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player };
@@ -239,7 +239,7 @@ impl Coordinator {
             for (instance, player) in instances {
                 let client = match await!(instance.connect()) {
                     Ok(client) => client,
-                    Err(e) => return Err(e)
+                    Err(e) => return Err((e, clients))
                 };
 
                 clients.push(client);
@@ -248,7 +248,7 @@ impl Coordinator {
 
             match clients[0].create_game(settings, &players) {
                 Ok(_) => Ok(clients),
-                Err(e) => Err(e)
+                Err(e) => Err((e, clients))
             }
         };
 
@@ -257,8 +257,11 @@ impl Coordinator {
                 mem::replace(&mut self.clients, clients);
 
                 Ok(())
-            },
-            Err(e) => Err(e)
+            }
+            Err((e, clients)) => {
+                mem::replace(&mut self.clients, clients);
+                Err(e)
+            }
         }
     }
 
