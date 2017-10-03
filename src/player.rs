@@ -2,7 +2,8 @@
 #[derive(Copy, Clone)]
 pub enum PlayerKind {
     Computer,
-    Participant
+    Participant,
+    Observer
 }
 
 #[derive(Copy, Clone)]
@@ -28,7 +29,7 @@ pub enum Difficulty {
 
 pub struct Player {
     pub kind:           PlayerKind,
-    pub race:           Race,
+    pub race:           Option<Race>,
     pub difficulty:     Option<Difficulty>
 }
 
@@ -41,7 +42,7 @@ impl Player {
     {
         Self {
             kind: PlayerKind::Computer,
-            race: race,
+            race: Some(race),
             difficulty: Some(difficulty)
         }
     }
@@ -49,7 +50,15 @@ impl Player {
     pub fn new_participant(race: Race) -> Self {
         Self {
             kind: PlayerKind::Participant,
-            race: race,
+            race: Some(race),
+            difficulty: None
+        }
+    }
+
+    pub fn new_observer() -> Self {
+        Self {
+            kind: PlayerKind::Observer,
+            race: None,
             difficulty: None
         }
     }

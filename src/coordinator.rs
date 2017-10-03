@@ -3,16 +3,18 @@ use std::io;
 use std::mem;
 use std::path::{ PathBuf };
 use std::process;
+use std::time;
 
 use futures::prelude::*;
 use futures::sync::{ oneshot };
 use glob::glob;
 use regex::Regex;
 use tokio_core::reactor;
+use tokio_timer::Timer;
 
 use super::{ Result, Error };
 use utils::Rect;
-use client::{ Client, Control };
+use client::{ Client };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player };
@@ -50,7 +52,7 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    clients:                Vec<Client>
+    clients:                Vec<Option<Client>>
 }
 
 fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
@@ -222,7 +224,7 @@ impl Coordinator {
         self.start_instance(instance)
     }
 
-    pub fn start_game(
+    pub fn run_game(
         &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
     )
         -> Result<()>
@@ -242,14 +244,32 @@ impl Coordinator {
                     Err(e) => return Err((e, clients))
                 };
 
-                clients.push(client);
+                clients.push(Some(client));
                 players.push(player);
             };
 
-            match clients[0].create_game(settings, &players) {
-                Ok(_) => Ok(clients),
-                Err(e) => Err((e, clients))
+            let host = match mem::replace(&mut clients[0], None) {
+                Some(host) => host,
+                None => return Err(
+                    (Error::Todo("expected host to exist"), clients)
+                )
+            };
+
+            match await!(host.create_game(settings, players)) {
+                Ok((rsp, host)) => {
+                    println!("got response {:#?}", rsp);
+                    mem::replace(&mut clients[0], Some(host));
+                },
+                Err(e) => return Err((e, clients))
             }
+
+            let timer = Timer::default();
+
+            loop {
+                await!(timer.sleep(time::Duration::from_millis(1000)));
+            };
+
+            Ok(clients)
         };
 
         match self.core.run(start_game) {
@@ -270,10 +290,13 @@ impl Coordinator {
         let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
 
         let cleanup = async_block! {
-            for mut client in clients {
-                 match client.quit() {
-                    Ok(_) => (),
-                    Err(e) => return Err(e)
+            for client in clients {
+                match client {
+                    Some(client) => match await!(client.quit()) {
+                        Ok(_) => (),
+                        Err(e) => return Err(e)
+                    }
+                    None => ()
                 }
             };
 
