@@ -5,11 +5,20 @@ authors = ["najen"]
 
 [dependencies]
 bytes = "*"
+docopt = "0.8"
 futures-await = { git = "https://github.com/alexcrichton/futures-await" }
 glob = "*"
+glutin = "*"
 protobuf = "*"
 regex = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
+serde = "1.0"
+serde_derive = "1.0"
 tokio-core = "0.1.9"
 tungstenite = "0.4.0"
 url = "*"
+
+[[example]]
+name = "bot-simple"
+crate-type = ["bin"]
+path = "examples/bot-simple/main.rs"
