@@ -11,7 +11,5 @@ protobuf = "*"
 regex = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
 tokio-core = "0.1.9"
-tokio-timer = "*"
-tokio-tungstenite = "0.3.0"
 tungstenite = "0.4.0"
 url = "*"

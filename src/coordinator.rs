@@ -1,7 +1,7 @@
 
 use std::io;
 use std::mem;
-use std::path::{ PathBuf };
+use std::path::{ PathBuf, MAIN_SEPARATOR };
 use std::process;
 
 use futures::prelude::*;
@@ -185,6 +185,12 @@ impl Coordinator {
 }
 
 fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
+    let separator = match MAIN_SEPARATOR {
+        '\\' => "\\\\",
+        '/' => "/",
+        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR)
+    };
+
     let glob_iter = match glob(
         &format!(
             "{}/Versions/Base*/SC2*",
@@ -195,7 +201,9 @@ fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
         Err(_) => return Err(Error::Todo("failed to read glob pattern"))
     };
 
-    let exe_re = match Regex::new(".*Base([0-9]*)/SC2(.*)(\\.exe)?") {
+    let exe_re = match Regex::new(
+        &format!("Base([0-9]*){}SC2(_x64)?", separator)[..]
+    ) {
         Ok(re) => re,
         Err(_) => return Err(Error::Todo("failed to parse regex"))
     };
@@ -266,12 +274,19 @@ fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
 }
 
 fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
+    let separator = match MAIN_SEPARATOR {
+        '\\' => "\\\\",
+        '/' => "/",
+        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR)
+    };
+
     let support_dir = PathBuf::from(
         &format!(
-            "{}/Support{}",
+            "{}{}Support{}",
             dir.to_str().unwrap(),
+            separator,
             match arch {
-                ExeArch::X64 => "_x64",
+                ExeArch::X64 => "64",
                 ExeArch::X32 => ""
             }
         )[..]
