@@ -259,7 +259,7 @@ fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
                             current_arch = match current_arch {
                                 ExeArch::X64 => ExeArch::X64,
                                 ExeArch::X32 => match arch {
-                                    ExeArch::X64 => ExeArch::X32,
+                                    ExeArch::X64 => ExeArch::X64,
                                     _ => ExeArch::X32
                                 }
                             };
