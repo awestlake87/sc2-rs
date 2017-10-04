@@ -45,7 +45,7 @@ pub struct Coordinator {
     core:                   reactor::Core,
     exe:                    PathBuf,
     pwd:                    Option<PathBuf>,
-    port:                   u16,
+    current_port:           u16,
     window:                 Rect<u32>,
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
@@ -65,11 +65,11 @@ impl Coordinator {
 
         Ok(
             Self {
-                core: reactor::Core::new().unwrap(),
-                exe: exe,
-                pwd: pwd,
-                port: settings.port,
-                window: settings.window,
+                core:           reactor::Core::new().unwrap(),
+                exe:            exe,
+                pwd:            pwd,
+                current_port:   settings.port,
+                window:         settings.window,
                 cleanups:       vec![ ],
                 clients:        vec![ ]
             }
@@ -96,12 +96,12 @@ impl Coordinator {
                 reactor: self.core.handle(),
                 exe: Some(self.exe.clone()),
                 pwd: self.pwd.clone(),
-                address: ("127.0.0.1".to_string(), self.port),
+                address: ("127.0.0.1".to_string(), self.current_port),
                 window_rect: self.window
             }
         )?;
 
-        self.port += 1;
+        self.current_port += 1;
         self.start_instance(instance)
     }
 
@@ -120,7 +120,7 @@ impl Coordinator {
         self.start_instance(instance)
     }
 
-    pub fn run_game(
+    pub fn start_game(
         &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
     )
         -> Result<()>
@@ -147,6 +147,10 @@ impl Coordinator {
             Err(e) => return Err(e)
         };
 
+        Ok(())
+    }
+
+    pub fn update(&mut self) -> Result<()> {
         Ok(())
     }
 
