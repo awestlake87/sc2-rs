@@ -3,18 +3,17 @@ use std::io;
 use std::mem;
 use std::path::{ PathBuf };
 use std::process;
-use std::time;
 
 use futures::prelude::*;
 use futures::sync::{ oneshot };
 use glob::glob;
 use regex::Regex;
 use tokio_core::reactor;
-use tokio_timer::Timer;
 
 use super::{ Result, Error };
 use utils::Rect;
 use client::{ Client };
+use client::control::{ Control };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player };
@@ -44,7 +43,6 @@ impl Default for CoordinatorSettings {
 
 pub struct Coordinator {
     core:                   reactor::Core,
-    dir:                    PathBuf,
     exe:                    PathBuf,
     pwd:                    Option<PathBuf>,
     port:                   u16,
@@ -52,7 +50,138 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    clients:                Vec<Option<Client>>
+    clients:                Vec<Client>
+}
+
+impl Coordinator {
+    pub fn from_settings(settings: CoordinatorSettings) -> Result<Self> {
+        let dir = match settings.dir {
+            Some(dir) => dir,
+            None => return Err(Error::ExeNotSpecified)
+        };
+
+        let (exe, arch) = select_exe(&dir)?;
+        let pwd = select_pwd(&dir, arch);
+
+        Ok(
+            Self {
+                core: reactor::Core::new().unwrap(),
+                exe: exe,
+                pwd: pwd,
+                port: settings.port,
+                window: settings.window,
+                cleanups:       vec![ ],
+                clients:        vec![ ]
+            }
+        )
+    }
+
+    pub fn start_instance(&mut self, instance: Instance) -> Result<Instance> {
+        let (cleanup, instance) = instance.start()?;
+
+        match cleanup {
+            Some(cleanup) => {
+                self.cleanups.push(cleanup);
+            }
+            _ => ()
+        };
+
+        Ok(instance)
+    }
+
+    pub fn launch(&mut self) -> Result<Instance> {
+        let instance = Instance::from_settings(
+            InstanceSettings {
+                kind: InstanceKind::Local,
+                reactor: self.core.handle(),
+                exe: Some(self.exe.clone()),
+                pwd: self.pwd.clone(),
+                address: ("127.0.0.1".to_string(), self.port),
+                window_rect: self.window
+            }
+        )?;
+
+        self.port += 1;
+        self.start_instance(instance)
+    }
+
+    pub fn remote(&mut self, host: String, port: u16) -> Result<Instance> {
+        let instance = Instance::from_settings(
+            InstanceSettings {
+                kind: InstanceKind::Remote,
+                reactor: self.core.handle(),
+                address: (host, port),
+                exe: None,
+                pwd: None,
+                window_rect: self.window
+            }
+        )?;
+
+        self.start_instance(instance)
+    }
+
+    pub fn run_game(
+        &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
+    )
+        -> Result<()>
+    {
+        if instances.len() < 1 {
+            return Err(Error::Todo("expected at least one instance"))
+        }
+
+        let mut players = vec![ ];
+
+        for (instance, player) in instances {
+            let client = instance.connect()?;
+
+            self.clients.push(client);
+            players.push(player);
+        };
+
+        let host = &mut self.clients[0];
+
+        match host.create_game(settings, players) {
+            Ok(rsp) => {
+                println!("got response {:#?}", rsp);
+            },
+            Err(e) => return Err(e)
+        };
+
+        Ok(())
+    }
+
+    pub fn cleanup(&mut self) -> Result<()> {
+        let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
+
+        for client in &mut self.clients {
+            match client.quit() {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("unable to send quit: {}", e);
+                }
+            };
+
+            match client.close() {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("unable to close client: {}", e);
+                }
+            };
+        };
+
+        let cleanup = async_block! {
+            for cleanup in cleanups {
+                match await!(cleanup) {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("unable to stop process {}", e)
+                }
+            }
+
+            Ok(())
+        };
+
+        self.core.run(cleanup)
+    }
 }
 
 fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
@@ -153,163 +282,5 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
     }
     else {
         None
-    }
-}
-
-impl Coordinator {
-    pub fn from_settings(settings: CoordinatorSettings) -> Result<Self> {
-        let dir = match settings.dir {
-            Some(dir) => dir,
-            None => return Err(Error::ExeNotSpecified)
-        };
-
-        let (exe, arch) = select_exe(&dir)?;
-        let pwd = select_pwd(&dir, arch);
-
-        Ok(
-            Self {
-                core: reactor::Core::new().unwrap(),
-                dir: dir,
-                exe: exe,
-                pwd: pwd,
-                port: settings.port,
-                window: settings.window,
-                cleanups:       vec![ ],
-                clients:        vec![ ]
-            }
-        )
-    }
-
-    pub fn start_instance(&mut self, instance: Instance) -> Result<Instance> {
-        let (cleanup, instance) = instance.start()?;
-
-        match cleanup {
-            Some(cleanup) => {
-                self.cleanups.push(cleanup);
-            }
-            _ => ()
-        };
-
-        Ok(instance)
-    }
-
-    pub fn launch(&mut self) -> Result<Instance> {
-        let instance = Instance::from_settings(
-            InstanceSettings {
-                kind: InstanceKind::Local,
-                reactor: self.core.handle(),
-                exe: Some(self.exe.clone()),
-                pwd: self.pwd.clone(),
-                address: ("127.0.0.1".to_string(), self.port),
-                window_rect: self.window
-            }
-        )?;
-
-        self.port += 1;
-        self.start_instance(instance)
-    }
-
-    pub fn remote(&mut self, host: String, port: u16) -> Result<Instance> {
-        let instance = Instance::from_settings(
-            InstanceSettings {
-                kind: InstanceKind::Remote,
-                reactor: self.core.handle(),
-                address: (host, port),
-                exe: None,
-                pwd: None,
-                window_rect: self.window
-            }
-        )?;
-
-        self.start_instance(instance)
-    }
-
-    pub fn run_game(
-        &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
-    )
-        -> Result<()>
-    {
-        let mut clients = mem::replace(&mut self.clients, vec! [ ]);
-
-        if instances.len() < 1 {
-            return Err(Error::Todo("expected at least one instance"))
-        }
-
-        let start_game = async_block! {
-            let mut players = vec![ ];
-
-            for (instance, player) in instances {
-                let client = match await!(instance.connect()) {
-                    Ok(client) => client,
-                    Err(e) => return Err((e, clients))
-                };
-
-                clients.push(Some(client));
-                players.push(player);
-            };
-
-            let host = match mem::replace(&mut clients[0], None) {
-                Some(host) => host,
-                None => return Err(
-                    (Error::Todo("expected host to exist"), clients)
-                )
-            };
-
-            match await!(host.create_game(settings, players)) {
-                Ok((rsp, host)) => {
-                    println!("got response {:#?}", rsp);
-                    mem::replace(&mut clients[0], Some(host));
-                },
-                Err(e) => return Err((e, clients))
-            }
-
-            let timer = Timer::default();
-
-            loop {
-                await!(timer.sleep(time::Duration::from_millis(1000)));
-            };
-
-            Ok(clients)
-        };
-
-        match self.core.run(start_game) {
-            Ok(clients) => {
-                mem::replace(&mut self.clients, clients);
-
-                Ok(())
-            }
-            Err((e, clients)) => {
-                mem::replace(&mut self.clients, clients);
-                Err(e)
-            }
-        }
-    }
-
-    pub fn cleanup(&mut self) -> Result<()> {
-        let clients = mem::replace(&mut self.clients, vec! [ ]);
-        let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
-
-        let cleanup = async_block! {
-            for client in clients {
-                match client {
-                    Some(client) => match await!(client.quit()) {
-                        Ok(_) => (),
-                        Err(e) => return Err(e)
-                    }
-                    None => ()
-                }
-            };
-
-            for cleanup in cleanups {
-                match await!(cleanup) {
-                    Ok(_) => (),
-                    Err(e) => eprintln!("unable to stop process {}", e)
-                }
-            }
-
-            Ok(())
-        };
-
-        self.core.run(cleanup)
     }
 }

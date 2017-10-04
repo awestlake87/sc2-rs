@@ -7,8 +7,6 @@ extern crate protobuf;
 extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
-extern crate tokio_timer;
-extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate url;
 

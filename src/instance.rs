@@ -6,10 +6,8 @@ use std::thread;
 use std::result;
 use std::process;
 
-use futures::prelude::*;
 use futures::sync::{ oneshot };
 use tokio_core::reactor;
-use tokio_timer::Timer;
 use url::Url;
 
 use super::{ Result, Error };
@@ -117,9 +115,8 @@ impl Instance {
         Ok((Some(rx), self))
     }
 
-    #[async]
-    pub fn connect(self) -> Result<Client> {
-        let (host, port) = self.settings.address;
+    pub fn connect(&self) -> Result<Client> {
+        let (host, port) = self.settings.address.clone();
 
         let url = Url::parse(
             &format!("ws://{}:{}/sc2api", host, port)[..]
@@ -128,26 +125,11 @@ impl Instance {
         println!("attempting connection to {:?}", url);
 
         for i in 0..10 {
-            match
-                await!(
-                    Client::connect(self.settings.reactor.clone(), url.clone())
-                )
-            {
+            match Client::connect(url.clone()) {
                 Ok(client) => return Ok(client),
-                Err(_) => {
-                    let timer = Timer::default();
-
-                    match
-                        await!(timer.sleep(time::Duration::from_millis(1000)))
-                    {
-                        Ok(_) => (),
-                        Err(e) => {
-                            eprintln!("timeout failed: {}", e);
-                        }
-                    }
-                }
+                Err(_) => ()
             };
-
+            thread::sleep(time::Duration::from_millis(1000));
             println!("retrying {}...", i);
         };
 
