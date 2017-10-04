@@ -17,12 +17,12 @@ use sc2::player::{ Player, Difficulty, Race };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const USAGE: &'static str = "
-Nuro StarCraft II AI.
+Simple StarCraft II Bot.
 
 Usage:
-  nuro (-h | --help)
-  nuro [options]
-  nuro --version
+  bot-simple (-h | --help)
+  bot-simple [options]
+  bot-simple --version
 
 Options:
   -h --help                 Show this screen.
