@@ -18,7 +18,7 @@ use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
     X64,
     X32
@@ -26,6 +26,7 @@ enum ExeArch {
 
 #[derive(Clone)]
 pub struct CoordinatorSettings {
+    pub use_wine:           bool,
     pub dir:                Option<PathBuf>,
     pub port:               u16,
     pub window:             Rect<u32>,
@@ -34,14 +35,16 @@ pub struct CoordinatorSettings {
 impl Default for CoordinatorSettings {
     fn default() -> Self {
         Self {
+            use_wine:       false,
             dir:            None,
             port:           9168,
-            window:         Rect::<u32> { x: 120, y: 100, w: 1024, h: 768 }
+            window:         Rect::<u32> { x: 10, y: 10, w: 800, h: 600 }
         }
     }
 }
 
 pub struct Coordinator {
+    use_wine:               bool,
     core:                   reactor::Core,
     exe:                    PathBuf,
     pwd:                    Option<PathBuf>,
@@ -60,11 +63,12 @@ impl Coordinator {
             None => return Err(Error::ExeNotSpecified)
         };
 
-        let (exe, arch) = select_exe(&dir)?;
+        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
         let pwd = select_pwd(&dir, arch);
 
         Ok(
             Self {
+                use_wine:       settings.use_wine,
                 core:           reactor::Core::new().unwrap(),
                 exe:            exe,
                 pwd:            pwd,
@@ -77,14 +81,9 @@ impl Coordinator {
     }
 
     pub fn start_instance(&mut self, instance: Instance) -> Result<Instance> {
-        let (cleanup, instance) = instance.start()?;
+        let cleanup = instance.start()?;
 
-        match cleanup {
-            Some(cleanup) => {
-                self.cleanups.push(cleanup);
-            }
-            _ => ()
-        };
+        self.cleanups.push(cleanup);
 
         Ok(instance)
     }
@@ -92,8 +91,14 @@ impl Coordinator {
     pub fn launch(&mut self) -> Result<Instance> {
         let instance = Instance::from_settings(
             InstanceSettings {
-                kind: InstanceKind::Local,
-                reactor: self.core.handle(),
+                kind: {
+                    if self.use_wine {
+                        InstanceKind::Wine
+                    }
+                    else {
+                        InstanceKind::Native
+                    }
+                },
                 exe: Some(self.exe.clone()),
                 pwd: self.pwd.clone(),
                 address: ("127.0.0.1".to_string(), self.current_port),
@@ -102,21 +107,6 @@ impl Coordinator {
         )?;
 
         self.current_port += 1;
-        self.start_instance(instance)
-    }
-
-    pub fn remote(&mut self, host: String, port: u16) -> Result<Instance> {
-        let instance = Instance::from_settings(
-            InstanceSettings {
-                kind: InstanceKind::Remote,
-                reactor: self.core.handle(),
-                address: (host, port),
-                exe: None,
-                pwd: None,
-                window_rect: self.window
-            }
-        )?;
-
         self.start_instance(instance)
     }
 
@@ -140,7 +130,7 @@ impl Coordinator {
 
         let host = &mut self.clients[0];
 
-        match host.create_game(settings, players) {
+        match host.create_game(&settings, &players) {
             Ok(rsp) => {
                 println!("got response {:#?}", rsp);
             },
@@ -188,7 +178,7 @@ impl Coordinator {
     }
 }
 
-fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
+fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
@@ -253,9 +243,12 @@ fn select_exe(dir: &PathBuf) -> Result<(PathBuf, ExeArch)> {
 
                         if current_version < v {
                             current_version = v;
-                            exe = Ok((path, arch));
+
+                            if use_wine && arch == ExeArch::X32 {
+                                exe = Ok((path, arch));
+                            }
                         }
-                        else if current_version == v {
+                        else if current_version == v && !use_wine {
                             current_arch = match current_arch {
                                 ExeArch::X64 => ExeArch::X64,
                                 ExeArch::X32 => match arch {

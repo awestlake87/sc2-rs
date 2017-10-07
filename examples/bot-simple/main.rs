@@ -2,43 +2,20 @@
 
 extern crate docopt;
 extern crate glutin;
-#[macro_use]
-extern crate serde_derive;
 
 extern crate sc2;
-
-use std::path::PathBuf;
+extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::coordinator::{ Coordinator, CoordinatorSettings };
-use sc2::game::{ GameSettings, Map };
+use sc2::coordinator::{ Coordinator };
 use sc2::player::{ Player, Difficulty, Race };
 
+use examples_common::{
+    USAGE, Args, get_coordinator_settings, get_game_settings
+};
+
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const USAGE: &'static str = "
-Simple StarCraft II Bot.
-
-Usage:
-  bot-simple (-h | --help)
-  bot-simple [options]
-  bot-simple --version
-
-Options:
-  -h --help                 Show this screen.
-  -d <path> --dir=<path>    Path to the StarCraft II directory.
-  -p <port> --port=<port>   Port to make StarCraft II listen on.
-  -m <path> --map=<path>    Path to the StarCraft II map.
-  --version                 Show version.
-";
-
-#[derive(Debug, Deserialize)]
-struct Args {
-    flag_dir: Option<PathBuf>,
-    flag_port: Option<u16>,
-    flag_map: PathBuf,
-    flag_version: bool
-}
 
 fn main() {
     let args: Args = Docopt::new(USAGE)
@@ -112,24 +89,5 @@ fn main() {
     match coordinator.cleanup() {
         Ok(_) => println!("shutdown successful"),
         Err(e) => eprintln!("error: {}", e)
-    }
-}
-
-fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
-    let default_settings = CoordinatorSettings::default();
-
-    CoordinatorSettings {
-        dir: args.flag_dir.clone(),
-        port: match args.flag_port {
-            Some(port) => port,
-            None => default_settings.port
-        },
-        ..default_settings
-    }
-}
-
-fn get_game_settings(args: &Args) -> GameSettings {
-    GameSettings {
-        map: Map::LocalMap(args.flag_map.clone())
     }
 }

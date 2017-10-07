@@ -10,9 +10,10 @@ use super::super::player::{ Player, PlayerKind, Race, Difficulty };
 
 pub trait Control {
     fn quit(&mut self) -> Result<()>;
-    fn create_game(&mut self, settings: GameSettings, players: Vec<Player>)
+    fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
         -> Result<Response>
     ;
+    fn join_game(&mut self, player: &Player) -> Result<Response>;
 }
 
 impl Control for Client {
@@ -25,16 +26,16 @@ impl Control for Client {
     }
 
     fn create_game(
-        &mut self, settings: GameSettings, players: Vec<Player>
+        &mut self, settings: &GameSettings, players: &Vec<Player>
     )
         -> Result<Response>
     {
         let mut req = sc2api::Request::new();
 
         match settings.map {
-            Map::LocalMap(path) => {
+            Map::LocalMap(ref path) => {
                 req.mut_create_game().mut_local_map().set_map_path(
-                    match path.into_os_string().into_string() {
+                    match path.clone().into_os_string().into_string() {
                         Ok(s) => s,
                         Err(_) => return Err(
                             Error::Todo("invalid path string")
@@ -95,6 +96,32 @@ impl Control for Client {
             };
 
             req.mut_create_game().mut_player_setup().push(setup);
+        }
+
+        self.call(req)
+    }
+
+    fn join_game(&mut self, player: &Player) -> Result<Response> {
+        let mut req = sc2api::Request::new();
+
+        {
+            let join_game = &mut req.mut_join_game();
+
+            match player.race {
+                Some(race) => join_game.set_race(
+                    match race {
+                        Race::Zerg      => common::Race::Zerg,
+                        Race::Terran    => common::Race::Terran,
+                        Race::Protoss   => common::Race::Protoss
+                    }
+                ),
+                None => join_game.set_race(common::Race::NoRace)
+            };
+
+            let options = &mut join_game.mut_options();
+
+            options.set_raw(true);
+            options.set_score(true);
         }
 
         self.call(req)
