@@ -5,7 +5,7 @@ use sc2_proto::sc2api::{ Response };
 
 use super::{ Client };
 use super::super::{ Result, Error };
-use super::super::game::{ GameSettings, Map };
+use super::super::game::{ GameSettings, Map, GamePorts };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
 
 pub trait Control {

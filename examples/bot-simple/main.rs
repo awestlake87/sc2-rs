@@ -41,7 +41,7 @@ fn main() {
         Race::Zerg,
         Difficulty::VeryEasy
     );
-    let observer = Player::new_observer();
+    let observer = Player::new_participant(Race::Terran);
 
     match coordinator.start_game(vec![ zerg_cpu, observer ], game_settings) {
         Ok(_) => println!("game started!"),
