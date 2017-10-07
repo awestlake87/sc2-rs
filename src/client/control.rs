@@ -101,6 +101,8 @@ impl Control for Client {
             req.mut_create_game().mut_player_setup().push(setup);
         }
 
+        req.mut_create_game().set_realtime(true);
+
         let rsp = self.call(req)?;
 
         println!("create game rsp: {:#?}", rsp);
