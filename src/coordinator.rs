@@ -16,7 +16,7 @@ use client::{ Client };
 use client::control::{ Control };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
-use player::{ Player };
+use player::{ Player, PlayerKind };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
@@ -53,7 +53,7 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    clients:                Vec<Client>
+    clients:                Vec<(Client, Player)>
 }
 
 impl Coordinator {
@@ -80,15 +80,7 @@ impl Coordinator {
         )
     }
 
-    pub fn start_instance(&mut self, instance: Instance) -> Result<Instance> {
-        let cleanup = instance.start()?;
-
-        self.cleanups.push(cleanup);
-
-        Ok(instance)
-    }
-
-    pub fn launch(&mut self) -> Result<Instance> {
+    fn launch(&mut self) -> Result<Instance> {
         let instance = Instance::from_settings(
             InstanceSettings {
                 kind: {
@@ -107,35 +99,41 @@ impl Coordinator {
         )?;
 
         self.current_port += 1;
-        self.start_instance(instance)
+
+        let cleanup = instance.start()?;
+
+        self.cleanups.push(cleanup);
+
+        Ok(instance)
     }
 
-    pub fn start_game(
-        &mut self, instances: Vec<(Instance, Player)>, settings: GameSettings
-    )
+    pub fn start_game(&mut self, players: Vec<Player>, settings: GameSettings)
         -> Result<()>
     {
-        if instances.len() < 1 {
+        let mut participants = vec![ ];
+
+        for player in &players {
+            match player.kind {
+                PlayerKind::Computer => (),
+                _ => {
+                    participants.push((self.launch()?, player.clone()));
+                }
+            };
+        }
+
+        if participants.len() < 1 {
             return Err(Error::Todo("expected at least one instance"))
         }
 
-        let mut players = vec![ ];
+        for (instance, player) in participants {
+            self.clients.push((instance.connect()?, player.clone()));
+        }
 
-        for (instance, player) in instances {
-            let client = instance.connect()?;
+        self.clients[0].0.create_game(&settings, &players)?;
 
-            self.clients.push(client);
-            players.push(player);
-        };
-
-        let host = &mut self.clients[0];
-
-        match host.create_game(&settings, &players) {
-            Ok(rsp) => {
-                println!("got response {:#?}", rsp);
-            },
-            Err(e) => return Err(e)
-        };
+        for &mut (ref mut client, ref player) in &mut self.clients {
+            client.join_game(&player)?;
+        }
 
         Ok(())
     }
@@ -147,7 +145,7 @@ impl Coordinator {
     pub fn cleanup(&mut self) -> Result<()> {
         let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
 
-        for client in &mut self.clients {
+        for &mut (ref mut client, _) in &mut self.clients {
             match client.quit() {
                 Ok(_) => (),
                 Err(e) => {

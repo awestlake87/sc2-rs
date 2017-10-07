@@ -11,9 +11,9 @@ use super::super::player::{ Player, PlayerKind, Race, Difficulty };
 pub trait Control {
     fn quit(&mut self) -> Result<()>;
     fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
-        -> Result<Response>
+        -> Result<()>
     ;
-    fn join_game(&mut self, player: &Player) -> Result<Response>;
+    fn join_game(&mut self, player: &Player) -> Result<()>;
 }
 
 impl Control for Client {
@@ -28,7 +28,7 @@ impl Control for Client {
     fn create_game(
         &mut self, settings: &GameSettings, players: &Vec<Player>
     )
-        -> Result<Response>
+        -> Result<()>
     {
         let mut req = sc2api::Request::new();
 
@@ -42,6 +42,9 @@ impl Control for Client {
                         )
                     }
                 );
+            },
+            Map::BlizzardMap(ref map) => {
+                req.mut_create_game().set_battlenet_map_name(map.clone());
             }
         };
 
@@ -98,10 +101,14 @@ impl Control for Client {
             req.mut_create_game().mut_player_setup().push(setup);
         }
 
-        self.call(req)
+        let rsp = self.call(req)?;
+
+        println!("create game rsp: {:#?}", rsp);
+
+        Ok(())
     }
 
-    fn join_game(&mut self, player: &Player) -> Result<Response> {
+    fn join_game(&mut self, player: &Player) -> Result<()> {
         let mut req = sc2api::Request::new();
 
         {
@@ -124,6 +131,10 @@ impl Control for Client {
             options.set_score(true);
         }
 
-        self.call(req)
+        let rsp = self.call(req)?;
+
+        println!("join game rsp: {:#?}", rsp);
+
+        Ok(())
     }
 }

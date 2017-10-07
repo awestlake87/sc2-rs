@@ -27,6 +27,7 @@ pub enum Difficulty {
     CheatInsane
 }
 
+#[derive(Copy, Clone)]
 pub struct Player {
     pub kind:           PlayerKind,
     pub race:           Option<Race>,
