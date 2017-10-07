@@ -97,6 +97,7 @@ impl Control for Client {
                 ),
                 None => ()
             };
+            
 
             req.mut_create_game().mut_player_setup().push(setup);
         }
