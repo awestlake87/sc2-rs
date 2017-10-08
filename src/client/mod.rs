@@ -1,5 +1,3 @@
-pub mod control;
-
 use std::io;
 
 use bytes::{ Buf, BufMut };

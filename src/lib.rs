@@ -16,6 +16,7 @@ pub mod client;
 pub mod coordinator;
 pub mod game;
 mod instance;
+pub mod participant;
 pub mod player;
 
 

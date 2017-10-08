@@ -3,7 +3,7 @@ use sc2_proto::common;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Response };
 
-use super::{ Client };
+use super::{ Participant };
 use super::super::{ Result, Error };
 use super::super::game::{ GameSettings, Map, GamePorts };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
@@ -13,16 +13,16 @@ pub trait Control {
     fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
         -> Result<()>
     ;
-    fn join_game(&mut self, player: &Player) -> Result<()>;
+    fn join_game(&mut self, player: Player) -> Result<()>;
 }
 
-impl Control for Client {
+impl Control for Participant {
     fn quit(&mut self) -> Result<()> {
         let mut req = sc2api::Request::new();
 
         req.mut_quit();
 
-        self.send(req)
+        self.client.send(req)
     }
 
     fn create_game(
@@ -103,14 +103,14 @@ impl Control for Client {
 
         req.mut_create_game().set_realtime(true);
 
-        let rsp = self.call(req)?;
+        let rsp = self.client.call(req)?;
 
         println!("create game rsp: {:#?}", rsp);
 
         Ok(())
     }
 
-    fn join_game(&mut self, player: &Player) -> Result<()> {
+    fn join_game(&mut self, player: Player) -> Result<()> {
         let mut req = sc2api::Request::new();
 
         {
@@ -133,7 +133,7 @@ impl Control for Client {
             options.set_score(true);
         }
 
-        let rsp = self.call(req)?;
+        let rsp = self.client.call(req)?;
 
         println!("join game rsp: {:#?}", rsp);
 

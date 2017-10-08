@@ -12,26 +12,17 @@ use tokio_core::reactor;
 
 use super::{ Result, Error };
 use client::{ Client };
-use client::control::{ Control };
 use utils::Rect;
 use agent::{ Agent };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
+use participant::{ Participant, Control };
 use player::{ Player, PlayerKind };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
     X64,
     X32
-}
-
-struct Participant {
-    player:                 Player,
-    instance:               Instance,
-    client:                 Client,
-    agent:                  Box<Agent>,
-    //observer
-    //control
 }
 
 #[derive(Clone)]
@@ -174,20 +165,19 @@ impl Coordinator {
             };
         }
 
-        self.participants[0].client.create_game(&settings, &player_data)?;
+        self.participants[0].create_game(&settings, &player_data)?;
 
-        for &mut Participant { ref mut client, ref player, .. }
-            in &mut self.participants
-        {
-            client.join_game(&player)?;
+        for ref mut p in &mut self.participants {
+            let player = p.player.clone();
+            p.join_game(player)?;
         }
 
-        for &mut Participant { ref mut agent, .. } in &mut self.participants {
-            agent.on_game_full_start();
+        for ref mut p in &mut self.participants {
+            p.agent.on_game_full_start();
         }
 
-        for &mut Participant { ref mut agent, .. } in &mut self.participants {
-            agent.on_game_start();
+        for ref mut p in &mut self.participants {
+            p.agent.on_game_start();
         }
 
         Ok(())
@@ -205,20 +195,20 @@ impl Coordinator {
     pub fn cleanup(&mut self) -> Result<()> {
         let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
 
-        for &mut Participant { ref mut client, .. } in &mut self.participants {
-            match client.quit() {
+        for ref mut p in &mut self.participants {
+            match p.quit() {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("unable to send quit: {}", e);
                 }
             };
 
-            match client.close() {
+            match p.client.close() {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("unable to close client: {}", e);
                 }
-            };
+            }
         };
 
         let cleanup = async_block! {
