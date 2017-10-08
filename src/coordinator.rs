@@ -13,6 +13,7 @@ use tokio_core::reactor;
 use super::{ Result, Error };
 use utils::Rect;
 use client::{ Client };
+use client::agent::{ Agent };
 use client::control::{ Control };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
@@ -22,6 +23,15 @@ use player::{ Player, PlayerKind };
 enum ExeArch {
     X64,
     X32
+}
+
+struct Participant {
+    player:                 Player,
+    instance:               Instance,
+    client:                 Client,
+    agent:                  Box<Agent>,
+    //observer
+    //control
 }
 
 #[derive(Clone)]
@@ -53,7 +63,7 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    clients:                Vec<(Client, Player)>
+    participants:           Vec<Participant>
 }
 
 impl Coordinator {
@@ -75,7 +85,7 @@ impl Coordinator {
                 current_port:   settings.port,
                 window:         settings.window,
                 cleanups:       vec![ ],
-                clients:        vec![ ]
+                participants:   vec![ ]
             }
         )
     }
@@ -107,45 +117,95 @@ impl Coordinator {
         Ok(instance)
     }
 
-    pub fn start_game(&mut self, players: Vec<Player>, settings: GameSettings)
+    pub fn start_game(
+        &mut self,
+        players: Vec<(Player, Option<Box<Agent>>)>,
+        settings: GameSettings
+    )
         -> Result<()>
     {
-        let mut participants = vec![ ];
+        let mut instances = vec![ ];
+        let mut player_data = vec![ ];
 
-        for player in &players {
+        for &(player, _) in &players {
             match player.kind {
                 PlayerKind::Computer => (),
                 _ => {
-                    participants.push((self.launch()?, player.clone()));
+                    instances.push(Some(self.launch()?));
+                }
+            };
+
+            player_data.push(player);
+        }
+
+        if instances.len() < 1 {
+            return Err(Error::Todo("expected at least one instance"))
+        }
+
+        let mut i = 0;
+        for (player, agent) in players {
+            match player.kind {
+                PlayerKind::Computer => (),
+                _ => match agent {
+                    Some(agent) => {
+                        let instance = mem::replace(&mut instances[i], None)
+                            .unwrap()
+                        ;
+
+                        let client = instance.connect()?;
+
+                        self.participants.push(
+                            Participant {
+                                instance: instance,
+                                player: player,
+                                agent: agent,
+                                client: client
+                            }
+                        );
+
+                        i += 1;
+                    }
+                    None => return Err(
+                        Error::Todo(
+                            "agent must be specified for non cpu player"
+                        )
+                    )
                 }
             };
         }
 
-        if participants.len() < 1 {
-            return Err(Error::Todo("expected at least one instance"))
-        }
+        self.participants[0].client.create_game(&settings, &player_data)?;
 
-        for (instance, player) in participants {
-            self.clients.push((instance.connect()?, player.clone()));
-        }
-
-        self.clients[0].0.create_game(&settings, &players)?;
-
-        for &mut (ref mut client, ref player) in &mut self.clients {
+        for &mut Participant { ref mut client, ref player, .. }
+            in &mut self.participants
+        {
             client.join_game(&player)?;
+        }
+
+        for &mut Participant { ref mut agent, .. } in &mut self.participants {
+            agent.on_game_full_start();
+        }
+
+        for &mut Participant { ref mut agent, .. } in &mut self.participants {
+            agent.on_game_start();
         }
 
         Ok(())
     }
 
     pub fn update(&mut self) -> Result<()> {
+        self.step_agents_realtime()?;
+        Ok(())
+    }
+
+    fn step_agents_realtime(&mut self) -> Result<()> {
         Ok(())
     }
 
     pub fn cleanup(&mut self) -> Result<()> {
         let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
 
-        for &mut (ref mut client, _) in &mut self.clients {
+        for &mut Participant { ref mut client, .. } in &mut self.participants {
             match client.quit() {
                 Ok(_) => (),
                 Err(e) => {

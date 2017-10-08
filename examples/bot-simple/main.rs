@@ -8,6 +8,7 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
+use sc2::client::agent::{ Agent };
 use sc2::coordinator::{ Coordinator };
 use sc2::player::{ Player, Difficulty, Race };
 
@@ -16,6 +17,22 @@ use examples_common::{
 };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+struct Bot {
+
+}
+
+impl Bot {
+    fn new() -> Self {
+        Self { }
+    }
+}
+
+impl Agent for Bot {
+    fn on_game_start(&mut self) {
+        println!("FUCK YEYA!");
+    }
+}
 
 fn main() {
     let mut events = glutin::EventsLoop::new();
@@ -41,9 +58,12 @@ fn main() {
         Race::Zerg,
         Difficulty::VeryEasy
     );
-    let observer = Player::new_participant(Race::Terran);
+    let player = Player::new_participant(Race::Terran);
 
-    match coordinator.start_game(vec![ zerg_cpu, observer ], game_settings) {
+    match coordinator.start_game(
+        vec![ (zerg_cpu, None), (player, Some(Box::from(Bot::new()))) ],
+        game_settings
+    ) {
         Ok(_) => println!("game started!"),
         Err(e) => eprintln!("unable to start game: {}", e)
     };
