@@ -1,4 +1,3 @@
-use super::{ Client };
 
 pub trait Agent {
     fn on_game_full_start(&mut self) {

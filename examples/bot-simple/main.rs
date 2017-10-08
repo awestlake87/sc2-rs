@@ -8,7 +8,7 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::client::agent::{ Agent };
+use sc2::agent::{ Agent };
 use sc2::coordinator::{ Coordinator };
 use sc2::player::{ Player, Difficulty, Race };
 

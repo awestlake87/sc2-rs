@@ -11,10 +11,10 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use utils::Rect;
 use client::{ Client };
-use client::agent::{ Agent };
 use client::control::{ Control };
+use utils::Rect;
+use agent::{ Agent };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use player::{ Player, PlayerKind };
