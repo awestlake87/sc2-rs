@@ -292,7 +292,12 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                         if current_version < v {
                             current_version = v;
 
-                            if use_wine && arch == ExeArch::X32 {
+                            if use_wine {
+                                if arch == ExeArch::X32 {
+                                    exe = Ok((path, arch));
+                                }
+                            }
+                            else {
                                 exe = Ok((path, arch));
                             }
                         }

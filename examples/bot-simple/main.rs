@@ -29,6 +29,9 @@ impl Bot {
 }
 
 impl Agent for Bot {
+    fn on_game_full_start(&mut self) {
+        println!("FULL FUCK YEYA!");
+    }
     fn on_game_start(&mut self) {
         println!("FUCK YEYA!");
     }
