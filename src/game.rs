@@ -41,9 +41,9 @@ pub struct GameState {
 pub struct GameInfo {
     //*** Game Info Data ***
     //game_info: GameInfo,
-    game_info_cached: bool,
+    pub game_info_cached: bool,
     //use gen ability set init val to true
-    use_generalized_ability: bool,
+    pub use_generalized_ability: bool,
 }
 //proto interface is client
 //observation is self
@@ -52,16 +52,16 @@ pub struct GameInfo {
 
 pub struct PlayerData {
     //*** Player Data ***
-    minerals: i32,
-    vespene: i32,
-    food_cap: i32,
-    food_used: i32,
-    food_army: i32,
-    food_workers: i32,
-    idle_worker_count: i32,
-    army_count: i32,
-    warp_gate_count: i32,
-    larva_count: i32,
+    pub minerals: i32,
+    pub vespene: i32,
+    pub food_cap: i32,
+    pub food_used: i32,
+    pub food_army: i32,
+    pub food_workers: i32,
+    pub idle_worker_count: i32,
+    pub army_count: i32,
+    pub warp_gate_count: i32,
+    pub larva_count: i32,
     //camera_pos: Point2D,
     //start_location: Point3D,
 }

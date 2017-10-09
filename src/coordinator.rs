@@ -11,10 +11,9 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use client::{ Client };
 use utils::Rect;
 use agent::{ Agent };
-use game::{ GameSettings, GameState };
+use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{ Participant, Control };
 use player::{ Player, PlayerKind };
@@ -146,16 +145,12 @@ impl Coordinator {
                         let client = instance.connect()?;
 
                         self.participants.push(
-                            Participant {
-                                instance: instance,
-                                player: player,
-                                agent: agent,
-                                client: client,
-                                player_id: 0,
-                                game_state: GameState {
-                                    current_game_loop: 0
-                                }
-                            }
+                            Participant::new(
+                                instance,
+                                client,
+                                player,
+                                agent
+                            )
                         );
 
                         i += 1;

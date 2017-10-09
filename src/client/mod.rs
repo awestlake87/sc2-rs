@@ -80,9 +80,4 @@ impl Client {
             }
         }
     }
-
-    pub fn call(&mut self, req: Request) -> Result<Response> {
-        self.send(req)?;
-        self.recv()
-    }
 }

@@ -1,6 +1,6 @@
 
 use super::{ Participant };
-use super::super::{ Result, Error };
+//use super::super::{ Result, Error };
 
 pub trait Observer {
     fn get_game_loop(&self) -> u32;

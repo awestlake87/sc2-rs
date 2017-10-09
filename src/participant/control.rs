@@ -1,11 +1,10 @@
 
 use sc2_proto::common;
 use sc2_proto::sc2api;
-use sc2_proto::sc2api::{ Response };
 
 use super::{ Participant };
 use super::super::{ Result, Error };
-use super::super::game::{ GameSettings, Map, GamePorts };
+use super::super::game::{ GameSettings, Map };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
 
 pub trait Control {
@@ -103,7 +102,8 @@ impl Control for Participant {
 
         req.mut_create_game().set_realtime(true);
 
-        let rsp = self.client.call(req)?;
+        self.client.send(req)?;
+        let rsp = self.recv()?;
 
         println!("create game rsp: {:#?}", rsp);
 
@@ -133,9 +133,18 @@ impl Control for Participant {
             options.set_score(true);
         }
 
-        let rsp = self.client.call(req)?;
+        self.client.send(req)?;
+        let rsp = self.recv()?;
 
-        println!("join game rsp: {:#?}", rsp);
+        if !rsp.has_join_game() {
+            return Err(Error::Todo("response does not contain join game"))
+        }
+
+        if rsp.get_error().len() > 0 {
+            return Err(Error::Todo("response has errors"))
+        }
+
+        self.player_id = Some(rsp.get_join_game().get_player_id());
 
         Ok(())
     }
