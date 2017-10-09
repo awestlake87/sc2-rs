@@ -14,7 +14,7 @@ use super::{ Result, Error };
 use client::{ Client };
 use utils::Rect;
 use agent::{ Agent };
-use game::{ GameSettings };
+use game::{ GameSettings, GameState };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{ Participant, Control };
 use player::{ Player, PlayerKind };
@@ -150,7 +150,11 @@ impl Coordinator {
                                 instance: instance,
                                 player: player,
                                 agent: agent,
-                                client: client
+                                client: client,
+                                player_id: 0,
+                                game_state: GameState {
+                                    current_game_loop: 0
+                                }
                             }
                         );
 
