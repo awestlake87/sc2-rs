@@ -202,7 +202,7 @@ impl Coordinator {
                 }
             };
 
-            match p.client.close() {
+            match p.close() {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("unable to close client: {}", e);

@@ -21,7 +21,7 @@ impl Control for Participant {
 
         req.mut_quit();
 
-        self.client.send(req)
+        self.send(req)
     }
 
     fn create_game(
@@ -102,7 +102,7 @@ impl Control for Participant {
 
         req.mut_create_game().set_realtime(true);
 
-        self.client.send(req)?;
+        self.send(req)?;
         let rsp = self.recv()?;
 
         println!("create game rsp: {:#?}", rsp);
@@ -133,17 +133,9 @@ impl Control for Participant {
             options.set_score(true);
         }
 
-        self.client.send(req)?;
+        self.send(req)?;
         let rsp = self.recv()?;
-
-        if !rsp.has_join_game() {
-            return Err(Error::Todo("response does not contain join game"))
-        }
-
-        if rsp.get_error().len() > 0 {
-            return Err(Error::Todo("response has errors"))
-        }
-
+        
         self.player_id = Some(rsp.get_join_game().get_player_id());
 
         Ok(())
