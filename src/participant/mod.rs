@@ -61,7 +61,7 @@ impl Participant {
         let rsp = match self.client.recv() {
             Ok(rsp) => rsp,
             Err(e) => {
-                panic!("receive error {}", e);
+                unimplemented!("receive error {}", e);
             }
         };
 
@@ -71,7 +71,7 @@ impl Participant {
         else {
             // the game instance is not responsive
             self.app_state = AppState::Timeout;
-            Err(Error::Todo("distinguish between a hang and a crash"))
+            unimplemented!("distinguish between a crash/hang")
         }
     }
 }
