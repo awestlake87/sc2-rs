@@ -3,13 +3,12 @@ use super::{ Participant };
 use super::super::{ Result, Error };
 use super::super::ability::{ Ability };
 use super::super::unit::{ Unit, Tag };
-
-use na::{ Vector2 };
+use super::super::utils::{ Point2 };
 
 pub trait Actions {
     fn command_units(&mut self, units: &Vec<Unit>, ability: Ability);
     fn command_units_to_location(
-        &mut self, units: &Vec<Unit>, ability: Ability, location: Vector2<f32>
+        &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
     );
     fn command_units_to_target(
         &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
@@ -24,7 +23,7 @@ impl Actions for Participant {
         unimplemented!("command units");
     }
     fn command_units_to_location(
-        &mut self, units: &Vec<Unit>, ability: Ability, location: Vector2<f32>
+        &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
     ) {
         unimplemented!("command units location");
     }
@@ -35,7 +34,7 @@ impl Actions for Participant {
     }
 
     fn get_commands(&self) -> Vec<Tag> {
-        unimplemented!("get commands");
+        self.commands.clone()
     }
 
     fn send_actions(&self) {

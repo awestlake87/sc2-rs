@@ -1,9 +1,9 @@
 
-use na::{ Vector3, Vector2 };
-
 use buff::{ Buff };
 use ability::{ Ability };
+use utils::{ Point2, Point3 };
 
+#[derive(Clone)]
 pub struct Tag {
 }
 
@@ -256,63 +256,63 @@ pub enum CloakState {
 }
 
 pub struct UnitOrder {
-    ability:                Ability,
-    target_unit_tag:        Tag,
-    target_pos:             Vector2<f32>,
+    pub ability:                Ability,
+    pub target_unit_tag:        Tag,
+    pub target_pos:             Point2,
 }
 
 pub struct PassengerUnit {
-    tag:                    Tag,
-    health:                 f32,
-    health_max:             f32,
-    shield:                 f32,
-    energy:                 f32,
-    unit_type:              UnitType,
+    pub tag:                    Tag,
+    pub health:                 f32,
+    pub health_max:             f32,
+    pub shield:                 f32,
+    pub energy:                 f32,
+    pub unit_type:              UnitType,
 }
 
 pub struct Unit {
-    display_type:           DisplayType,
-    alliance:               Alliance,
+    pub display_type:           DisplayType,
+    pub alliance:               Alliance,
 
-    tag:                    Tag,
-    unit_type:              UnitType,
-    owner:                  u32,
+    pub tag:                    Tag,
+    pub unit_type:              UnitType,
+    pub owner:                  u32,
 
-    pos:                    Vector3<f32>,
-    facing:                 f32,
-    radius:                 f32,
-    build_progress:         f32,
+    pub pos:                    Point3,
+    pub facing:                 f32,
+    pub radius:                 f32,
+    pub build_progress:         f32,
 
-    cloak:                  CloakState,
+    pub cloak:                  CloakState,
 
-    detect_range:           f32,
-    radar_range:            f32,
+    pub detect_range:           f32,
+    pub radar_range:            f32,
 
-    is_selected:            bool,
-    is_on_screen:           bool,
-    is_blip:                bool,
+    pub is_selected:            bool,
+    pub is_on_screen:           bool,
+    pub is_blip:                bool,
 
-    health:                 f32,
-    health_max:             f32,
-    shield:                 f32,
-    energy:                 f32,
-    mineral_contents:       u32,
-    vespene_contents:       u32,
-    is_flying:              bool,
-    is_burrowed:            bool,
-    weapon_cooldown:        f32,
+    pub health:                 f32,
+    pub health_max:             f32,
+    pub shield:                 f32,
+    pub energy:                 f32,
+    pub mineral_contents:       u32,
+    pub vespene_contents:       u32,
+    pub is_flying:              bool,
+    pub is_burrowed:            bool,
+    pub weapon_cooldown:        f32,
 
-    orders:                 Vec<UnitOrder>,
-    add_on_tag:             Tag,
-    passengers:             Vec<PassengerUnit>,
-    cargo_space_taken:      u32,
-    cargo_space_max:        u32,
-    assigned_harvesters:    u32,
-    ideal_harvesters:       u32,
-    engaged_target_tag:     Tag,
-    buffs:                  Vec<Buff>,
-    is_powered:             bool,
+    pub orders:                 Vec<UnitOrder>,
+    pub add_on_tag:             Tag,
+    pub passengers:             Vec<PassengerUnit>,
+    pub cargo_space_taken:      u32,
+    pub cargo_space_max:        u32,
+    pub assigned_harvesters:    u32,
+    pub ideal_harvesters:       u32,
+    pub engaged_target_tag:     Tag,
+    pub buffs:                  Vec<Buff>,
+    pub is_powered:             bool,
 
-    is_alive:               bool,
-    last_seen_game_loop:    u32,
+    pub is_alive:               bool,
+    pub last_seen_game_loop:    u32,
 }

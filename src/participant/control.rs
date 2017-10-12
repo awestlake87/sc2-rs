@@ -8,7 +8,7 @@ use super::{ Participant };
 use super::super::{ Result, Error };
 use super::super::game::{ GameSettings, Map };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
-use super::super::unit::{ Tag };
+use super::super::unit::{ Unit, Tag };
 
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
@@ -25,6 +25,15 @@ pub trait Control {
     fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()>;
 
     fn quit(&mut self) -> Result<()>;
+}
+
+trait InnerControl {
+    fn issue_unit_destroyed_events(&mut self) -> Result<()>;
+    fn issue_unit_added_events(&mut self) -> Result<()>;
+    fn issue_idle_events(&mut self) -> Result<()>;
+    fn issue_building_completed_events(&mut self) -> Result<()>;
+    fn issue_upgrade_events(&mut self) -> Result<()>;
+    fn issue_alert_events(&mut self) -> Result<()>;
 }
 
 impl Control for Participant {
@@ -161,7 +170,25 @@ impl Control for Participant {
     }
 
     fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()> {
-        unimplemented!("issue events");
+        if
+            self.game_state.current_game_loop ==
+            self.game_state.previous_game_loop
+        {
+            return Ok(())
+        }
+
+        self.issue_unit_destroyed_events()?;
+        self.issue_unit_added_events()?;
+
+        self.issue_idle_events()?;
+        self.issue_building_completed_events()?;
+
+        self.issue_upgrade_events()?;
+        self.issue_alert_events()?;
+
+        self.agent.on_step();
+
+        Ok(())
     }
 
     fn quit(&mut self) -> Result<()> {
@@ -170,5 +197,26 @@ impl Control for Participant {
         req.mut_quit();
 
         self.send(req)
+    }
+}
+
+impl InnerControl for Participant {
+    fn issue_unit_destroyed_events(&mut self) -> Result<()> {
+        unimplemented!("issue unit destroyed events");
+    }
+    fn issue_unit_added_events(&mut self) -> Result<()> {
+        unimplemented!("issue unit added events");
+    }
+    fn issue_idle_events(&mut self) -> Result<()> {
+        unimplemented!("issue idle event");
+    }
+    fn issue_building_completed_events(&mut self) -> Result<()> {
+        unimplemented!("issue building completed event");
+    }
+    fn issue_upgrade_events(&mut self) -> Result<()> {
+        unimplemented!("issue upgrade events");
+    }
+    fn issue_alert_events(&mut self) -> Result<()> {
+        unimplemented!("issue alert events");
     }
 }

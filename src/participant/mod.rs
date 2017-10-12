@@ -12,6 +12,7 @@ use super::client::Client;
 use super::game::{ GameState, PlayerData };
 use super::instance::Instance;
 use super::player::Player;
+use super::unit::{ Unit, Tag };
 
 pub use self::actions::{ Actions };
 pub use self::control::{ Control };
@@ -28,6 +29,9 @@ pub struct Participant {
     response_pending:           MessageType,
     base_build:                 Option<u32>,
     data_version:               Option<String>,
+
+    commands:                   Vec<Tag>,
+    units:                      Vec<Unit>,
 
     player_id:                  Option<u32>,
     game_state:                 GameState,
@@ -51,6 +55,9 @@ impl Participant {
             response_pending: MessageType::Unknown,
             base_build: None,
             data_version: None,
+
+            commands: vec![ ],
+            units: vec![ ],
 
             player_id: None,
             game_state: GameState {
@@ -117,7 +124,7 @@ impl Participant {
     }
 
     pub fn poll_leave_game(&self) -> bool {
-        unimplemented!("poll leave game");
+        false
     }
 
     fn send(&mut self, req: Request) -> Result<()> {
