@@ -15,7 +15,7 @@ use utils::Rect;
 use agent::{ Agent };
 use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
-use participant::{ Participant, Control };
+use participant::{ Participant, Control, Observer, Actions, AppState };
 use player::{ Player, PlayerKind };
 
 #[derive(Copy, Clone, PartialEq)]
@@ -188,7 +188,40 @@ impl Coordinator {
     }
 
     fn step_agents_realtime(&mut self) -> Result<()> {
-        Ok(())
+        let mut result = Ok(());
+
+        for ref mut p in &mut self.participants {
+            if p.get_app_state() != AppState::Normal {
+                continue;
+            }
+
+            if p.poll_leave_game() {
+                continue;
+            }
+
+            if p.is_finished_game() {
+                continue;
+            }
+
+            p.update_observation();
+
+            let commands = p.get_commands();
+            p.issue_events(commands);
+            p.send_actions();
+
+            if !p.is_in_game() {
+                p.agent.on_game_end();
+                match p.leave_game() {
+                    Ok(()) => (),
+                    Err(e) => {
+                        result = Err(e);
+                    }
+                }
+                continue;
+            }
+        }
+
+        result
     }
 
     pub fn cleanup(&mut self) -> Result<()> {

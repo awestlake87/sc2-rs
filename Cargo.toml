@@ -8,6 +8,7 @@ bytes = "*"
 futures-await = { git = "https://github.com/alexcrichton/futures-await" }
 glob = "*"
 glutin = "*"
+nalgebra = "*"
 protobuf = "*"
 regex = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }

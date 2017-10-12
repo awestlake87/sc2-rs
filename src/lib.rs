@@ -3,6 +3,7 @@
 extern crate bytes;
 extern crate futures_await as futures;
 extern crate glob;
+extern crate nalgebra as na;
 extern crate protobuf;
 extern crate regex;
 extern crate sc2_proto;

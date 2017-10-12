@@ -1,29 +1,35 @@
 
+use std::path::PathBuf;
+
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
 use super::{ Participant };
 use super::super::{ Result, Error };
-use super::super::game::{ GameSettings, Map };
+use super::super::game::{ GameSettings, Map, Tag };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
 
 pub trait Control {
-    fn quit(&mut self) -> Result<()>;
+    fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
     fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
         -> Result<()>
     ;
     fn join_game(&mut self, player: Player) -> Result<()>;
+    fn leave_game(&mut self) -> Result<()>;
+
+    fn step(&mut self, count: usize) -> Result<()>;
+
+    fn save_replay(&mut self, path: PathBuf) -> Result<()>;
+
+    fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()>;
+
+    fn quit(&mut self) -> Result<()>;
 }
 
 impl Control for Participant {
-    fn quit(&mut self) -> Result<()> {
-        let mut req = sc2api::Request::new();
-
-        req.mut_quit();
-
-        self.send(req)
+    fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()> {
+        unimplemented!("save map");
     }
-
     fn create_game(
         &mut self, settings: &GameSettings, players: &Vec<Player>
     )
@@ -135,9 +141,33 @@ impl Control for Participant {
 
         self.send(req)?;
         let rsp = self.recv()?;
-        
+
         self.player_id = Some(rsp.get_join_game().get_player_id());
 
         Ok(())
+    }
+
+    fn leave_game(&mut self) -> Result<()> {
+        unimplemented!("leave game");
+    }
+
+    fn step(&mut self, count: usize) -> Result<()> {
+        unimplemented!("step");
+    }
+
+    fn save_replay(&mut self, path: PathBuf) -> Result<()> {
+        unimplemented!("save replay");
+    }
+
+    fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()> {
+        unimplemented!("issue events");
+    }
+
+    fn quit(&mut self) -> Result<()> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_quit();
+
+        self.send(req)
     }
 }

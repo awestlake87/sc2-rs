@@ -1,4 +1,5 @@
 
+mod actions;
 mod control;
 mod observer;
 
@@ -8,10 +9,11 @@ use sc2_proto::sc2api::{ Request, Response };
 use super::{ Result, Error };
 use super::agent::Agent;
 use super::client::Client;
+use super::game::{ GameState, PlayerData };
 use super::instance::Instance;
 use super::player::Player;
-use super::game::{ GameState };
 
+pub use self::actions::{ Actions };
 pub use self::control::{ Control };
 pub use self::observer::{ Observer };
 
@@ -21,14 +23,15 @@ pub struct Participant {
     client:                     Client,
     pub agent:                  Box<Agent>,
 
-    pub app_state:              AppState,
-    pub last_status:            AppStatus,
+    app_state:                  AppState,
+    last_status:                AppStatus,
     response_pending:           MessageType,
     base_build:                 Option<u32>,
     data_version:               Option<String>,
 
     pub player_id:              Option<u32>,
     pub game_state:             GameState,
+    pub player_data:            PlayerData,
 }
 
 impl Participant {
@@ -51,9 +54,70 @@ impl Participant {
 
             player_id: None,
             game_state: GameState {
-                current_game_loop: 0
+                current_game_loop: 0,
+                previous_game_loop: 0,
+            },
+            player_data: PlayerData {
+                minerals: 0,
+                vespene: 0,
+                food_cap: 0,
+                food_used: 0,
+                food_army: 0,
+                food_workers: 0,
+                idle_worker_count: 0,
+                army_count: 0,
+                warp_gate_count: 0,
+                larva_count: 0,
             }
         }
+    }
+
+    pub fn get_app_state(&self) -> AppState {
+        self.app_state
+    }
+    pub fn get_last_status(&self) -> AppStatus {
+        self.last_status
+    }
+    pub fn is_in_game(&self) -> bool {
+        if self.get_app_state() == AppState::Normal {
+            match self.get_last_status() {
+                AppStatus::InGame => true,
+                AppStatus::InReplay => true,
+                _ => false
+            }
+        }
+        else {
+            false
+        }
+    }
+    pub fn is_finished_game(&self) -> bool {
+        if self.get_app_state() != AppState::Normal {
+            true
+        }
+        else if self.is_in_game() {
+            false
+        }
+        // else if self.has_response_pending() { false }
+        else {
+            true
+        }
+    }
+    pub fn is_ready_for_create_game(&self) -> bool {
+        if self.get_app_state() != AppState::Normal {
+            false
+        }
+        // else if self.has_response_pending() { false }
+        else {
+            match self.get_last_status() {
+                AppStatus::Launched => true,
+                AppStatus::Ended => true,
+                _ => false
+            }
+        }
+    }
+
+    pub fn poll_leave_game(&self) -> bool {
+        unimplemented!("poll leave game");
     }
 
     fn send(&mut self, req: Request) -> Result<()> {
