@@ -11,8 +11,9 @@ extern crate tokio_core;
 extern crate tungstenite;
 extern crate url;
 
-pub mod utils;
+pub mod ability;
 pub mod agent;
+pub mod buff;
 pub mod client;
 pub mod coordinator;
 pub mod game;
@@ -20,6 +21,8 @@ mod instance;
 pub mod participant;
 pub mod player;
 pub mod unit;
+pub mod utils;
+pub mod upgrade;
 
 
 use std::result;

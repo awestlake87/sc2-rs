@@ -6,8 +6,9 @@ use sc2_proto::sc2api;
 
 use super::{ Participant };
 use super::super::{ Result, Error };
-use super::super::game::{ GameSettings, Map, Tag };
+use super::super::game::{ GameSettings, Map };
 use super::super::player::{ Player, PlayerKind, Race, Difficulty };
+use super::super::unit::{ Tag };
 
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;

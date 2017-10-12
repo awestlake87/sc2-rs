@@ -1,15 +1,6 @@
 
 use std::path::PathBuf;
 
-pub struct Unit {
-
-}
-pub struct Tag {
-}
-
-pub struct AbilityId {
-}
-
 #[derive(Clone)]
 pub enum Map {
     LocalMap(PathBuf),

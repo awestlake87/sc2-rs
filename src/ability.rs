@@ -529,7 +529,7 @@ pub enum Ability {
     Effect(Effect),
     Hallucination(Hallucination),
     Halt(Halt),
-    Harvest(Harvest)
+    Harvest(Harvest),
 
     HoldPosition,    // Target: None.
 

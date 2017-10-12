@@ -1,4 +1,12 @@
 
+use na::{ Vector3, Vector2 };
+
+use buff::{ Buff };
+use ability::{ Ability };
+
+pub struct Tag {
+}
+
 pub enum Terran {
     // Terran
     Armory,                 // CANCEL, HALT, CANCEL_LAST, RESEARCH_TERRANSHIPWEAPONS, RESEARCH_TERRANVEHICLEANDSHIPPLATING, RESEARCH_TERRANVEHICLEWEAPONS
@@ -228,20 +236,83 @@ pub enum UnitType {
 }
 
 pub enum DisplayType {
-
+    Visible,
+    Snapshot,
+    Hidden,
 }
 
 pub enum Alliance {
-
+    Domestic,
+    Ally,
+    Neutral,
+    Enemy,
 }
 
 pub enum CloakState {
+    Cloaked,
+    CloakedDetected,
+    NotCloaked,
+    Unknown,
+}
 
+pub struct UnitOrder {
+    ability:                Ability,
+    target_unit_tag:        Tag,
+    target_pos:             Vector2<f32>,
+}
+
+pub struct PassengerUnit {
+    tag:                    Tag,
+    health:                 f32,
+    health_max:             f32,
+    shield:                 f32,
+    energy:                 f32,
+    unit_type:              UnitType,
 }
 
 pub struct Unit {
-    display_type:   DisplayType,
-    alliance:       Alliance,
-    tag:            Tag,
-    unit_type:      UnitType
+    display_type:           DisplayType,
+    alliance:               Alliance,
+
+    tag:                    Tag,
+    unit_type:              UnitType,
+    owner:                  u32,
+
+    pos:                    Vector3<f32>,
+    facing:                 f32,
+    radius:                 f32,
+    build_progress:         f32,
+
+    cloak:                  CloakState,
+
+    detect_range:           f32,
+    radar_range:            f32,
+
+    is_selected:            bool,
+    is_on_screen:           bool,
+    is_blip:                bool,
+
+    health:                 f32,
+    health_max:             f32,
+    shield:                 f32,
+    energy:                 f32,
+    mineral_contents:       u32,
+    vespene_contents:       u32,
+    is_flying:              bool,
+    is_burrowed:            bool,
+    weapon_cooldown:        f32,
+
+    orders:                 Vec<UnitOrder>,
+    add_on_tag:             Tag,
+    passengers:             Vec<PassengerUnit>,
+    cargo_space_taken:      u32,
+    cargo_space_max:        u32,
+    assigned_harvesters:    u32,
+    ideal_harvesters:       u32,
+    engaged_target_tag:     Tag,
+    buffs:                  Vec<Buff>,
+    is_powered:             bool,
+
+    is_alive:               bool,
+    last_seen_game_loop:    u32,
 }
