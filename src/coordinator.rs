@@ -11,12 +11,10 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use utils::Rect;
+use data::{ Rect, Player, PlayerKind, GameSettings };
 use agent::{ Agent };
-use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{ Participant, Control, Observer, Actions, AppState };
-use player::{ Player, PlayerKind };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {

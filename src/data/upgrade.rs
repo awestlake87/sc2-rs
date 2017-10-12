@@ -87,3 +87,11 @@ pub enum Upgrade {
     LiberatorAgRangeUpgrade,
     DarkTemplarBlinkUpgrade,
 }
+
+impl Upgrade {
+    pub fn from_id(id: u32) -> Self {
+        match id {
+            _ => Upgrade::Invalid
+        }
+    }
+}

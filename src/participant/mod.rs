@@ -11,10 +11,10 @@ use sc2_proto::sc2api::{ Request, Response };
 use super::{ Result, Error };
 use super::agent::Agent;
 use super::client::Client;
-use super::game::{ GameState, PlayerData };
+use super::data::{
+    PowerSource, GameState, PlayerData, Player, Unit, Tag, Upgrade, Point2
+};
 use super::instance::Instance;
-use super::player::Player;
-use super::unit::{ Unit, Tag };
 
 pub use self::actions::{ Actions };
 pub use self::control::{ Control };
@@ -36,8 +36,12 @@ pub struct Participant {
 
     previous_units:             HashMap<Tag, Unit>,
     units:                      HashMap<Tag, Unit>,
+    power_sources:              Vec<PowerSource>,
+    previous_upgrades:          Vec<Upgrade>,
+    upgrades:                   Vec<Upgrade>,
 
     player_id:                  Option<u32>,
+    camera_pos:                 Option<Point2>,
     game_state:                 GameState,
     player_data:                PlayerData,
 }
@@ -64,8 +68,12 @@ impl Participant {
 
             previous_units: HashMap::new(),
             units: HashMap::new(),
+            power_sources: vec![ ],
+            previous_upgrades: vec![ ],
+            upgrades: vec![ ],
 
             player_id: None,
+            camera_pos: None,
             game_state: GameState {
                 current_game_loop: 0,
                 previous_game_loop: 0,

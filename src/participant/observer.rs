@@ -5,9 +5,10 @@ use std::mem;
 use sc2_proto::sc2api;
 
 use super::{ Participant, AppState };
-use super::super::{ Result };
-use super::super::game::{ PlayerData, GameState };
-use super::super::unit::{ Unit };
+use super::super::{ Result, Error };
+use super::super::data::{
+    PowerSource, PlayerData, GameState, Unit, Upgrade, Point2
+};
 
 pub trait Observer {
     fn get_player_id(&self) -> Option<u32>;
@@ -80,8 +81,9 @@ impl Observer for Participant {
             */
 
             let raw = observation.get_raw_data();
-            self.previous_units = mem::replace(&mut self.units, HashMap::new());
-            self.units.clear();
+            self.previous_units = mem::replace(
+                &mut self.units, HashMap::new()
+            );
 
             for unit in raw.get_units().iter() {
                 let mut unit = Unit::from(unit.clone());
@@ -93,8 +95,31 @@ impl Observer for Participant {
             }
 
             // get camera data
+            if !raw.has_player() {
+                return Err(Error::Todo("no player data"))
+            }
 
-            //TODO the rest
+            let player_raw = raw.get_player();
+            if !player_raw.has_camera() {
+                return Err(Error::Todo("no camera data"))
+            }
+
+            self.camera_pos = {
+                let camera = player_raw.get_camera();
+                Some(Point2::new(camera.get_x(), camera.get_y()))
+            };
+
+            self.power_sources.clear();
+            for power_source in player_raw.get_power_sources() {
+                self.power_sources.push(
+                    PowerSource::from(power_source.clone())
+                );
+            }
+
+            self.previous_upgrades = mem::replace(&mut self.upgrades, vec![ ]);
+            for upgrade_id in player_raw.get_upgrade_ids() {
+                self.upgrades.push(Upgrade::from_id(*upgrade_id));
+            }
         }
 
         Ok(())

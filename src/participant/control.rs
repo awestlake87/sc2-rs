@@ -6,9 +6,9 @@ use sc2_proto::sc2api;
 
 use super::{ Participant };
 use super::super::{ Result, Error };
-use super::super::game::{ GameSettings, Map };
-use super::super::player::{ Player, PlayerKind, Race, Difficulty };
-use super::super::unit::{ Unit, Tag };
+use super::super::data::{
+    GameSettings, Map, Player, PlayerKind, Race, Difficulty, Unit, Tag
+};
 
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
@@ -37,7 +37,7 @@ trait InnerControl {
 }
 
 impl Control for Participant {
-    fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()> {
+    fn save_map(&mut self, _: Vec<u8>, _: PathBuf) -> Result<()> {
         unimplemented!("save map");
     }
     fn create_game(
@@ -161,15 +161,15 @@ impl Control for Participant {
         unimplemented!("leave game");
     }
 
-    fn step(&mut self, count: usize) -> Result<()> {
+    fn step(&mut self, _: usize) -> Result<()> {
         unimplemented!("step");
     }
 
-    fn save_replay(&mut self, path: PathBuf) -> Result<()> {
+    fn save_replay(&mut self, _: PathBuf) -> Result<()> {
         unimplemented!("save replay");
     }
 
-    fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()> {
+    fn issue_events(&mut self, _: Vec<Tag>) -> Result<()> {
         if
             self.game_state.current_game_loop ==
             self.game_state.previous_game_loop

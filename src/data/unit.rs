@@ -1,9 +1,9 @@
 
 use sc2_proto::raw;
 
-use buff::{ Buff };
-use ability::{ Ability };
-use utils::{ Point2, Point3 };
+use super::ability::{ Ability };
+use super::buff::{ Buff };
+use super::common::{ Point2, Point3 };
 
 pub type Tag = u64;
 
