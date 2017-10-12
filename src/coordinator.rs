@@ -167,8 +167,7 @@ impl Coordinator {
         self.participants[0].create_game(&settings, &player_data)?;
 
         for ref mut p in &mut self.participants {
-            let player = p.player.clone();
-            p.join_game(player)?;
+            p.join_game()?;
         }
 
         for ref mut p in &mut self.participants {

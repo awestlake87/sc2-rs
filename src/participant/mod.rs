@@ -18,7 +18,7 @@ pub use self::control::{ Control };
 pub use self::observer::{ Observer };
 
 pub struct Participant {
-    pub player:                 Player,
+    player:                     Player,
     pub instance:               Instance,
     client:                     Client,
     pub agent:                  Box<Agent>,
@@ -29,9 +29,9 @@ pub struct Participant {
     base_build:                 Option<u32>,
     data_version:               Option<String>,
 
-    pub player_id:              Option<u32>,
-    pub game_state:             GameState,
-    pub player_data:            PlayerData,
+    player_id:                  Option<u32>,
+    game_state:                 GameState,
+    player_data:                PlayerData,
 }
 
 impl Participant {

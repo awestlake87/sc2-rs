@@ -14,7 +14,7 @@ pub trait Control {
     fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
         -> Result<()>
     ;
-    fn join_game(&mut self, player: Player) -> Result<()>;
+    fn join_game(&mut self) -> Result<()>;
     fn leave_game(&mut self) -> Result<()>;
 
     fn step(&mut self, count: usize) -> Result<()>;
@@ -116,13 +116,13 @@ impl Control for Participant {
         Ok(())
     }
 
-    fn join_game(&mut self, player: Player) -> Result<()> {
+    fn join_game(&mut self) -> Result<()> {
         let mut req = sc2api::Request::new();
 
         {
             let join_game = &mut req.mut_join_game();
 
-            match player.race {
+            match self.player.race {
                 Some(race) => join_game.set_race(
                     match race {
                         Race::Zerg      => common::Race::Zerg,

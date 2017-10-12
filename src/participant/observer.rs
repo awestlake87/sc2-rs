@@ -4,16 +4,25 @@ use sc2_proto::sc2api;
 use super::{ Participant, AppState };
 use super::super::{ Result };
 use super::super::game::{ PlayerData, GameState };
+use super::super::unit::{ Unit };
 
 pub trait Observer {
+    fn get_player_id(&self) -> Option<u32>;
     fn get_game_loop(&self) -> u32;
+    fn get_units(&self) -> Vec<Unit>;
 
     fn update_observation(&mut self) -> Result<()>;
 }
 
 impl Observer for Participant {
+    fn get_player_id(&self) -> Option<u32> {
+        self.player_id
+    }
     fn get_game_loop(&self) -> u32 {
         self.game_state.current_game_loop
+    }
+    fn get_units(&self) -> Vec<Unit> {
+        unimplemented!("get units");
     }
 
     fn update_observation(&mut self) -> Result<()> {

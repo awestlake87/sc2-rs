@@ -19,6 +19,7 @@ pub mod game;
 mod instance;
 pub mod participant;
 pub mod player;
+pub mod unit;
 
 
 use std::result;
