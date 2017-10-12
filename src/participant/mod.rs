@@ -3,6 +3,8 @@ mod actions;
 mod control;
 mod observer;
 
+use std::collections::HashMap;
+
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
@@ -31,7 +33,9 @@ pub struct Participant {
     data_version:               Option<String>,
 
     commands:                   Vec<Tag>,
-    units:                      Vec<Unit>,
+
+    previous_units:             HashMap<Tag, Unit>,
+    units:                      HashMap<Tag, Unit>,
 
     player_id:                  Option<u32>,
     game_state:                 GameState,
@@ -57,7 +61,9 @@ impl Participant {
             data_version: None,
 
             commands: vec![ ],
-            units: vec![ ],
+
+            previous_units: HashMap::new(),
+            units: HashMap::new(),
 
             player_id: None,
             game_state: GameState {

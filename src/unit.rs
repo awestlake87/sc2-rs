@@ -1,10 +1,142 @@
 
+use sc2_proto::raw;
+
 use buff::{ Buff };
 use ability::{ Ability };
 use utils::{ Point2, Point3 };
 
-#[derive(Clone)]
-pub struct Tag {
+pub type Tag = u64;
+
+pub struct Unit {
+    pub display_type:           DisplayType,
+    pub alliance:               Alliance,
+
+    pub tag:                    Tag,
+    pub unit_type:              UnitType,
+    pub owner:                  i32,
+
+    pub pos:                    Point3,
+    pub facing:                 f32,
+    pub radius:                 f32,
+    pub build_progress:         f32,
+
+    pub cloak:                  CloakState,
+
+    pub detect_range:           f32,
+    pub radar_range:            f32,
+
+    pub is_selected:            bool,
+    pub is_on_screen:           bool,
+    pub is_blip:                bool,
+
+    pub health:                 f32,
+    pub health_max:             f32,
+    pub shield:                 f32,
+    pub energy:                 f32,
+    pub mineral_contents:       i32,
+    pub vespene_contents:       i32,
+    pub is_flying:              bool,
+    pub is_burrowed:            bool,
+    pub weapon_cooldown:        f32,
+
+    pub orders:                 Vec<UnitOrder>,
+    pub add_on_tag:             Tag,
+    pub passengers:             Vec<PassengerUnit>,
+    pub cargo_space_taken:      i32,
+    pub cargo_space_max:        i32,
+    pub assigned_harvesters:    i32,
+    pub ideal_harvesters:       i32,
+    pub engaged_target_tag:     Tag,
+    pub buffs:                  Vec<Buff>,
+    pub is_powered:             bool,
+
+    pub is_alive:               bool,
+    pub last_seen_game_loop:    u32,
+}
+
+impl From<raw::Unit> for Unit {
+    fn from(unit: raw::Unit) -> Self {
+        Self {
+            display_type: DisplayType::from(unit.get_display_type()),
+            alliance: Alliance::from(unit.get_alliance()),
+
+            tag: unit.get_tag(),
+            unit_type: UnitType::from_id(unit.get_unit_type()),
+            owner: unit.get_owner(),
+
+            pos: {
+                let pos = unit.get_pos();
+                Point3::new(pos.get_x(), pos.get_y(), pos.get_z())
+            },
+            facing: unit.get_facing(),
+            radius: unit.get_radius(),
+            build_progress: unit.get_build_progress(),
+
+            cloak: {
+                if unit.has_cloak() {
+                    CloakState::from(unit.get_cloak())
+                }
+                else {
+                    CloakState::Unknown
+                }
+            },
+
+            detect_range: unit.get_detect_range(),
+            radar_range: unit.get_radar_range(),
+
+            is_selected: unit.get_is_selected(),
+            is_on_screen: unit.get_is_on_screen(),
+            is_blip: unit.get_is_blip(),
+
+            health: unit.get_health(),
+            health_max: unit.get_health_max(),
+            shield: unit.get_shield(),
+            energy: unit.get_energy(),
+            mineral_contents: unit.get_mineral_contents(),
+            vespene_contents: unit.get_vespene_contents(),
+            is_flying: unit.get_is_flying(),
+            is_burrowed: unit.get_is_burrowed(),
+            weapon_cooldown: unit.get_weapon_cooldown(),
+
+            orders: {
+                let mut orders = vec![ ];
+
+                for order in unit.get_orders().iter() {
+                    orders.push(UnitOrder::from(order.clone()));
+                }
+
+                orders
+            },
+            add_on_tag: unit.get_add_on_tag(),
+            passengers: {
+                let mut passengers = vec![ ];
+
+                for passenger in unit.get_passengers().iter() {
+                    passengers.push(PassengerUnit::from(passenger.clone()));
+                }
+
+                passengers
+            },
+            cargo_space_taken: unit.get_cargo_space_taken(),
+            cargo_space_max: unit.get_cargo_space_max(),
+            assigned_harvesters: unit.get_assigned_harvesters(),
+            ideal_harvesters: unit.get_ideal_harvesters(),
+            engaged_target_tag: unit.get_engaged_target_tag(),
+            buffs: {
+                let mut buffs = vec![ ];
+
+                for buff in unit.get_buff_ids().iter() {
+                    buffs.push(Buff::from_id(*buff));
+                }
+
+                buffs
+            },
+            is_powered: unit.get_is_powered(),
+
+            is_alive: true,
+            last_seen_game_loop: 0,
+        }
+    }
 }
 
 pub enum Terran {
@@ -235,10 +367,28 @@ pub enum UnitType {
     Neutral(Neutral),
 }
 
+impl UnitType {
+    pub fn from_id(id: u32) -> Self {
+        match id {
+            _ => UnitType::Invalid
+        }
+    }
+}
+
 pub enum DisplayType {
     Visible,
     Snapshot,
     Hidden,
+}
+
+impl From<raw::DisplayType> for DisplayType {
+    fn from(display: raw::DisplayType) -> Self {
+        match display {
+            raw::DisplayType::Visible   => DisplayType::Visible,
+            raw::DisplayType::Snapshot  => DisplayType::Snapshot,
+            raw::DisplayType::Hidden    => DisplayType::Hidden,
+        }
+    }
 }
 
 pub enum Alliance {
@@ -248,6 +398,17 @@ pub enum Alliance {
     Enemy,
 }
 
+impl From<raw::Alliance> for Alliance {
+    fn from(alliance: raw::Alliance) -> Self {
+        match alliance {
+            raw::Alliance::Domestic => Alliance::Domestic,
+            raw::Alliance::Ally     => Alliance::Ally,
+            raw::Alliance::Neutral  => Alliance::Neutral,
+            raw::Alliance::Enemy    => Alliance::Enemy
+        }
+    }
+}
+
 pub enum CloakState {
     Cloaked,
     CloakedDetected,
@@ -255,10 +416,35 @@ pub enum CloakState {
     Unknown,
 }
 
+impl From<raw::CloakState> for CloakState {
+    fn from(cloak: raw::CloakState) -> Self {
+        match cloak {
+            raw::CloakState::Cloaked => CloakState::Cloaked,
+            raw::CloakState::CloakedDetected => CloakState::CloakedDetected,
+            raw::CloakState::NotCloaked => CloakState::NotCloaked
+        }
+    }
+}
+
 pub struct UnitOrder {
     pub ability:                Ability,
     pub target_unit_tag:        Tag,
     pub target_pos:             Point2,
+    pub progress:               f32,
+}
+
+impl From<raw::UnitOrder> for UnitOrder {
+    fn from(order: raw::UnitOrder) -> Self {
+        Self {
+            ability: Ability::from_id(order.get_ability_id()),
+            target_unit_tag: order.get_target_unit_tag(),
+            target_pos: {
+                let target_pos = order.get_target_world_space_pos();
+                Point2::new(target_pos.get_x(), target_pos.get_y())
+            },
+            progress: order.get_progress()
+        }
+    }
 }
 
 pub struct PassengerUnit {
@@ -270,49 +456,15 @@ pub struct PassengerUnit {
     pub unit_type:              UnitType,
 }
 
-pub struct Unit {
-    pub display_type:           DisplayType,
-    pub alliance:               Alliance,
-
-    pub tag:                    Tag,
-    pub unit_type:              UnitType,
-    pub owner:                  u32,
-
-    pub pos:                    Point3,
-    pub facing:                 f32,
-    pub radius:                 f32,
-    pub build_progress:         f32,
-
-    pub cloak:                  CloakState,
-
-    pub detect_range:           f32,
-    pub radar_range:            f32,
-
-    pub is_selected:            bool,
-    pub is_on_screen:           bool,
-    pub is_blip:                bool,
-
-    pub health:                 f32,
-    pub health_max:             f32,
-    pub shield:                 f32,
-    pub energy:                 f32,
-    pub mineral_contents:       u32,
-    pub vespene_contents:       u32,
-    pub is_flying:              bool,
-    pub is_burrowed:            bool,
-    pub weapon_cooldown:        f32,
-
-    pub orders:                 Vec<UnitOrder>,
-    pub add_on_tag:             Tag,
-    pub passengers:             Vec<PassengerUnit>,
-    pub cargo_space_taken:      u32,
-    pub cargo_space_max:        u32,
-    pub assigned_harvesters:    u32,
-    pub ideal_harvesters:       u32,
-    pub engaged_target_tag:     Tag,
-    pub buffs:                  Vec<Buff>,
-    pub is_powered:             bool,
-
-    pub is_alive:               bool,
-    pub last_seen_game_loop:    u32,
+impl From<raw::PassengerUnit> for PassengerUnit {
+    fn from(passenger: raw::PassengerUnit) -> Self {
+        Self {
+            tag: passenger.get_tag(),
+            health: passenger.get_health(),
+            health_max: passenger.get_health_max(),
+            shield: passenger.get_shield(),
+            energy: passenger.get_energy(),
+            unit_type: UnitType::from_id(passenger.get_unit_type())
+        }
+    }
 }

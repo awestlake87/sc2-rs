@@ -547,3 +547,11 @@ pub enum Ability {
     Train(Train),
     Unload(Unload),
 }
+
+impl Ability {
+    pub fn from_id(id: u32) -> Self {
+        match id {
+            _ => Ability::Invalid
+        }
+    }
+}

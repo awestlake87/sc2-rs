@@ -1,4 +1,7 @@
 
+use std::collections::HashMap;
+use std::mem;
+
 use sc2_proto::sc2api;
 
 use super::{ Participant, AppState };
@@ -70,9 +73,30 @@ impl Observer for Participant {
                 //feature_layer_actions = SpatialActions()
             }
 
-            //TODO the rest
+            /*
+            if self.use_generalized_ability {
+                //TODO this
+            }
+            */
 
-            Ok(())
+            let raw = observation.get_raw_data();
+            self.previous_units = mem::replace(&mut self.units, HashMap::new());
+            self.units.clear();
+
+            for unit in raw.get_units().iter() {
+                let mut unit = Unit::from(unit.clone());
+                let tag = unit.tag;
+
+                unit.last_seen_game_loop = self.get_game_loop();
+
+                self.units.insert(tag, unit);
+            }
+
+            // get camera data
+
+            //TODO the rest
         }
+
+        Ok(())
     }
 }

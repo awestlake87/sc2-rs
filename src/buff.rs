@@ -46,3 +46,11 @@ pub enum Buff {
     CarryHarvestableVespeneGeyserGasProtoss,
     CarryHarvestableVespeneGeyserGasZerg,
 }
+
+impl Buff {
+    pub fn from_id(id: u32) -> Self {
+        match id {
+            _ => Buff::Invalid
+        }
+    }
+}
