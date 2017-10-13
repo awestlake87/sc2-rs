@@ -24,6 +24,7 @@ use super::data::{
     SpatialAction,
     Ability,
     AbilityData,
+    Score
 };
 use super::instance::Instance;
 
@@ -58,6 +59,7 @@ pub struct Participant {
     camera_pos:                 Option<Point2>,
     game_state:                 GameState,
     player_data:                PlayerData,
+    score:                      Option<Score>,
 
     use_generalized_ability:    bool
 }
@@ -109,7 +111,8 @@ impl Participant {
                 warp_gate_count: 0,
                 larva_count: 0,
             },
-
+            score: None,
+            
             use_generalized_ability: true
         }
     }

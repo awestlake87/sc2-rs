@@ -95,8 +95,3 @@ pub struct GameData {
     //upgrade_ids: Upgrades,
     //buff_ids: Buffs,
 }
-
-pub struct Score {
-    //*** Score ***
-    //score: Score
-}

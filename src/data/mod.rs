@@ -4,6 +4,7 @@ mod action;
 mod buff;
 mod game;
 mod player;
+mod score;
 mod unit;
 mod upgrade;
 
@@ -16,6 +17,7 @@ pub use self::action::*;
 pub use self::buff::*;
 pub use self::game::*;
 pub use self::player::*;
+pub use self::score::*;
 pub use self::unit::*;
 pub use self::upgrade::*;
 
