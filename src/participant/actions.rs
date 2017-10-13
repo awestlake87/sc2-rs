@@ -20,7 +20,7 @@ pub trait Actions {
 
 impl Actions for Participant {
     fn command_units(&mut self, units: &Vec<Unit>, ability: Ability) {
-        self.actions.push(
+        self.requested_actions.push(
             Action {
                 ability: ability,
                 unit_tags: units.iter().map(|u| u.tag).collect(),
@@ -31,7 +31,7 @@ impl Actions for Participant {
     fn command_units_to_location(
         &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
     ) {
-        self.actions.push(
+        self.requested_actions.push(
             Action {
                 ability: ability,
                 unit_tags: units.iter().map(|u| u.tag).collect(),
@@ -42,7 +42,7 @@ impl Actions for Participant {
     fn command_units_to_target(
         &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
     ) {
-        self.actions.push(
+        self.requested_actions.push(
             Action {
                 ability: ability,
                 unit_tags: units.iter().map(|u| u.tag).collect(),
@@ -63,7 +63,7 @@ impl Actions for Participant {
         {
             let req_actions = req.mut_action().mut_actions();
 
-            for action in &self.actions {
+            for action in &self.requested_actions {
                 let mut a = sc2api::Action::new();
                 {
                     let cmd = a.mut_action_raw().mut_unit_command();
@@ -91,6 +91,8 @@ impl Actions for Participant {
 
                 req_actions.push(a);
             }
+
+            self.requested_actions.clear();
 
             for action in req_actions.iter() {
                 if action.has_action_raw() {

@@ -51,7 +51,10 @@ pub struct Participant {
     power_sources:              Vec<PowerSource>,
     previous_upgrades:          Vec<Upgrade>,
     upgrades:                   Vec<Upgrade>,
+
     actions:                    Vec<Action>,
+    requested_actions:          Vec<Action>,
+
     feature_layer_actions:      Vec<SpatialAction>,
     ability_data:               HashMap<Ability, AbilityData>,
 
@@ -89,8 +92,12 @@ impl Participant {
             power_sources: vec![ ],
             previous_upgrades: vec![ ],
             upgrades: vec![ ],
+
             actions: vec![ ],
+            requested_actions: vec![ ],
+
             feature_layer_actions: vec![ ],
+
             ability_data: HashMap::new(),
 
             player_id: None,
@@ -112,7 +119,7 @@ impl Participant {
                 larva_count: 0,
             },
             score: None,
-            
+
             use_generalized_ability: true
         }
     }
