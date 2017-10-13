@@ -1,6 +1,8 @@
 
 use std::path::PathBuf;
 
+use sc2_proto::sc2api;
+
 #[derive(Clone)]
 pub enum Map {
     LocalMap(PathBuf),
@@ -67,6 +69,23 @@ pub struct PlayerData {
     pub larva_count: u32,
     //camera_pos: Point2D,
     //start_location: Point3D,
+}
+
+impl From<sc2api::PlayerCommon> for PlayerData {
+    fn from(data: sc2api::PlayerCommon) -> Self {
+        Self {
+            minerals: data.get_minerals(),
+            vespene: data.get_vespene(),
+            food_used: data.get_food_used(),
+            food_cap: data.get_food_cap(),
+            food_army: data.get_food_army(),
+            food_workers: data.get_food_workers(),
+            idle_worker_count: data.get_idle_worker_count(),
+            army_count: data.get_army_count(),
+            warp_gate_count: data.get_warp_gate_count(),
+            larva_count: data.get_larva_count()
+        }
+    }
 }
 
 pub struct GameData {

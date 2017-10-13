@@ -12,7 +12,16 @@ use super::{ Result, Error };
 use super::agent::Agent;
 use super::client::Client;
 use super::data::{
-    PowerSource, GameState, PlayerData, Player, Unit, Tag, Upgrade, Point2
+    PowerSource,
+    GameState,
+    PlayerData,
+    Player,
+    Unit,
+    Tag,
+    Upgrade,
+    Point2,
+    Action,
+    SpatialAction,
 };
 use super::instance::Instance;
 
@@ -39,6 +48,8 @@ pub struct Participant {
     power_sources:              Vec<PowerSource>,
     previous_upgrades:          Vec<Upgrade>,
     upgrades:                   Vec<Upgrade>,
+    actions:                    Vec<Action>,
+    feature_layer_actions:      Vec<SpatialAction>,
 
     player_id:                  Option<u32>,
     camera_pos:                 Option<Point2>,
@@ -71,6 +82,8 @@ impl Participant {
             power_sources: vec![ ],
             previous_upgrades: vec![ ],
             upgrades: vec![ ],
+            actions: vec![ ],
+            feature_layer_actions: vec![ ],
 
             player_id: None,
             camera_pos: None,

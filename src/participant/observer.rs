@@ -7,7 +7,14 @@ use sc2_proto::sc2api;
 use super::{ Participant, AppState };
 use super::super::{ Result, Error };
 use super::super::data::{
-    PowerSource, PlayerData, GameState, Unit, Upgrade, Point2
+    PowerSource,
+    PlayerData,
+    GameState,
+    Unit,
+    Upgrade,
+    Point2,
+    Action,
+    SpatialAction
 };
 
 pub trait Observer {
@@ -42,7 +49,9 @@ impl Observer for Participant {
 
         {
             let observation = rsp.get_observation().get_observation();
-            // convert observation data to score
+
+            // TODO convert observation data to score
+
             let next_game_loop = observation.get_game_loop();
             let is_new_frame = next_game_loop != self.get_game_loop();
 
@@ -56,24 +65,67 @@ impl Observer for Participant {
                 self.player_id = Some(player_common.get_player_id());
             }
 
-            self.player_data = PlayerData {
-                minerals:           player_common.get_minerals(),
-                vespene:            player_common.get_vespene(),
-                food_used:          player_common.get_food_used(),
-                food_cap:           player_common.get_food_cap(),
-                food_army:          player_common.get_food_army(),
-                food_workers:       player_common.get_food_workers(),
-                idle_worker_count:  player_common.get_idle_worker_count(),
-                army_count:         player_common.get_army_count(),
-                warp_gate_count:    player_common.get_warp_gate_count(),
-                larva_count:        player_common.get_larva_count()
-            };
+            self.player_data = PlayerData::from(player_common.clone());
 
             if is_new_frame {
-                //raw_actions.clear()
-                //feature_layer_actions = SpatialActions()
+                self.actions.clear();
+                self.feature_layer_actions = vec![ ];
             }
 
+            for action in rsp.get_observation().get_actions() {
+                if !action.has_action_raw() {
+                    continue;
+                }
+
+                let raw = action.get_action_raw();
+                if !raw.has_unit_command() {
+                    continue;
+                }
+
+                let cmd = raw.get_unit_command();
+                if !cmd.has_ability_id() {
+                    continue;
+                }
+
+                self.actions.push(Action::from_proto(&cmd));
+            }
+
+            for action in rsp.get_observation().get_actions() {
+                if !action.has_action_feature_layer() {
+                    continue;
+                }
+
+                let fl = action.get_action_feature_layer();
+
+                if fl.has_unit_command() {
+                    self.feature_layer_actions.push(
+                        SpatialAction::from_unit_command_proto(
+                            fl.get_unit_command()
+                        )
+                    );
+                }
+                else if fl.has_camera_move() {
+                    self.feature_layer_actions.push(
+                        SpatialAction::from_camera_move_proto(
+                            fl.get_camera_move()
+                        )
+                    );
+                }
+                else if fl.has_unit_selection_point() {
+                    self.feature_layer_actions.push(
+                        SpatialAction::from_selection_point_proto(
+                            fl.get_unit_selection_point()
+                        )
+                    );
+                }
+                else if fl.has_unit_selection_rect() {
+                    self.feature_layer_actions.push(
+                        SpatialAction::from_selection_rect_proto(
+                            fl.get_unit_selection_rect()
+                        )
+                    )
+                }
+            }
             /*
             if self.use_generalized_ability {
                 //TODO this

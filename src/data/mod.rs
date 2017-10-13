@@ -1,5 +1,6 @@
 
 mod ability;
+mod action;
 mod buff;
 mod common;
 mod game;
@@ -10,6 +11,7 @@ mod upgrade;
 use sc2_proto::raw;
 
 pub use self::ability::*;
+pub use self::action::*;
 pub use self::buff::*;
 pub use self::common::*;
 pub use self::game::*;
