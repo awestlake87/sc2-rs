@@ -1,7 +1,9 @@
 
+use sc2_proto::sc2api;
+
 use super::{ Participant };
-use super::super::{ Result, Error };
-use super::super::data::{ Ability, Unit, Tag, Point2 };
+use super::super::{ Result };
+use super::super::data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
 
 pub trait Actions {
     fn command_units(&mut self, units: &Vec<Unit>, ability: Ability);
@@ -11,35 +13,105 @@ pub trait Actions {
     fn command_units_to_target(
         &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
     );
-    fn get_commands(&self) -> Vec<Tag>;
-    fn send_actions(&self);
-    fn toggle_autocast(unit_tags: &Vec<Tag>, ability: Ability);
+    fn get_commands(&self) -> &Vec<Tag>;
+    fn send_actions(&mut self) -> Result<()>;
+    fn toggle_autocast(&mut self, unit_tags: &Vec<Tag>, ability: Ability);
 }
 
 impl Actions for Participant {
-    fn command_units(&mut self, _: &Vec<Unit>, _: Ability) {
-        unimplemented!("command units");
+    fn command_units(&mut self, units: &Vec<Unit>, ability: Ability) {
+        self.actions.push(
+            Action {
+                ability: ability,
+                unit_tags: units.iter().map(|u| u.tag).collect(),
+                target: None,
+            }
+        );
     }
     fn command_units_to_location(
-        &mut self, _: &Vec<Unit>, _: Ability, _: Point2
+        &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
     ) {
-        unimplemented!("command units location");
+        self.actions.push(
+            Action {
+                ability: ability,
+                unit_tags: units.iter().map(|u| u.tag).collect(),
+                target: Some(ActionTarget::Position(location)),
+            }
+        );
     }
     fn command_units_to_target(
-        &mut self, _: &Vec<Unit>, _: Ability, _: &Unit
+        &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
     ) {
-        unimplemented!("command units to target");
+        self.actions.push(
+            Action {
+                ability: ability,
+                unit_tags: units.iter().map(|u| u.tag).collect(),
+                target: Some(ActionTarget::UnitTag(target.tag)),
+            }
+        )
     }
 
-    fn get_commands(&self) -> Vec<Tag> {
-        self.commands.clone()
+    fn get_commands(&self) -> &Vec<Tag> {
+        &self.commands
     }
 
-    fn send_actions(&self) {
-        unimplemented!("send actions");
+    fn send_actions(&mut self) -> Result<()> {
+        self.commands.clear();
+
+        let mut req = sc2api::Request::new();
+
+        {
+            let req_actions = req.mut_action().mut_actions();
+
+            for action in &self.actions {
+                let mut a = sc2api::Action::new();
+                {
+                    let cmd = a.mut_action_raw().mut_unit_command();
+
+                    cmd.set_ability_id(action.ability.as_id() as i32);
+
+                    match action.target {
+                        Some(ActionTarget::UnitTag(tag)) => {
+                            cmd.set_target_unit_tag(tag);
+                        },
+                        Some(ActionTarget::Position(pos)) => {
+                            let target = cmd.mut_target_world_space_pos();
+                            target.set_x(pos.x);
+                            target.set_y(pos.y);
+                        },
+                        None => ()
+                    };
+
+                    let unit_tags = cmd.mut_unit_tags();
+
+                    for tag in &action.unit_tags {
+                        unit_tags.push(*tag);
+                    }
+                }
+
+                req_actions.push(a);
+            }
+
+            for action in req_actions.iter() {
+                if action.has_action_raw() {
+                    let raw = action.get_action_raw();
+
+                    if raw.has_unit_command() {
+                        for tag in raw.get_unit_command().get_unit_tags() {
+                            self.commands.push(*tag);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.send(req)?;
+        self.recv()?;
+
+        Ok(())
     }
 
-    fn toggle_autocast(_: &Vec<Tag>, _: Ability) {
+    fn toggle_autocast(&mut self, _: &Vec<Tag>, _: Ability) {
         unimplemented!("toggle autocast")
     }
 }

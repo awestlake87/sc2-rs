@@ -201,9 +201,7 @@ impl Coordinator {
             }
 
             p.update_observation();
-
-            let commands = p.get_commands();
-            p.issue_events(commands);
+            p.issue_events();
             p.send_actions();
 
             if !p.is_in_game() {

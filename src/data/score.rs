@@ -8,9 +8,9 @@ use sc2_proto::score::{
 };
 
 pub struct Score {
-    score_type:                     ScoreType,
-    score:                          f32,
-    details:                        ScoreDetails
+    pub score_type:                     ScoreType,
+    pub score:                          f32,
+    pub details:                        ScoreDetails
 }
 
 impl Score {
@@ -39,18 +39,18 @@ pub enum ScoreType {
 }
 
 pub struct ScoreEntry {
-    name:                           String,
-    offset:                         i32,
-    used:                           bool,
-    nonzero:                        bool,
+    pub name:                           String,
+    pub offset:                         i32,
+    pub used:                           bool,
+    pub nonzero:                        bool,
 }
 
 pub struct CategoryScoreDetails {
-    none:                           f32,
-    army:                           f32,
-    economy:                        f32,
-    technology:                     f32,
-    upgrade:                        f32,
+    pub none:                           f32,
+    pub army:                           f32,
+    pub economy:                        f32,
+    pub technology:                     f32,
+    pub upgrade:                        f32,
 }
 
 impl CategoryScoreDetails {
@@ -66,9 +66,9 @@ impl CategoryScoreDetails {
 }
 
 pub struct VitalScoreDetails {
-    life:                           f32,
-    shields:                        f32,
-    energy:                         f32
+    pub life:                           f32,
+    pub shields:                        f32,
+    pub energy:                         f32
 }
 
 impl VitalScoreDetails {
@@ -82,44 +82,44 @@ impl VitalScoreDetails {
 }
 
 pub struct ScoreDetails {
-    idle_production_time:           f32,
-    idle_worker_time:               f32,
+    pub idle_production_time:           f32,
+    pub idle_worker_time:               f32,
 
-    total_value_units:              f32,
-    total_value_structures:         f32,
+    pub total_value_units:              f32,
+    pub total_value_structures:         f32,
 
-    killed_value_units:             f32,
-    killed_value_structures:        f32,
+    pub killed_value_units:             f32,
+    pub killed_value_structures:        f32,
 
-    collected_minerals:             f32,
-    collected_vespene:              f32,
+    pub collected_minerals:             f32,
+    pub collected_vespene:              f32,
 
-    collection_rate_minerals:       f32,
-    collection_rate_vespene:        f32,
+    pub collection_rate_minerals:       f32,
+    pub collection_rate_vespene:        f32,
 
-    spent_minerals:                 f32,
-    spent_vespene:                  f32,
+    pub spent_minerals:                 f32,
+    pub spent_vespene:                  f32,
 
-    food_used:                      Option<CategoryScoreDetails>,
+    pub food_used:                      Option<CategoryScoreDetails>,
 
-    killed_minerals:                Option<CategoryScoreDetails>,
-    killed_vespene:                 Option<CategoryScoreDetails>,
+    pub killed_minerals:                Option<CategoryScoreDetails>,
+    pub killed_vespene:                 Option<CategoryScoreDetails>,
 
-    lost_minerals:                  Option<CategoryScoreDetails>,
-    lost_vespene:                   Option<CategoryScoreDetails>,
+    pub lost_minerals:                  Option<CategoryScoreDetails>,
+    pub lost_vespene:                   Option<CategoryScoreDetails>,
 
-    friendly_fire_minerals:         Option<CategoryScoreDetails>,
-    friendly_fire_vespene:          Option<CategoryScoreDetails>,
+    pub friendly_fire_minerals:         Option<CategoryScoreDetails>,
+    pub friendly_fire_vespene:          Option<CategoryScoreDetails>,
 
-    used_minerals:                  Option<CategoryScoreDetails>,
-    used_vespene:                   Option<CategoryScoreDetails>,
+    pub used_minerals:                  Option<CategoryScoreDetails>,
+    pub used_vespene:                   Option<CategoryScoreDetails>,
 
-    total_used_minerals:            Option<CategoryScoreDetails>,
-    total_used_vespene:             Option<CategoryScoreDetails>,
+    pub total_used_minerals:            Option<CategoryScoreDetails>,
+    pub total_used_vespene:             Option<CategoryScoreDetails>,
 
-    total_damage_dealt:             Option<VitalScoreDetails>,
-    total_damage_taken:             Option<VitalScoreDetails>,
-    total_healed:                   Option<VitalScoreDetails>,
+    pub total_damage_dealt:             Option<VitalScoreDetails>,
+    pub total_damage_taken:             Option<VitalScoreDetails>,
+    pub total_healed:                   Option<VitalScoreDetails>,
 }
 
 impl ScoreDetails {

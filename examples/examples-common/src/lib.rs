@@ -8,7 +8,7 @@ extern crate sc2;
 use std::path::PathBuf;
 
 use sc2::coordinator::{ CoordinatorSettings };
-use sc2::game::{ GameSettings, Map };
+use sc2::data::{ GameSettings, Map };
 use sc2::{ Result, Error };
 
 pub const USAGE: &'static str = "

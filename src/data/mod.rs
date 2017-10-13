@@ -48,8 +48,8 @@ pub struct Rect2I {
 }
 
 pub struct AvailableAbility {
-    ability:                Ability,
-    requires_point:         bool,
+    pub ability:                Ability,
+    pub requires_point:         bool,
 }
 
 pub enum AbilityTarget {
@@ -60,22 +60,22 @@ pub enum AbilityTarget {
 }
 
 pub struct AbilityData {
-    available:              bool,
-    ability:                Ability,
-    link_name:              String,
-    link_index:             u32,
-    button_name:            String,
-    friendly_name:          String,
-    hotkey:                 String,
-    remaps_to_ability:      Option<Ability>,
-    remaps_from_ability:    Vec<Ability>,
-    target:                 Option<AbilityTarget>,
-    allow_minimap:          bool,
-    allow_autocast:         bool,
-    is_building:            bool,
-    footprint_radius:       f32,
-    is_instant_placement:   bool,
-    cast_range:             f32,
+    pub available:              bool,
+    pub ability:                Ability,
+    pub link_name:              String,
+    pub link_index:             u32,
+    pub button_name:            String,
+    pub friendly_name:          String,
+    pub hotkey:                 String,
+    pub remaps_to_ability:      Option<Ability>,
+    pub remaps_from_ability:    Vec<Ability>,
+    pub target:                 Option<AbilityTarget>,
+    pub allow_minimap:          bool,
+    pub allow_autocast:         bool,
+    pub is_building:            bool,
+    pub footprint_radius:       f32,
+    pub is_instant_placement:   bool,
+    pub cast_range:             f32,
 }
 
 impl AbilityData {
@@ -88,9 +88,9 @@ impl AbilityData {
 }
 
 pub struct AvailableAbilities {
-    abilities:              Vec<AvailableAbilities>,
-    unit_tag:               Tag,
-    unit_type:              UnitType,
+    pub abilities:              Vec<AvailableAbilities>,
+    pub unit_tag:               Tag,
+    pub unit_type:              UnitType,
 }
 
 pub enum Attribute {
@@ -109,8 +109,8 @@ pub enum Attribute {
 }
 
 pub struct DamageBonus {
-    attribute:              Attribute,
-    bonus:                  f32,
+    pub attribute:              Attribute,
+    pub bonus:                  f32,
 }
 
 pub enum WeaponTargetType {
@@ -121,55 +121,55 @@ pub enum WeaponTargetType {
 }
 
 pub struct Weapon {
-    target_type:            WeaponTargetType,
-    damage:                 f32,
-    damage_bonus:           Vec<DamageBonus>,
-    attacks:                u32,
-    range:                  f32,
-    speed:                  f32,
+    pub target_type:            WeaponTargetType,
+    pub damage:                 f32,
+    pub damage_bonus:           Vec<DamageBonus>,
+    pub attacks:                u32,
+    pub range:                  f32,
+    pub speed:                  f32,
 }
 
 pub struct UnitTypeData {
-    unit_type:              UnitType,
-    name:                   String,
-    available:              bool,
-    cargo_size:             u32,
-    mineral_cost:           i32,
-    vespene_cost:           i32,
-    attributes:             Vec<Attribute>,
-    movement_speed:         f32,
-    armor:                  f32,
-    weapons:                Vec<Weapon>,
-    food_required:          f32,
-    food_provided:          f32,
-    ability:                Ability,
-    race:                   Race,
-    build_time:             f32,
-    has_minerals:           bool,
-    has_vespene:            bool,
-    tech_alias:             Vec<UnitType>,
-    tech_requirement:       UnitType,
-    require_attached:       bool,
+    pub unit_type:              UnitType,
+    pub name:                   String,
+    pub available:              bool,
+    pub cargo_size:             u32,
+    pub mineral_cost:           i32,
+    pub vespene_cost:           i32,
+    pub attributes:             Vec<Attribute>,
+    pub movement_speed:         f32,
+    pub armor:                  f32,
+    pub weapons:                Vec<Weapon>,
+    pub food_required:          f32,
+    pub food_provided:          f32,
+    pub ability:                Ability,
+    pub race:                   Race,
+    pub build_time:             f32,
+    pub has_minerals:           bool,
+    pub has_vespene:            bool,
+    pub tech_alias:             Vec<UnitType>,
+    pub tech_requirement:       UnitType,
+    pub require_attached:       bool,
 }
 
 pub struct UpgradeData {
-    upgrade:                Upgrade,
-    name:                   String,
-    mineral_cost:           u32,
-    vespene_cost:           u32,
-    ability:                Ability,
-    research_time:          f32,
+    pub upgrade:                Upgrade,
+    pub name:                   String,
+    pub mineral_cost:           u32,
+    pub vespene_cost:           u32,
+    pub ability:                Ability,
+    pub research_time:          f32,
 }
 
 pub struct BuffData {
-    buff:                   Buff,
-    name:                   String,
+    pub buff:                   Buff,
+    pub name:                   String,
 }
 
 pub struct PowerSource {
-    tag:                    Tag,
-    pos:                    Point2,
-    radius:                 f32,
+    pub tag:                    Tag,
+    pub pos:                    Point2,
+    pub radius:                 f32,
 }
 
 impl From<raw::PowerSource> for PowerSource {

@@ -493,4 +493,8 @@ impl Ability {
             _ => Ability::Invalid
         }
     }
+
+    pub fn as_id(&self) -> u32 {
+        0
+    }
 }

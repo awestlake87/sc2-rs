@@ -7,7 +7,7 @@ use sc2_proto::sc2api;
 use super::{ Participant };
 use super::super::{ Result, Error };
 use super::super::data::{
-    GameSettings, Map, Player, PlayerKind, Race, Difficulty, Unit, Tag
+    GameSettings, Map, Player, PlayerKind, Race, Difficulty
 };
 
 pub trait Control {
@@ -22,7 +22,7 @@ pub trait Control {
 
     fn save_replay(&mut self, path: PathBuf) -> Result<()>;
 
-    fn issue_events(&mut self, commands: Vec<Tag>) -> Result<()>;
+    fn issue_events(&mut self) -> Result<()>;
 
     fn quit(&mut self) -> Result<()>;
 }
@@ -169,7 +169,7 @@ impl Control for Participant {
         unimplemented!("save replay");
     }
 
-    fn issue_events(&mut self, _: Vec<Tag>) -> Result<()> {
+    fn issue_events(&mut self) -> Result<()> {
         if
             self.game_state.current_game_loop ==
             self.game_state.previous_game_loop
