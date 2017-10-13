@@ -22,6 +22,8 @@ use super::data::{
     Point2,
     Action,
     SpatialAction,
+    Ability,
+    AbilityData,
 };
 use super::instance::Instance;
 
@@ -50,11 +52,14 @@ pub struct Participant {
     upgrades:                   Vec<Upgrade>,
     actions:                    Vec<Action>,
     feature_layer_actions:      Vec<SpatialAction>,
+    ability_data:               HashMap<Ability, AbilityData>,
 
     player_id:                  Option<u32>,
     camera_pos:                 Option<Point2>,
     game_state:                 GameState,
     player_data:                PlayerData,
+
+    use_generalized_ability:    bool
 }
 
 impl Participant {
@@ -84,6 +89,7 @@ impl Participant {
             upgrades: vec![ ],
             actions: vec![ ],
             feature_layer_actions: vec![ ],
+            ability_data: HashMap::new(),
 
             player_id: None,
             camera_pos: None,
@@ -102,7 +108,9 @@ impl Participant {
                 army_count: 0,
                 warp_gate_count: 0,
                 larva_count: 0,
-            }
+            },
+
+            use_generalized_ability: true
         }
     }
 

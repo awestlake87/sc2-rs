@@ -5,6 +5,7 @@ use sc2_proto::spatial::{
     ActionSpatialCameraMove,
     ActionSpatialUnitSelectionPoint,
     ActionSpatialUnitSelectionRect,
+    ActionSpatialUnitSelectionPoint_Type as ProtoPointSelectionType
 };
 
 use super::{ Tag, Ability, Point2, Point2I, Rect2I };
@@ -15,9 +16,9 @@ pub enum ActionTarget {
 }
 
 pub struct Action {
-    ability:            Ability,
-    unit_tags:          Vec<Tag>,
-    target:             Option<ActionTarget>,
+    pub ability:            Ability,
+    pub unit_tags:          Vec<Tag>,
+    pub target:             Option<ActionTarget>,
 }
 
 impl Action {
@@ -65,10 +66,21 @@ pub enum PointSelectionType {
     AddAll
 }
 
+impl From<ProtoPointSelectionType> for PointSelectionType {
+    fn from(select_type: ProtoPointSelectionType) -> Self {
+        match select_type {
+            ProtoPointSelectionType::Select => PointSelectionType::Select,
+            ProtoPointSelectionType::Toggle => PointSelectionType::Toggle,
+            ProtoPointSelectionType::AllType => PointSelectionType::All,
+            ProtoPointSelectionType::AddAllType => PointSelectionType::AddAll,
+        }
+    }
+}
+
 pub enum SpatialAction {
     UnitCommand {
         ability:            Ability,
-        target:             SpatialUnitCommandTarget,
+        target:             Option<SpatialUnitCommandTarget>,
         queued:             bool
     },
     CameraMove {
@@ -86,22 +98,79 @@ pub enum SpatialAction {
 
 impl SpatialAction {
     pub fn from_unit_command_proto(cmd: &ActionSpatialUnitCommand) -> Self {
-        unimplemented!("from unit command proto");
+        SpatialAction::UnitCommand {
+            ability: Ability::from_id(cmd.get_ability_id() as u32),
+            queued: cmd.get_queue_command(),
+            target: {
+                if cmd.has_target_screen_coord() {
+                    let pos = cmd.get_target_screen_coord();
+                    Some(
+                        SpatialUnitCommandTarget::Screen(
+                            Point2I::new(pos.get_x(), pos.get_y())
+                        )
+                    )
+                }
+                else if cmd.has_target_minimap_coord() {
+                    let pos = cmd.get_target_minimap_coord();
+                    Some(
+                        SpatialUnitCommandTarget::Minimap(
+                            Point2I::new(pos.get_x(), pos.get_y())
+                        )
+                    )
+                }
+                else {
+                    None
+                }
+            }
+        }
     }
 
     pub fn from_camera_move_proto(cmd: &ActionSpatialCameraMove) -> Self {
-        unimplemented!("from camera move proto");
+        SpatialAction::CameraMove {
+            center_minimap: {
+                let pos = cmd.get_center_minimap();
+                Point2I::new(pos.get_x(), pos.get_y())
+            }
+        }
     }
 
     pub fn from_selection_point_proto(cmd: &ActionSpatialUnitSelectionPoint)
         -> Self
     {
-        unimplemented!("from selection point proto");
+        SpatialAction::SelectPoint {
+            select_screen: {
+                let pos = cmd.get_selection_screen_coord();
+                Point2I::new(pos.get_x(), pos.get_y())
+            },
+            select_type: PointSelectionType::from(cmd.get_field_type())
+        }
     }
 
     pub fn from_selection_rect_proto(cmd: &ActionSpatialUnitSelectionRect)
         -> Self
     {
-        unimplemented!("from selection rect proto");
+        SpatialAction::SelectRect {
+            select_screen: {
+                let mut rects = vec![ ];
+
+                for r in cmd.get_selection_screen_coord() {
+                    rects.push(
+                        Rect2I {
+                            from: {
+                                let p = r.get_p0();
+                                Point2I::new(p.get_x(), p.get_y())
+                            },
+                            to: {
+                                let p = r.get_p1();
+                                Point2I::new(p.get_x(), p.get_y())
+                            }
+                        }
+                    )
+                }
+
+                rects
+            },
+            select_add: cmd.get_selection_add()
+        }
     }
 }

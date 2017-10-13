@@ -69,7 +69,7 @@ impl Observer for Participant {
 
             if is_new_frame {
                 self.actions.clear();
-                self.feature_layer_actions = vec![ ];
+                self.feature_layer_actions.clear();
             }
 
             for action in rsp.get_observation().get_actions() {
@@ -126,11 +126,35 @@ impl Observer for Participant {
                     )
                 }
             }
-            /*
+
+            // remap ability ids
             if self.use_generalized_ability {
-                //TODO this
+                for action in &mut self.actions {
+                    action.ability = match self.ability_data.get(
+                        &action.ability
+                    ) {
+                        Some(ref ability_data) => {
+                            ability_data.get_generalized_ability()
+                        },
+                        None => action.ability
+                    };
+                }
+                for action in &mut self.feature_layer_actions {
+                    match action {
+                        &mut SpatialAction::UnitCommand {
+                            ref mut ability, ..
+                        } => {
+                            *ability = match self.ability_data.get(ability) {
+                                Some(ref ability_data) => {
+                                    ability_data.get_generalized_ability()
+                                },
+                                None => *ability
+                            };
+                        },
+                        _ => ()
+                    };
+                }
             }
-            */
 
             let raw = observation.get_raw_data();
             self.previous_units = mem::replace(
@@ -146,7 +170,6 @@ impl Observer for Participant {
                 self.units.insert(tag, unit);
             }
 
-            // get camera data
             if !raw.has_player() {
                 return Err(Error::Todo("no player data"))
             }

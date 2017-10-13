@@ -1,551 +1,490 @@
 
-pub enum Attack {
-    Attack,             // Target: Unit, Point.
-    AttackBuilding,     // Target: Unit, Point.
-    AttackRedirect,     // Target: Unit, Point.
-}
-
-pub enum Behavior {
-    BuildingAttackOff,  // Target: None.
-    BuildingAttackOn,  // Target: None.
-    CloakOff,  // Target: None.
-    CloakOffBanshee,   // Target: None.
-    CloakOffGhost,   // Target: None.
-    CloakOn,  // Target: None.
-    CloakOnBanshee,   // Target: None.
-    CloakOnGhost,   // Target: None.
-    GenerateCreepOff,  // Target: None.
-    GenerateCreepOn,  // Target: None.
-    HoldFireOff,  // Target: None.
-    HoldFireOffLurker,  // Target: None.
-    HoldFireOn,  // Target: None.
-    HoldFireOnGhost,    // Target: None.
-    HoldFireOnLurker,  // Target: None.
-    PulsarBeamOff,  // Target: None.
-    PulsarBeamOn,  // Target: None.
-}
-
-pub enum Build {
-    Armory,   // Target: Point.
-    Assimilator,   // Target: Unit.
-    BanelingNest,  // Target: Point.
-    Barracks,   // Target: Point.
-    Bunker,   // Target: Point.
-    CommandCenter,   // Target: Point.
-    CreepTumor,  // Target: Point.
-    CreepTumorQueen,  // Target: Point.
-    CreepTumorTumor,  // Target: Point.
-    CyberneticsCore,   // Target: Point.
-    DarkShrine,   // Target: Point.
-    EngineeringBay,   // Target: Point.
-    EvolutionChamber,  // Target: Point.
-    Extractor,  // Target: Unit.
-    Factory,   // Target: Point.
-    FleetBeacon,   // Target: Point.
-    Forge,   // Target: Point.
-    FusionCore,   // Target: Point.
-    Gateway,   // Target: Point.
-    GhostAcademy,   // Target: Point.
-    Hatchery,  // Target: Point.
-    HydraliskDen,  // Target: Point.
-    InfestationPit,  // Target: Point.
-    Interceptors,  // Target: None.
-    MissileTurret,   // Target: Point.
-    Nexus,   // Target: Point.
-    Nuke,   // Target: None.
-    NydusNetwork,  // Target: Point.
-    NydusWorm,  // Target: Point.
-    PhotonCannon,   // Target: Point.
-    Pylon,   // Target: Point.
-    Reactor,  // Target: None.
-    ReactorBarracks,   // Target: None.
-    ReactorFactory,   // Target: None.
-    ReactorStarport,   // Target: None.
-    Refinery,   // Target: Unit.
-    RoachWarren,  // Target: Point.
-    RoboticsBay,   // Target: Point.
-    RoboticsFacility,   // Target: Point.
-    SensorTower,   // Target: Point.
-    SpawningPool,  // Target: Point.
-    SpineCrawler,  // Target: Point.
-    Spire,  // Target: Point.
-    SporeCrawler,  // Target: Point.
-    StarGate,   // Target: Point.
-    Starport,   // Target: Point.
-    StasisTrap,  // Target: Point.
-    SupplyDepot,   // Target: Point.
-    TechLab,  // Target: None.
-    TechLabBarracks,   // Target: None.
-    TechLabFactory,   // Target: None.
-    TechLabStarport,   // Target: None.
-    TemplarArchive,   // Target: Point.
-    TwilightCouncil,   // Target: Point.
-    UltraliskCavern,  // Target: Point.
-}
-
-pub enum BurrowDown {
-    BurrowDown,  // Target: None.
-    Baneling,  // Target: None.
-    Drone,  // Target: None.
-    Hydralisk,  // Target: None.
-    Infestor,  // Target: None.
-    Lurker,  // Target: None.
-    Queen,  // Target: None.
-    Ravager,  // Target: None.
-    Roach,  // Target: None.
-    SwarmHost,  // Target: None.
-    WidowMine,  // Target: None.
-    Zergling,  // Target: None.
-}
-
-pub enum BurrowUp {
-    BurrowUp,  // Target: None.
-    Baneling,  // Target: None.
-    Drone,  // Target: None.
-    Hydralisk,  // Target: None.
-    Infestor,  // Target: None.
-    Lurker,  // Target: None.
-    Queen,  // Target: None.
-    Ravager,  // Target: None.
-    Roach,  // Target: None.
-    SwarmHost,  // Target: None.
-    WidowMine,  // Target: None.
-    Zergling,  // Target: None.
-}
-
-pub enum Cancel {
-    Cancel,  // Target: None.
-    SlotAddOn,   // Target: None.
-    SlotQueue1,   // Target: None.
-    SlotQueue5,   // Target: None.
-    SlotQueueToSelection,   // Target: None.
-    SlotQueuePassive,  // Target: None.
-    AdeptPhaseShift,  // Target: None.
-    AdeptShadePhaseShift,  // Target: None.
-    BarracksAddOn,   // Target: None.
-    BuildInProgress,   // Target: None.
-    CreepTumor,  // Target: None.
-    FactoryAddOn,   // Target: None.
-    GravitonBeam,   // Target: None.
-    Last,  // Target: None.
-    MorphBroodLord,  // Target: None.
-    MorphLair,  // Target: None.
-    MorphLurker,  // Target: None.
-    MorphLurkerDen,  // Target: None.
-    MorphMothership,  // Target: None.
-    MorphOrbital,  // Target: None.
-    MorphOverlordTransport,  // Target: None.
-    MorphOverseer,  // Target: None.
-    MorphPlanetaryFortress,  // Target: None.
-    MorphRavager,  // Target: None.
-    Queue1,   // Target: None.
-    Queue5,   // Target: None.
-    QueueAddOn,   // Target: None.
-    QueueToSelection,   // Target: None.
-    QueuePassive,  // Target: None.
-    QueuePassiveToSelection,  // Target: None.
-    SpineCrawlerRoot,  // Target: None.
-    StarportAddOn,   // Target: None.
-}
-
-pub enum Effect {
-    Abduct,  // Target: Unit.
-    AdeptPhaseShift,  // Target: Point.
-    AutoTurret,  // Target: Point.
-    BlindingCloud,  // Target: Point.
-    Blink,  // Target: Point.
-    BlinkStalker,  // Target: Point.
-    CallDownMule,   // Target: Unit, Point.
-    CausticSpray,  // Target: Unit.
-    Charge,  // Target: Unit.
-    ChronoBoost,   // Target: Unit.
-    Contaminate,  // Target: Unit.
-    CorrosiveBile,  // Target: Point.
-    Emp,  // Target: Point.
-    Explode,    // Target: None.
-    Feedback,   // Target: Unit.
-    ForceField,  // Target: Point.
-    FungalGrowth,    // Target: Point.
-    GhostSnipe,  // Target: Unit.
-    GravitonBeam,   // Target: Unit.
-    GuardianShield,    // Target: None.
-    Heal,   // Target: Unit.
-    HunterSeekerMissile,   // Target: Unit.
-    ImmortalBarrier,  // Target: None.
-    InfestedTerrans,   // Target: Point.
-    InjectLarva,   // Target: Unit.
-    Kd8Charge,  // Target: Unit, Point.
-    LockOn,  // Target: Unit.
-    LocustSwoop,  // Target: Point.
-    MassRecall,  // Target: Unit.
-    MassRecallMothership,  // Target: Unit.
-    MassRecallMothershipCore,  // Target: Unit.
-    MedivacIgniteAfterBurners,  // Target: None.
-    NeuralParasite,   // Target: Unit.
-    NukeCallDown,  // Target: Point.
-    OracleRevelation,  // Target: Point.
-    ParasiticBomb,  // Target: Unit.
-    PhotonOvercharge,  // Target: Unit.
-    PointDefenseDrone,   // Target: Point.
-    PsiStorm,  // Target: Point.
-    PurificationNova,  // Target: Point.
-    Repair,  // Target: Unit.
-    RepairMule,    // Target: Unit.
-    RepairScv,   // Target: Unit.
-    Salvage,    // Target: None.
-    Scan,   // Target: Point.
-    ShadowStride,  // Target: Point.
-    SpawnChangeling,   // Target: None.
-    SpawnLocusts,  // Target: Point.
-    Spray,  // Target: Point.
-    SprayProtoss,    // Target: Point.
-    SprayTerran,    // Target: Point.
-    SprayZerg,    // Target: Point.
-    Stim,  // Target: None.
-    StimMarauder,   // Target: None.
-    StimMarine,   // Target: None.
-    StimMarineRedirect,  // Target: None.
-    SupplyDrop,   // Target: Unit.
-    TacticalJump,  // Target: Point.
-    TempestDisruptionBlast,  // Target: Point.
-    TimeWarp,  // Target: Point.
-    Transfusion,  // Target: Unit.
-    ViperConsume,  // Target: Unit.
-    VoidRayPrismaticalAlignment,  // Target: None.
-    WidowMineAttack,  // Target: Unit.
-    YamatoGun,   // Target: Unit.
-}
-
-pub enum Hallucination {
-    Adept,  // Target: None.
-    Archon,   // Target: None.
-    Colossus,   // Target: None.
-    Disruptor,  // Target: None.
-    HighTemplar,   // Target: None.
-    Immortal,   // Target: None.
-    Oracle,  // Target: None.
-    Phoenix,   // Target: None.
-    Probe,   // Target: None.
-    Stalker,   // Target: None.
-    VoidRay,   // Target: None.
-    WarpPrism,   // Target: None.
-    Zealot,   // Target: None.
-}
-
-pub enum Halt {
-    Halt,  // Target: None.
-    Building,   // Target: None.
-    TerranBuild,   // Target: None.
-}
-
-pub enum Harvest {
-    Gather,  // Target: Unit.
-    GatherDrone,  // Target: Unit.
-    GatherProbe,   // Target: Unit.
-    GatherScv,   // Target: Unit.
-    Return,  // Target: None.
-    ReturnDrone,  // Target: None.
-    ReturnMule,   // Target: None.
-    ReturnProbe,   // Target: None.
-    ReturnScv,   // Target: None.
-}
-
-pub enum Land {
-    Land,  // Target: Point.
-    Barracks,   // Target: Point.
-    CommandCenter,   // Target: Point.
-    Factory,   // Target: Point.
-    OrbitalCommand,  // Target: Point.
-    Starport,   // Target: Point.
-}
-
-pub enum Lift {
-    Lift,  // Target: None.
-    Barracks,   // Target: None.
-    CommandCenter,   // Target: None.
-    Factory,   // Target: None.
-    OrbitalCommand,  // Target: None.
-    Starport,   // Target: None.
-}
-
-pub enum Load {
-    Load,  // Target: Unit.
-    LoadAll,  // Target: None.
-    LoadAllCommandCenter,   // Target: None.
-    Bunker,   // Target: Unit.
-    Medivac,   // Target: Unit.
-}
-
-pub enum Morph {
-    Archon,  // Target: None.
-    BroodLord,  // Target: None.
-    Gateway,  // Target: None.
-    GreaterSpire,  // Target: None.
-    HellBat,  // Target: None.
-    Hellion,  // Target: None.
-    Hive,  // Target: None.
-    Lair,  // Target: None.
-    LiberatorAaMode,  // Target: None.
-    LiberatorAgMode,  // Target: Point.
-    Lurker,  // Target: None.
-    LurkerDen,  // Target: None.
-    Mothership,  // Target: None.
-    OrbitalCommand,  // Target: None.
-    OverlordTransport,  // Target: None.
-    Overseer,  // Target: None.
-    PlanetaryFortress,  // Target: None.
-    Ravager,  // Target: None.
-    Root,  // Target: Point.
-    SiegeMode,   // Target: None.
-    SpineCrawlerRoot,  // Target: Point.
-    SpineCrawlerUproot,  // Target: None.
-    SporeCrawlerRoot,  // Target: Point.
-    SporeCrawlerUproot,  // Target: None.
-    SupplyDepotLower,   // Target: None.
-    SupplyDepotRaise,   // Target: None.
-    ThorExplosiveMode,  // Target: None.
-    ThorHighImpactMode,  // Target: None.
-    Unsiege,   // Target: None.
-    Uproot,  // Target: None.
-    VikingAssaultMode,   // Target: None.
-    VikingFighterMode,   // Target: None.
-    WarpGate,  // Target: None.
-    WarpPrismPhasingMode,  // Target: None.
-    WarpPrismTransportMode,  // Target: None.
-}
-
-pub enum Move {
-    Move,    // Target: Unit, Point.
-    Patrol,    // Target: Unit, Point.
-    RallyBuilding,   // Target: Unit, Point.
-    RallyCommandCenter,   // Target: Unit, Point.
-    RallyHatcheryUnits,   // Target: Unit, Point.
-    RallyHatcheryWorkers,   // Target: Unit, Point.
-    RallyMorphingUnit,   // Target: Unit, Point.
-    RallyNexus,   // Target: Unit, Point.
-    RallyUnits,  // Target: Unit, Point.
-    RallyWorkers,  // Target: Unit, Point.
-}
-
-pub enum Research {
-    AdeptResonatingGlaives,  // Target: None.
-    AdvancedBallistics,   // Target: None.
-    BansheeCloakingField,   // Target: None.
-    BansheeHyperFlightRotors,   // Target: None.
-    BattleCruiserWeaponReFit,  // Target: None.
-    Blink,  // Target: None.
-    Burrow,  // Target: None.
-    CentrifugalHooks,  // Target: None.
-    Charge,  // Target: None.
-    ChitinousPlating,   // Target: None.
-    CombatShield,   // Target: None.
-    ConcussiveShells,   // Target: None.
-    DrillingClaws,   // Target: None.
-    ExtendedThermalLance,  // Target: None.
-    GlialRegeneration,   // Target: None.
-    GraviticBooster,  // Target: None.
-    GraviticDrive,  // Target: None.
-    GroovedSpines,  // Target: None.
-    HighCapacityFuelTanks,   // Target: None.
-    HisecAutoTracking,   // Target: None.
-    InfernalPreIgniter,   // Target: None.
-    InterceptorGravitonCatapult,    // Target: None.
-    MagFieldLaunchers,   // Target: None.
-    MuscularAugments,  // Target: None.
-    NeoSteelFrame,   // Target: None.
-    NeuralParasite,  // Target: None.
-    PathogenGlands,  // Target: None.
-    PersonalCloaking,   // Target: None.
-    PhoenixAnionPulseCrystals,    // Target: None.
-    PneumatizedCarapace,  // Target: None.
-    ProtossAirArmor,  // Target: None.
-    ProtossAirArmorLevel1,  // Target: None.
-    ProtossAirArmorLevel2,  // Target: None.
-    ProtossAirArmorLevel3,  // Target: None.
-    ProtossAirWeapons,  // Target: None.
-    ProtossAirWeaponsLevel1,  // Target: None.
-    ProtossAirWeaponsLevel2,  // Target: None.
-    ProtossAirWeaponsLevel3,  // Target: None.
-    ProtossGroundArmor,  // Target: None.
-    ProtossGroundArmorLevel1,  // Target: None.
-    ProtossGroundArmorLevel2,  // Target: None.
-    ProtossGroundArmorLevel3,  // Target: None.
-    ProtossGroundWeapons,  // Target: None.
-    ProtossGroundWeaponsLevel1,  // Target: None.
-    ProtossGroundWeaponsLevel2,  // Target: None.
-    ProtossGroundWeaponsLevel3,  // Target: None.
-    ProtossShields,  // Target: None.
-    ProtossShieldsLevel1,  // Target: None.
-    ProtossShieldsLevel2,  // Target: None.
-    ProtossShieldsLevel3,  // Target: None.
-    PsiStorm,  // Target: None.
-    RavenCorvidReactor,   // Target: None.
-    RavenRecalibratedExplosives,   // Target: None.
-    ShadowStrike,  // Target: None.
-    Stimpack,   // Target: None.
-    TerranInfantryArmor,  // Target: None.
-    TerranInfantryArmorLevel1,   // Target: None.
-    TerranInfantryArmorLevel2,   // Target: None.
-    TerranInfantryArmorLevel3,   // Target: None.
-    TerranInfantryWeapons,  // Target: None.
-    TerranInfantryWeaponsLevel1,   // Target: None.
-    TerranInfantryWeaponsLevel2,   // Target: None.
-    TerranInfantryWeaponsLevel3,   // Target: None.
-    TerranShipWeapons,  // Target: None.
-    TerranShipWeaponsLevel1,   // Target: None.
-    TerranShipWeaponsLevel2,   // Target: None.
-    TerranShipWeaponsLevel3,   // Target: None.
-    TerranStructureArmorUpgrade,   // Target: None.
-    TerranVehicleAndShipPlating,  // Target: None.
-    TerranVehicleAndShipPlatingLevel1,   // Target: None.
-    TerranVehicleAndShipPlatingLevel2,   // Target: None.
-    TerranVehicleAndShipPlatingLevel3,   // Target: None.
-    TerranVehicleWeapons,  // Target: None.
-    TerranVehicleWeaponsLevel1,   // Target: None.
-    TerranVehicleWeaponsLevel2,   // Target: None.
-    TerranVehicleWeaponsLevel3,   // Target: None.
-    TunnelingClaws,   // Target: None.
-    WarpGate,  // Target: None.
-    ZergFlyerArmor,  // Target: None.
-    ZergFlyerArmorLevel1,  // Target: None.
-    ZergFlyerArmorLevel2,  // Target: None.
-    ZergFlyerArmorLevel3,  // Target: None.
-    ZergFlyerAttack,  // Target: None.
-    ZergFlyerAttackLevel1,  // Target: None.
-    ZergFlyerAttackLevel2,  // Target: None.
-    ZergFlyerAttackLevel3,  // Target: None.
-    ZergGroundArmor,  // Target: None.
-    ZergGroundArmorLevel1,  // Target: None.
-    ZergGroundArmorLevel2,  // Target: None.
-    ZergGroundArmorLevel3,  // Target: None.
-    ZerglingAdrenalGlands,  // Target: None.
-    ZerglingMetabolicBoost,  // Target: None.
-    ZergMeleeWeapons,  // Target: None.
-    ZergMeleeWeaponsLevel1,  // Target: None.
-    ZergMeleeWeaponsLevel2,  // Target: None.
-    ZergMeleeWeaponsLevel3,  // Target: None.
-    ZergMissileWeapons,  // Target: None.
-    ZergMissileWeaponsLevel1,  // Target: None.
-    ZergMissileWeaponsLevel2,  // Target: None.
-    ZergMissileWeaponsLevel3,  // Target: None.
-}
-
-pub enum Stop {
-    Stop,  // Target: None.
-    Building,  // Target: None.
-    Cheer,     // Target: None.
-    Dance,     // Target: None.
-    Redirect,  // Target: None.
-}
-
-pub enum TrainWarp {
-    Adept,  // Target: Point.
-    DarkTemplar,  // Target: Point.
-    HighTemplar,  // Target: Point.
-    Sentry,  // Target: Point.
-    Stalker,  // Target: Point.
-    Zealot,  // Target: Point.
-}
-
-pub enum Train {
-    Adept,   // Target: None.
-    Baneling,    // Target: None.
-    Banshee,   // Target: None.
-    BattleCruiser,   // Target: None.
-    Carrier,   // Target: None.
-    Colossus,   // Target: None.
-    Corruptor,  // Target: None.
-    Cyclone,   // Target: None.
-    DarkTemplar,   // Target: None.
-    Disruptor,   // Target: None.
-    Drone,  // Target: None.
-    Ghost,   // Target: None.
-    HellBat,   // Target: None.
-    Hellion,   // Target: None.
-    HighTemplar,   // Target: None.
-    Hydralisk,  // Target: None.
-    Immortal,   // Target: None.
-    Infestor,  // Target: None.
-    Liberator,   // Target: None.
-    Marauder,   // Target: None.
-    Marine,   // Target: None.
-    Medivac,   // Target: None.
-    MothershipCore,  // Target: None.
-    Mutalisk,  // Target: None.
-    Observer,   // Target: None.
-    Oracle,   // Target: None.
-    Overlord,  // Target: None.
-    Phoenix,   // Target: None.
-    Probe,  // Target: None.
-    Queen,  // Target: None.
-    Raven,   // Target: None.
-    Reaper,   // Target: None.
-    Roach,  // Target: None.
-    Scv,   // Target: None.
-    Sentry,   // Target: None.
-    SiegeTank,   // Target: None.
-    Stalker,   // Target: None.
-    SwarmHost,  // Target: None.
-    Tempest,   // Target: None.
-    Thor,   // Target: None.
-    Ultralisk,  // Target: None.
-    VikingFighter,   // Target: None.
-    Viper,  // Target: None.
-    VoidRay,   // Target: None.
-    WarpPrism,   // Target: None.
-    WidowMine,   // Target: None.
-    Zealot,   // Target: None.
-    Zergling,  // Target: None.
-}
-
-pub enum Unload {
-    UnloadAll,  // Target: None.
-    UnloadAllAt,  // Target: Unit, Point.
-    UnloadAllAtMedivac,   // Target: Unit, Point.
-    UnloadAllAtOverlord,  // Target: Unit, Point.
-    UnloadAllAtWarpPrism,   // Target: Unit, Point.
-    UnloadAllBunker,   // Target: None.
-    UnloadAllCommandCenter,   // Target: None.
-    UnloadAllNydusNetwork,  // Target: None.
-    UnloadAllNydusWorm,  // Target: None.
-    UnloadUnitBunker,   // Target: None.
-    UnloadUnitCommandCenter,   // Target: None.
-    UnloadUnitMedivac,   // Target: None.
-    UnloadUnitNydusNetwork,  // Target: None.
-    UnloadUnitOverlord,  // Target: None.
-    UnloadUnitWarpPrism,   // Target: None.
-}
-
+#[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Ability {
     Invalid,
-    Smart,     // Target: Unit, Point.
+    Smart,                                      // Target: Unit, Point.
 
-    Attack(Attack),
-    Behavior(Behavior),
-    Build(Build),
-    BurrowDown(BurrowDown),
-    BurrowUp(BurrowUp),
-    Cancel(Cancel),
-    Effect(Effect),
-    Hallucination(Hallucination),
-    Halt(Halt),
-    Harvest(Harvest),
+    Attack,                                     // Target: Unit, Point.
+    AttackAttack,                               // Target: Unit, Point.
+    AttackAttackBuilding,                       // Target: Unit, Point.
+    AttackAttackRedirect,                       // Target: Unit, Point.
 
-    HoldPosition,    // Target: None.
+    BehaviorBuildingAttackOff,                  // Target: None.
+    BehaviorBuildingAttackOn,                   // Target: None.
+    BehaviorCloakOff,                           // Target: None.
+    BehaviorCloakOffBanshee,                    // Target: None.
+    BehaviorCloakOffGhost,                      // Target: None.
+    BehaviorCloakOn,                            // Target: None.
+    BehaviorCloakOnBanshee,                     // Target: None.
+    BehaviorCloakOnGhost,                       // Target: None.
+    BehaviorGenerateCreepOff,                   // Target: None.
+    BehaviorGenerateCreepOn,                    // Target: None.
+    BehaviorHoldFireOff,                        // Target: None.
+    BehaviorHoldFireOffLurker,                  // Target: None.
+    BehaviorHoldFireOn,                         // Target: None.
+    BehaviorHoldFireOnGhost,                    // Target: None.
+    BehaviorHoldFireOnLurker,                   // Target: None.
+    BehaviorPulsarBeamOff,                      // Target: None.
+    BehaviorPulsarBeamOn,                       // Target: None.
 
-    Land(Land),
-    Lift(Lift),
-    Load(Load),
-    Morph(Morph),
-    Move(Move),
-    Research(Research),
+    BuildArmory,                                // Target: Point.
+    BuildAssimilator,                           // Target: Unit.
+    BuildBanelingNest,                          // Target: Point.
+    BuildBarracks,                              // Target: Point.
+    BuildBunker,                                // Target: Point.
+    BuildCommandCenter,                         // Target: Point.
+    BuildCreepTumor,                            // Target: Point.
+    BuildCreepTumorQueen,                       // Target: Point.
+    BuildCreepTumorTumor,                       // Target: Point.
+    BuildCyberneticsCore,                       // Target: Point.
+    BuildDarkShrine,                            // Target: Point.
+    BuildEngineeringBay,                        // Target: Point.
+    BuildEvolutionChamber,                      // Target: Point.
+    BuildExtractor,                             // Target: Unit.
+    BuildFactory,                               // Target: Point.
+    BuildFleetBeacon,                           // Target: Point.
+    BuildForge,                                 // Target: Point.
+    BuildFusionCore,                            // Target: Point.
+    BuildGateway,                               // Target: Point.
+    BuildGhostAcademy,                          // Target: Point.
+    BuildHatchery,                              // Target: Point.
+    BuildHydraliskDen,                          // Target: Point.
+    BuildInfestationPit,                        // Target: Point.
+    BuildInterceptors,                          // Target: None.
+    BuildMissileTurret,                         // Target: Point.
+    BuildNexus,                                 // Target: Point.
+    BuildNuke,                                  // Target: None.
+    BuildNydusNetwork,                          // Target: Point.
+    BuildNydusWorm,                             // Target: Point.
+    BuildPhotonCannon,                          // Target: Point.
+    BuildPylon,                                 // Target: Point.
+    BuildReactor,                               // Target: None.
+    BuildReactorBarracks,                       // Target: None.
+    BuildReactorFactory,                        // Target: None.
+    BuildReactorStarport,                       // Target: None.
+    BuildRefinery,                              // Target: Unit.
+    BuildRoachWarren,                           // Target: Point.
+    BuildRoboticsBay,                           // Target: Point.
+    BuildRoboticsFacility,                      // Target: Point.
+    BuildSensorTower,                           // Target: Point.
+    BuildSpawningPool,                          // Target: Point.
+    BuildSpineCrawler,                          // Target: Point.
+    BuildSpire,                                 // Target: Point.
+    BuildSporeCrawler,                          // Target: Point.
+    BuildStarGate,                              // Target: Point.
+    BuildStarport,                              // Target: Point.
+    BuildStasisTrap,                            // Target: Point.
+    BuildSupplyDepot,                           // Target: Point.
+    BuildTechLab,                               // Target: None.
+    BuildTechLabBarracks,                       // Target: None.
+    BuildTechLabFactory,                        // Target: None.
+    BuildTechLabStarport,                       // Target: None.
+    BuildTemplarArchive,                        // Target: Point.
+    BuildTwilightCouncil,                       // Target: Point.
+    BuildUltraliskCavern,                       // Target: Point.
 
-    ScanMove,    // Target: Unit, Point.
+    BurrowDown,                                 // Target: None.
+    BurrowDownBaneling,                         // Target: None.
+    BurrowDownDrone,                            // Target: None.
+    BurrowDownHydralisk,                        // Target: None.
+    BurrowDownInfestor,                         // Target: None.
+    BurrowDownLurker,                           // Target: None.
+    BurrowDownQueen,                            // Target: None.
+    BurrowDownRavager,                          // Target: None.
+    BurrowDownRoach,                            // Target: None.
+    BurrowDownSwarmHost,                        // Target: None.
+    BurrowDownWidowMine,                        // Target: None.
+    BurrowDownZergling,                         // Target: None.
 
-    Stop(Stop),
-    TrainWarp(TrainWarp),
-    Train(Train),
-    Unload(Unload),
+    BurrowUp,                                   // Target: None.
+    BurrowUpBaneling,                           // Target: None.
+    BurrowUpDrone,                              // Target: None.
+    BurrowUpHydralisk,                          // Target: None.
+    BurrowUpInfestor,                           // Target: None.
+    BurrowUpLurker,                             // Target: None.
+    BurrowUpQueen,                              // Target: None.
+    BurrowUpRavager,                            // Target: None.
+    BurrowUpRoach,                              // Target: None.
+    BurrowUpSwarmHost,                          // Target: None.
+    BurrowUpWidowMine,                          // Target: None.
+    BurrowUpZergling,                           // Target: None.
+
+    Cancel,                                     // Target: None.
+    CancelSlotAddOn,                            // Target: None.
+    CancelSlotQueue1,                           // Target: None.
+    CancelSlotQueue5,                           // Target: None.
+    CancelSlotQueueToSelection,                 // Target: None.
+    CancelSlotQueuePassive,                     // Target: None.
+    CancelAdeptPhaseShift,                      // Target: None.
+    CancelAdeptShadePhaseShift,                 // Target: None.
+    CancelBarracksAddOn,                        // Target: None.
+    CancelBuildInProgress,                      // Target: None.
+    CancelCreepTumor,                           // Target: None.
+    CancelFactoryAddOn,                         // Target: None.
+    CancelGravitonBeam,                         // Target: None.
+    CancelLast,                                 // Target: None.
+    CancelMorphBroodLord,                       // Target: None.
+    CancelMorphLair,                            // Target: None.
+    CancelMorphLurker,                          // Target: None.
+    CancelMorphLurkerDen,                       // Target: None.
+    CancelMorphMothership,                      // Target: None.
+    CancelMorphOrbital,                         // Target: None.
+    CancelMorphOverlordTransport,               // Target: None.
+    CancelMorphOverseer,                        // Target: None.
+    CancelMorphPlanetaryFortress,               // Target: None.
+    CancelMorphRavager,                         // Target: None.
+    CancelQueue1,                               // Target: None.
+    CancelQueue5,                               // Target: None.
+    CancelQueueAddOn,                           // Target: None.
+    CancelQueueToSelection,                     // Target: None.
+    CancelQueuePassive,                         // Target: None.
+    CancelQueuePassiveToSelection,              // Target: None.
+    CancelSpineCrawlerRoot,                     // Target: None.
+    CancelStarportAddOn,                        // Target: None.
+
+    EffectAbduct,                               // Target: Unit.
+    EffectAdeptPhaseShift,                      // Target: Point.
+    EffectAutoTurret,                           // Target: Point.
+    EffectBlindingCloud,                        // Target: Point.
+    EffectBlink,                                // Target: Point.
+    EffectBlinkStalker,                         // Target: Point.
+    EffectCallDownMule,                         // Target: Unit, Point.
+    EffectCausticSpray,                         // Target: Unit.
+    EffectCharge,                               // Target: Unit.
+    EffectChronoBoost,                          // Target: Unit.
+    EffectContaminate,                          // Target: Unit.
+    EffectCorrosiveBile,                        // Target: Point.
+    EffectEmp,                                  // Target: Point.
+    EffectExplode,                              // Target: None.
+    EffectFeedback,                             // Target: Unit.
+    EffectForceField,                           // Target: Point.
+    EffectFungalGrowth,                         // Target: Point.
+    EffectGhostSnipe,                           // Target: Unit.
+    EffectGravitonBeam,                         // Target: Unit.
+    EffectGuardianShield,                       // Target: None.
+    EffectHeal,                                 // Target: Unit.
+    EffectHunterSeekerMissile,                  // Target: Unit.
+    EffectImmortalBarrier,                      // Target: None.
+    EffectInfestedTerrans,                      // Target: Point.
+    EffectInjectLarva,                          // Target: Unit.
+    EffectKd8Charge,                            // Target: Unit, Point.
+    EffectLockOn,                               // Target: Unit.
+    EffectLocustSwoop,                          // Target: Point.
+    EffectMassRecall,                           // Target: Unit.
+    EffectMassRecallMothership,                 // Target: Unit.
+    EffectMassRecallMothershipCore,             // Target: Unit.
+    EffectMedivacIgniteAfterBurners,            // Target: None.
+    EffectNeuralParasite,                       // Target: Unit.
+    EffectNukeCallDown,                         // Target: Point.
+    EffectOracleRevelation,                     // Target: Point.
+    EffectParasiticBomb,                        // Target: Unit.
+    EffectPhotonOvercharge,                     // Target: Unit.
+    EffectPointDefenseDrone,                    // Target: Point.
+    EffectPsiStorm,                             // Target: Point.
+    EffectPurificationNova,                     // Target: Point.
+    EffectRepair,                               // Target: Unit.
+    EffectRepairMule,                           // Target: Unit.
+    EffectRepairScv,                            // Target: Unit.
+    EffectSalvage,                              // Target: None.
+    EffectScan,                                 // Target: Point.
+    EffectShadowStride,                         // Target: Point.
+    EffectSpawnChangeling,                      // Target: None.
+    EffectSpawnLocusts,                         // Target: Point.
+    EffectSpray,                                // Target: Point.
+    EffectSprayProtoss,                         // Target: Point.
+    EffectSprayTerran,                          // Target: Point.
+    EffectSprayZerg,                            // Target: Point.
+    EffectStim,                                 // Target: None.
+    EffectStimMarauder,                         // Target: None.
+    EffectStimMarine,                           // Target: None.
+    EffectStimMarineRedirect,                   // Target: None.
+    EffectSupplyDrop,                           // Target: Unit.
+    EffectTacticalJump,                         // Target: Point.
+    EffectTempestDisruptionBlast,               // Target: Point.
+    EffectTimeWarp,                             // Target: Point.
+    EffectTransfusion,                          // Target: Unit.
+    EffectViperConsume,                         // Target: Unit.
+    EffectVoidRayPrismaticalAlignment,          // Target: None.
+    EffectWidowMineAttack,                      // Target: Unit.
+    EffectYamatoGun,                            // Target: Unit.
+
+    HallucinationAdept,                         // Target: None.
+    HallucinationArchon,                        // Target: None.
+    HallucinationColossus,                      // Target: None.
+    HallucinationDisruptor,                     // Target: None.
+    HallucinationHighTemplar,                   // Target: None.
+    HallucinationImmortal,                      // Target: None.
+    HallucinationOracle,                        // Target: None.
+    HallucinationPhoenix,                       // Target: None.
+    HallucinationProbe,                         // Target: None.
+    HallucinationStalker,                       // Target: None.
+    HallucinationVoidRay,                       // Target: None.
+    HallucinationWarpPrism,                     // Target: None.
+    HallucinationZealot,                        // Target: None.
+
+    Halt,                                       // Target: None.
+    HaltBuilding,                               // Target: None.
+    HaltTerranBuild,                            // Target: None.
+
+    HarvestGather,                              // Target: Unit.
+    HarvestGatherDrone,                         // Target: Unit.
+    HarvestGatherProbe,                         // Target: Unit.
+    HarvestGatherScv,                           // Target: Unit.
+    HarvestReturn,                              // Target: None.
+    HarvestReturnDrone,                         // Target: None.
+    HarvestReturnMule,                          // Target: None.
+    HarvestReturnProbe,                         // Target: None.
+    HarvestReturnScv,                           // Target: None.
+
+    HoldPosition,                               // Target: None.
+
+    Land,                                       // Target: Point.
+    LandBarracks,                               // Target: Point.
+    LandCommandCenter,                          // Target: Point.
+    LandFactory,                                // Target: Point.
+    LandOrbitalCommand,                         // Target: Point.
+    LandStarport,                               // Target: Point.
+
+    Lift,                                       // Target: None.
+    LiftBarracks,                               // Target: None.
+    LiftCommandCenter,                          // Target: None.
+    LiftFactory,                                // Target: None.
+    LiftOrbitalCommand,                         // Target: None.
+    LiftStarport,                               // Target: None.
+
+    Load,                                       // Target: Unit.
+    LoadAll,                                    // Target: None.
+    LoadAllCommandCenter,                       // Target: None.
+    LoadBunker,                                 // Target: Unit.
+    LoadMedivac,                                // Target: Unit.
+
+    MorphArchon,                                // Target: None.
+    MorphBroodLord,                             // Target: None.
+    MorphGateway,                               // Target: None.
+    MorphGreaterSpire,                          // Target: None.
+    MorphHellBat,                               // Target: None.
+    MorphHellion,                               // Target: None.
+    MorphHive,                                  // Target: None.
+    MorphLair,                                  // Target: None.
+    MorphLiberatorAaMode,                       // Target: None.
+    MorphLiberatorAgMode,                       // Target: Point.
+    MorphLurker,                                // Target: None.
+    MorphLurkerDen,                             // Target: None.
+    MorphMothership,                            // Target: None.
+    MorphOrbitalCommand,                        // Target: None.
+    MorphOverlordTransport,                     // Target: None.
+    MorphOverseer,                              // Target: None.
+    MorphPlanetaryFortress,                     // Target: None.
+    MorphRavager,                               // Target: None.
+    MorphRoot,                                  // Target: Point.
+    MorphSiegeMode,                             // Target: None.
+    MorphSpineCrawlerRoot,                      // Target: Point.
+    MorphSpineCrawlerUproot,                    // Target: None.
+    MorphSporeCrawlerRoot,                      // Target: Point.
+    MorphSporeCrawlerUproot,                    // Target: None.
+    MorphSupplyDepotLower,                      // Target: None.
+    MorphSupplyDepotRaise,                      // Target: None.
+    MorphThorExplosiveMode,                     // Target: None.
+    MorphThorHighImpactMode,                    // Target: None.
+    MorphUnsiege,                               // Target: None.
+    MorphUproot,                                // Target: None.
+    MorphVikingAssaultMode,                     // Target: None.
+    MorphVikingFighterMode,                     // Target: None.
+    MorphWarpGate,                              // Target: None.
+    MorphWarpPrismPhasingMode,                  // Target: None.
+    MorphWarpPrismTransportMode,                // Target: None.
+
+    Move,                                       // Target: Unit, Point.
+    Patrol,                                     // Target: Unit, Point.
+    RallyBuilding,                              // Target: Unit, Point.
+    RallyCommandCenter,                         // Target: Unit, Point.
+    RallyHatcheryUnits,                         // Target: Unit, Point.
+    RallyHatcheryWorkers,                       // Target: Unit, Point.
+    RallyMorphingUnit,                          // Target: Unit, Point.
+    RallyNexus,                                 // Target: Unit, Point.
+    RallyUnits,                                 // Target: Unit, Point.
+    RallyWorkers,                               // Target: Unit, Point.
+
+    ResearchAdeptResonatingGlaives,             // Target: None.
+    ResearchAdvancedBallistics,                 // Target: None.
+    ResearchBansheeCloakingField,               // Target: None.
+    ResearchBansheeHyperFlightRotors,           // Target: None.
+    ResearchBattleCruiserWeaponReFit,           // Target: None.
+    ResearchBlink,                              // Target: None.
+    ResearchBurrow,                             // Target: None.
+    ResearchCentrifugalHooks,                   // Target: None.
+    ResearchCharge,                             // Target: None.
+    ResearchChitinousPlating,                   // Target: None.
+    ResearchCombatShield,                       // Target: None.
+    ResearchConcussiveShells,                   // Target: None.
+    ResearchDrillingClaws,                      // Target: None.
+    ResearchExtendedThermalLance,               // Target: None.
+    ResearchGlialRegeneration,                  // Target: None.
+    ResearchGraviticBooster,                    // Target: None.
+    ResearchGraviticDrive,                      // Target: None.
+    ResearchGroovedSpines,                      // Target: None.
+    ResearchHighCapacityFuelTanks,              // Target: None.
+    ResearchHisecAutoTracking,                  // Target: None.
+    ResearchInfernalPreIgniter,                 // Target: None.
+    ResearchInterceptorGravitonCatapult,        // Target: None.
+    ResearchMagFieldLaunchers,                  // Target: None.
+    ResearchMuscularAugments,                   // Target: None.
+    ResearchNeoSteelFrame,                      // Target: None.
+    ResearchNeuralParasite,                     // Target: None.
+    ResearchPathogenGlands,                     // Target: None.
+    ResearchPersonalCloaking,                   // Target: None.
+    ResearchPhoenixAnionPulseCrystals,          // Target: None.
+    ResearchPneumatizedCarapace,                // Target: None.
+    ResearchProtossAirArmor,                    // Target: None.
+    ResearchProtossAirArmorLevel1,              // Target: None.
+    ResearchProtossAirArmorLevel2,              // Target: None.
+    ResearchProtossAirArmorLevel3,              // Target: None.
+    ResearchProtossAirWeapons,                  // Target: None.
+    ResearchProtossAirWeaponsLevel1,            // Target: None.
+    ResearchProtossAirWeaponsLevel2,            // Target: None.
+    ResearchProtossAirWeaponsLevel3,            // Target: None.
+    ResearchProtossGroundArmor,                 // Target: None.
+    ResearchProtossGroundArmorLevel1,           // Target: None.
+    ResearchProtossGroundArmorLevel2,           // Target: None.
+    ResearchProtossGroundArmorLevel3,           // Target: None.
+    ResearchProtossGroundWeapons,               // Target: None.
+    ResearchProtossGroundWeaponsLevel1,         // Target: None.
+    ResearchProtossGroundWeaponsLevel2,         // Target: None.
+    ResearchProtossGroundWeaponsLevel3,         // Target: None.
+    ResearchProtossShields,                     // Target: None.
+    ResearchProtossShieldsLevel1,               // Target: None.
+    ResearchProtossShieldsLevel2,               // Target: None.
+    ResearchProtossShieldsLevel3,               // Target: None.
+    ResearchPsiStorm,                           // Target: None.
+    ResearchRavenCorvidReactor,                 // Target: None.
+    ResearchRavenRecalibratedExplosives,        // Target: None.
+    ResearchShadowStrike,                       // Target: None.
+    ResearchStimpack,                           // Target: None.
+    ResearchTerranInfantryArmor,                // Target: None.
+    ResearchTerranInfantryArmorLevel1,          // Target: None.
+    ResearchTerranInfantryArmorLevel2,          // Target: None.
+    ResearchTerranInfantryArmorLevel3,          // Target: None.
+    ResearchTerranInfantryWeapons,              // Target: None.
+    ResearchTerranInfantryWeaponsLevel1,        // Target: None.
+    ResearchTerranInfantryWeaponsLevel2,        // Target: None.
+    ResearchTerranInfantryWeaponsLevel3,        // Target: None.
+    ResearchTerranShipWeapons,                  // Target: None.
+    ResearchTerranShipWeaponsLevel1,            // Target: None.
+    ResearchTerranShipWeaponsLevel2,            // Target: None.
+    ResearchTerranShipWeaponsLevel3,            // Target: None.
+    ResearchTerranStructureArmorUpgrade,        // Target: None.
+    ResearchTerranVehicleAndShipPlating,        // Target: None.
+    ResearchTerranVehicleAndShipPlatingLevel1,  // Target: None.
+    ResearchTerranVehicleAndShipPlatingLevel2,  // Target: None.
+    ResearchTerranVehicleAndShipPlatingLevel3,  // Target: None.
+    ResearchTerranVehicleWeapons,               // Target: None.
+    ResearchTerranVehicleWeaponsLevel1,         // Target: None.
+    ResearchTerranVehicleWeaponsLevel2,         // Target: None.
+    ResearchTerranVehicleWeaponsLevel3,         // Target: None.
+    ResearchTunnelingClaws,                     // Target: None.
+    ResearchWarpGate,                           // Target: None.
+    ResearchZergFlyerArmor,                     // Target: None.
+    ResearchZergFlyerArmorLevel1,               // Target: None.
+    ResearchZergFlyerArmorLevel2,               // Target: None.
+    ResearchZergFlyerArmorLevel3,               // Target: None.
+    ResearchZergFlyerAttack,                    // Target: None.
+    ResearchZergFlyerAttackLevel1,              // Target: None.
+    ResearchZergFlyerAttackLevel2,              // Target: None.
+    ResearchZergFlyerAttackLevel3,              // Target: None.
+    ResearchZergGroundArmor,                    // Target: None.
+    ResearchZergGroundArmorLevel1,              // Target: None.
+    ResearchZergGroundArmorLevel2,              // Target: None.
+    ResearchZergGroundArmorLevel3,              // Target: None.
+    ResearchZerglingAdrenalGlands,              // Target: None.
+    ResearchZerglingMetabolicBoost,             // Target: None.
+    ResearchZergMeleeWeapons,                   // Target: None.
+    ResearchZergMeleeWeaponsLevel1,             // Target: None.
+    ResearchZergMeleeWeaponsLevel2,             // Target: None.
+    ResearchZergMeleeWeaponsLevel3,             // Target: None.
+    ResearchZergMissileWeapons,                 // Target: None.
+    ResearchZergMissileWeaponsLevel1,           // Target: None.
+    ResearchZergMissileWeaponsLevel2,           // Target: None.
+    ResearchZergMissileWeaponsLevel3,           // Target: None.
+
+    ScanMove,                                   // Target: Unit, Point.
+
+    Stop,                                       // Target: None.
+    StopBuilding,                               // Target: None.
+    StopCheer,                                  // Target: None.
+    StopDance,                                  // Target: None.
+    StopRedirect,                               // Target: None.
+
+    TrainWarpAdept,                             // Target: Point.
+    TrainWarpDarkTemplar,                       // Target: Point.
+    TrainWarpHighTemplar,                       // Target: Point.
+    TrainWarpSentry,                            // Target: Point.
+    TrainWarpStalker,                           // Target: Point.
+    TrainWarpZealot,                            // Target: Point.
+
+    TrainAdept,                                 // Target: None.
+    TrainBaneling,                              // Target: None.
+    TrainBanshee,                               // Target: None.
+    TrainBattleCruiser,                         // Target: None.
+    TrainCarrier,                               // Target: None.
+    TrainColossus,                              // Target: None.
+    TrainCorruptor,                             // Target: None.
+    TrainCyclone,                               // Target: None.
+    TrainDarkTemplar,                           // Target: None.
+    TrainDisruptor,                             // Target: None.
+    TrainDrone,                                 // Target: None.
+    TrainGhost,                                 // Target: None.
+    TrainHellBat,                               // Target: None.
+    TrainHellion,                               // Target: None.
+    TrainHighTemplar,                           // Target: None.
+    TrainHydralisk,                             // Target: None.
+    TrainImmortal,                              // Target: None.
+    TrainInfestor,                              // Target: None.
+    TrainLiberator,                             // Target: None.
+    TrainMarauder,                              // Target: None.
+    TrainMarine,                                // Target: None.
+    TrainMedivac,                               // Target: None.
+    TrainMothershipCore,                        // Target: None.
+    TrainMutalisk,                              // Target: None.
+    TrainObserver,                              // Target: None.
+    TrainOracle,                                // Target: None.
+    TrainOverlord,                              // Target: None.
+    TrainPhoenix,                               // Target: None.
+    TrainProbe,                                 // Target: None.
+    TrainQueen,                                 // Target: None.
+    TrainRaven,                                 // Target: None.
+    TrainReaper,                                // Target: None.
+    TrainRoach,                                 // Target: None.
+    TrainScv,                                   // Target: None.
+    TrainSentry,                                // Target: None.
+    TrainSiegeTank,                             // Target: None.
+    TrainStalker,                               // Target: None.
+    TrainSwarmHost,                             // Target: None.
+    TrainTempest,                               // Target: None.
+    TrainThor,                                  // Target: None.
+    TrainUltralisk,                             // Target: None.
+    TrainVikingFighter,                         // Target: None.
+    TrainViper,                                 // Target: None.
+    TrainVoidRay,                               // Target: None.
+    TrainWarpPrism,                             // Target: None.
+    TrainWidowMine,                             // Target: None.
+    TrainZealot,                                // Target: None.
+    TrainZergling,                              // Target: None.
+
+    UnloadAll,                                  // Target: None.
+    UnloadAllAt,                                // Target: Unit, Point.
+    UnloadAllAtMedivac,                         // Target: Unit, Point.
+    UnloadAllAtOverlord,                        // Target: Unit, Point.
+    UnloadAllAtWarpPrism,                       // Target: Unit, Point.
+    UnloadAllBunker,                            // Target: None.
+    UnloadAllCommandCenter,                     // Target: None.
+    UnloadAllNydusNetwork,                      // Target: None.
+    UnloadAllNydusWorm,                         // Target: None.
+    UnloadUnitBunker,                           // Target: None.
+    UnloadUnitCommandCenter,                    // Target: None.
+    UnloadUnitMedivac,                          // Target: None.
+    UnloadUnitNydusNetwork,                     // Target: None.
+    UnloadUnitOverlord,                         // Target: None.
+    UnloadUnitWarpPrism,                        // Target: None.
 }
 
 impl Ability {
