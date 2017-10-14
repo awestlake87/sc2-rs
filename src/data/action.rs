@@ -59,20 +59,20 @@ pub enum SpatialUnitCommandTarget {
     Minimap(Point2I),
 }
 
-pub enum PointSelectionType {
+pub enum PointSelectType {
     Select,
     Toggle,
     All,
     AddAll
 }
 
-impl From<ProtoPointSelectionType> for PointSelectionType {
+impl From<ProtoPointSelectionType> for PointSelectType {
     fn from(select_type: ProtoPointSelectionType) -> Self {
         match select_type {
-            ProtoPointSelectionType::Select => PointSelectionType::Select,
-            ProtoPointSelectionType::Toggle => PointSelectionType::Toggle,
-            ProtoPointSelectionType::AllType => PointSelectionType::All,
-            ProtoPointSelectionType::AddAllType => PointSelectionType::AddAll,
+            ProtoPointSelectionType::Select => PointSelectType::Select,
+            ProtoPointSelectionType::Toggle => PointSelectType::Toggle,
+            ProtoPointSelectionType::AllType => PointSelectType::All,
+            ProtoPointSelectionType::AddAllType => PointSelectType::AddAll,
         }
     }
 }
@@ -88,7 +88,7 @@ pub enum SpatialAction {
     },
     SelectPoint {
         select_screen:      Point2I,
-        select_type:        PointSelectionType
+        select_type:        PointSelectType
     },
     SelectRect {
         select_screen:      Vec<Rect2I>,
@@ -142,7 +142,7 @@ impl SpatialAction {
                 let pos = cmd.get_selection_screen_coord();
                 Point2I::new(pos.get_x(), pos.get_y())
             },
-            select_type: PointSelectionType::from(cmd.get_field_type())
+            select_type: PointSelectType::from(cmd.get_field_type())
         }
     }
 

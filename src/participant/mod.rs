@@ -1,7 +1,10 @@
 
 mod actions;
 mod control;
+mod debug;
 mod observer;
+mod query;
+mod spatial_actions;
 
 use std::collections::HashMap;
 
@@ -28,9 +31,12 @@ use super::data::{
 };
 use super::instance::Instance;
 
-pub use self::actions::{ Actions };
-pub use self::control::{ Control };
-pub use self::observer::{ Observer };
+pub use self::actions::*;
+pub use self::control::*;
+pub use self::debug::*;
+pub use self::observer::*;
+pub use self::query::*;
+pub use self::spatial_actions::*;
 
 pub struct Participant {
     player:                     Player,
