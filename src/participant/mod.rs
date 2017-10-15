@@ -7,6 +7,7 @@ mod query;
 mod spatial_actions;
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
@@ -17,6 +18,7 @@ use super::client::Client;
 use super::data::{
     PowerSource,
     GameState,
+    GameInfo,
     PlayerData,
     Player,
     Unit,
@@ -42,7 +44,7 @@ pub struct Participant {
     player:                     Player,
     pub instance:               Instance,
     client:                     Client,
-    pub agent:                  Box<Agent>,
+    pub agent:                  Option<Box<Agent>>,
 
     app_state:                  AppState,
     last_status:                AppStatus,
@@ -54,8 +56,8 @@ pub struct Participant {
 
     commands:                   Vec<Tag>,
 
-    previous_units:             HashMap<Tag, Unit>,
-    units:                      HashMap<Tag, Unit>,
+    previous_units:             HashMap<Tag, Rc<Unit>>,
+    units:                      HashMap<Tag, Rc<Unit>>,
     power_sources:              Vec<PowerSource>,
     previous_upgrades:          Vec<Upgrade>,
     upgrades:                   Vec<Upgrade>,
@@ -69,6 +71,7 @@ pub struct Participant {
     player_id:                  Option<u32>,
     camera_pos:                 Option<Point2>,
     game_state:                 GameState,
+    game_info:                  GameInfo,
     player_data:                PlayerData,
     score:                      Option<Score>,
 
@@ -85,7 +88,7 @@ impl Participant {
             player: player,
             instance: instance,
             client: client,
-            agent: agent,
+            agent: Some(agent),
 
             app_state: AppState::Normal,
             last_status: AppStatus::Launched,
@@ -116,6 +119,7 @@ impl Participant {
                 current_game_loop: 0,
                 previous_game_loop: 0,
             },
+            game_info: GameInfo::default(),
             player_data: PlayerData {
                 minerals: 0,
                 vespene: 0,

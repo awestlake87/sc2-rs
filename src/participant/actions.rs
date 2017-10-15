@@ -1,4 +1,6 @@
 
+use std::rc::Rc;
+
 use sc2_proto::sc2api;
 
 use super::{ Participant };
@@ -6,12 +8,12 @@ use super::super::{ Result };
 use super::super::data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
 
 pub trait Actions {
-    fn command_units(&mut self, units: &Vec<Unit>, ability: Ability);
+    fn command_units(&mut self, units: &Vec<Rc<Unit>>, ability: Ability);
     fn command_units_to_location(
-        &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, location: Point2
     );
     fn command_units_to_target(
-        &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: &Unit
     );
     fn get_commands(&self) -> &Vec<Tag>;
     fn send_actions(&mut self) -> Result<()>;
@@ -19,7 +21,7 @@ pub trait Actions {
 }
 
 impl Actions for Participant {
-    fn command_units(&mut self, units: &Vec<Unit>, ability: Ability) {
+    fn command_units(&mut self, units: &Vec<Rc<Unit>>, ability: Ability) {
         self.requested_actions.push(
             Action {
                 ability: ability,
@@ -29,7 +31,7 @@ impl Actions for Participant {
         );
     }
     fn command_units_to_location(
-        &mut self, units: &Vec<Unit>, ability: Ability, location: Point2
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, location: Point2
     ) {
         self.requested_actions.push(
             Action {
@@ -40,7 +42,7 @@ impl Actions for Participant {
         );
     }
     fn command_units_to_target(
-        &mut self, units: &Vec<Unit>, ability: Ability, target: &Unit
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: &Unit
     ) {
         self.requested_actions.push(
             Action {
@@ -92,8 +94,6 @@ impl Actions for Participant {
                 req_actions.push(a);
             }
 
-            self.requested_actions.clear();
-
             for action in req_actions.iter() {
                 if action.has_action_raw() {
                     let raw = action.get_action_raw();
@@ -107,8 +107,12 @@ impl Actions for Participant {
             }
         }
 
-        self.send(req)?;
-        self.recv()?;
+        if !self.requested_actions.is_empty() {
+            self.requested_actions.clear();
+            self.send(req)?;
+            let rsp = self.recv()?;
+            println!("received {:#?}", rsp);
+        }
 
         Ok(())
     }

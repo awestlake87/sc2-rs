@@ -1,6 +1,8 @@
 
 use std::collections::HashSet;
+use std::mem;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use sc2_proto::common;
 use sc2_proto::sc2api;
@@ -194,7 +196,15 @@ impl Control for Participant {
         self.issue_upgrade_events()?;
         self.issue_alert_events()?;
 
-        self.agent.on_step();
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                agent.on_step(self);
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
+        }
 
         Ok(())
     }
@@ -221,8 +231,13 @@ impl InnerControl for Participant {
             for tag in event.get_dead_units() {
                 match self.units.get_mut(tag) {
                     Some(ref mut unit) => {
-                        unit.mark_dead();
-                        self.agent.on_unit_destroyed(unit);
+                        Rc::get_mut(unit).unwrap().mark_dead();
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_unit_destroyed(unit);
+                            },
+                            None => ()
+                        }
                     },
                     None => ()
                 }
@@ -239,10 +254,20 @@ impl InnerControl for Participant {
                     if unit.alliance == Alliance::Enemy &&
                         unit.display_type == DisplayType::Visible
                     {
-                        self.agent.on_unit_detected(unit);
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_unit_detected(unit);
+                            },
+                            None => ()
+                        }
                     }
                     else {
-                        self.agent.on_unit_created(unit);
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_unit_created(unit);
+                            },
+                            None => ()
+                        }
                     }
                 }
             }
@@ -259,23 +284,43 @@ impl InnerControl for Participant {
             match self.previous_units.get(&unit.tag) {
                 Some(ref prev_unit) => {
                     if !prev_unit.orders.is_empty() {
-                        self.agent.on_unit_idle(&unit);
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_unit_idle(&unit);
+                            },
+                            None => ()
+                        }
                         continue;
                     }
 
                     if prev_unit.build_progress < 1.0 {
-                        self.agent.on_unit_idle(&unit);
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_unit_idle(&unit);
+                            },
+                            None => ()
+                        }
                         continue;
                     }
 
                     for tag in &self.commands {
                         if *tag == unit.tag {
-                            self.agent.on_unit_idle(&unit);
+                            match self.agent {
+                                Some(ref mut agent) => {
+                                    agent.on_unit_idle(&unit);
+                                },
+                                None => ()
+                            }
                         }
                     }
                 },
                 None => {
-                    self.agent.on_unit_idle(&unit);
+                    match self.agent {
+                        Some(ref mut agent) => {
+                            agent.on_unit_idle(&unit);
+                        },
+                        None => ()
+                    }
                     continue;
                 }
             }
@@ -292,7 +337,12 @@ impl InnerControl for Participant {
             match self.previous_units.get(&unit.tag) {
                 Some(ref prev_unit) => {
                     if prev_unit.build_progress < 1.0 {
-                        self.agent.on_building_complete(&unit);
+                        match self.agent {
+                            Some(ref mut agent) => {
+                                agent.on_building_complete(&unit);
+                            },
+                            None => ()
+                        }
                     }
                 },
                 None => ()
@@ -312,7 +362,12 @@ impl InnerControl for Participant {
             match prev_upgrades.get(&upgrade) {
                 Some(_) => (),
                 None => {
-                    self.agent.on_upgrade_complete(*upgrade);
+                    match self.agent {
+                        Some(ref mut agent) => {
+                            agent.on_upgrade_complete(*upgrade);
+                        },
+                        None => ()
+                    }
                 }
             }
         }
@@ -323,10 +378,20 @@ impl InnerControl for Participant {
         for alert in self.observation.get_observation().get_alerts() {
             match *alert {
                 sc2api::Alert::NuclearLaunchDetected => {
-                    self.agent.on_nuke_detected();
+                    match self.agent {
+                        Some(ref mut agent) => {
+                            agent.on_nuke_detected();
+                        },
+                        None => ()
+                    }
                 },
                 sc2api::Alert::NydusWormDetected => {
-                    self.agent.on_nydus_detected();
+                    match self.agent {
+                        Some(ref mut agent) => {
+                            agent.on_nydus_detected();
+                        },
+                        None => ()
+                    }
                 },
                 _ => continue
             }

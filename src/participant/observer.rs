@@ -1,6 +1,7 @@
 
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
@@ -10,6 +11,7 @@ use super::super::data::{
     PowerSource,
     PlayerData,
     GameState,
+    GameInfo,
     Unit,
     Upgrade,
     Point2,
@@ -22,7 +24,12 @@ use super::super::data::{
 pub trait Observer {
     fn get_player_id(&self) -> Option<u32>;
     fn get_game_loop(&self) -> u32;
-    fn get_units(&self) -> Vec<Unit>;
+    fn get_units(&self) -> Vec<Rc<Unit>>;
+
+    fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
+        where F: Fn(&Unit) -> bool
+    ;
+
     fn get_actions(&self) -> &Vec<Action>;
     fn get_feature_layer_actions(&self) -> &Vec<SpatialAction>;
     fn get_power_sources(&self) -> &Vec<PowerSource>;
@@ -32,7 +39,7 @@ pub trait Observer {
     //fn get_unit_type_data(&self)
     //fn get_upgrade_data(&self)
     //fn get_buff_data(&self)
-    //fn get_game_info(&self)
+    fn get_game_info(&mut self) -> Result<&GameInfo>;
     fn get_minerals(&self) -> u32;
     fn get_vespene(&self) -> u32;
     fn get_food_cap(&self) -> u32;
@@ -60,8 +67,21 @@ impl Observer for Participant {
     fn get_game_loop(&self) -> u32 {
         self.game_state.current_game_loop
     }
-    fn get_units(&self) -> Vec<Unit> {
+    fn get_units(&self) -> Vec<Rc<Unit>> {
         unimplemented!("get units");
+    }
+    fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
+        where F: Fn(&Unit) -> bool
+    {
+        let mut units = vec![ ];
+
+        for unit in self.units.values() {
+            if filter(unit.as_ref()) {
+                units.push(unit.clone());
+            }
+        }
+
+        units
     }
     fn get_actions(&self) -> &Vec<Action> {
         &self.actions
@@ -77,6 +97,20 @@ impl Observer for Participant {
     }
     fn get_score(&self) -> &Score {
         unimplemented!("get score");
+    }
+
+    fn get_game_info(&mut self) -> Result<&GameInfo> {
+        let mut req = sc2api::Request::new();
+        req.mut_game_info();
+
+        self.send(req)?;
+        let mut rsp = self.recv()?;
+
+        if rsp.has_game_info() {
+            self.game_info = rsp.take_game_info().into();
+        }
+
+        Ok(&self.game_info)
     }
     fn get_minerals(&self) -> u32 {
         self.player_data.minerals
@@ -255,7 +289,7 @@ impl Observer for Participant {
 
             unit.last_seen_game_loop = self.get_game_loop();
 
-            self.units.insert(tag, unit);
+            self.units.insert(tag, Rc::from(unit));
         }
 
         if !raw.has_player() {

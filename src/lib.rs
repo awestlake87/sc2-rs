@@ -5,6 +5,7 @@ extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
 extern crate protobuf;
+extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
@@ -17,6 +18,7 @@ pub mod coordinator;
 pub mod data;
 mod instance;
 pub mod participant;
+pub mod utils;
 
 use std::result;
 use std::fmt;

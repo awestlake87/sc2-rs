@@ -10,7 +10,9 @@ use docopt::Docopt;
 
 use sc2::agent::{ Agent };
 use sc2::coordinator::{ Coordinator };
-use sc2::data::{ Player, Difficulty, Race };
+use sc2::data::{ Player, Difficulty, Race, Alliance, Ability };
+use sc2::participant::{ Participant, Observer, Actions };
+use sc2::utils::{ find_random_location };
 
 use examples_common::{
     USAGE, Args, get_coordinator_settings, get_game_settings, poll_escape
@@ -34,6 +36,31 @@ impl Agent for Bot {
     }
     fn on_game_start(&mut self) {
         println!("FUCK YEYA!");
+    }
+
+    fn on_step(&mut self, game: &mut Participant) {
+        let game_loop = game.get_game_loop();
+
+        if game_loop % 100 == 0 {
+            let units = game.filter_units(
+                |unit| unit.alliance == Alliance::Domestic
+            );
+
+            for unit in units {
+                let target = match game.get_game_info() {
+                    Ok(ref info) => find_random_location(info),
+                    Err(e) => {
+                        eprintln!("error getting game info {}", e);
+                        return
+                    }
+                };
+
+                game.command_units_to_location(
+                    &vec![ unit ], Ability::Smart, target
+                );
+            }
+            println!("100 steps...");
+        }
     }
 }
 
