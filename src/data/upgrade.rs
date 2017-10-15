@@ -1,4 +1,5 @@
 
+#[derive(PartialEq, Eq, Copy, Clone, Hash)]
 pub enum Upgrade {
     Invalid,
     CarrierLaunchSpeedUpgrade,

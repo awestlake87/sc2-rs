@@ -1,4 +1,5 @@
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use sc2_proto::common;
@@ -7,7 +8,14 @@ use sc2_proto::sc2api;
 use super::{ Participant };
 use super::super::{ Result, Error };
 use super::super::data::{
-    GameSettings, Map, Player, PlayerKind, Race, Difficulty
+    GameSettings,
+    Map,
+    Player,
+    PlayerKind,
+    Race,
+    Difficulty,
+    Alliance,
+    DisplayType
 };
 
 pub trait Control {
@@ -202,21 +210,128 @@ impl Control for Participant {
 
 impl InnerControl for Participant {
     fn issue_unit_destroyed_events(&mut self) -> Result<()> {
-        unimplemented!("issue unit destroyed events");
+        if !self.observation.get_observation().has_raw_data() {
+            return Ok(())
+        }
+
+        let raw = self.observation.get_observation().get_raw_data();
+        if raw.has_event() {
+            let event = raw.get_event();
+
+            for tag in event.get_dead_units() {
+                match self.units.get_mut(tag) {
+                    Some(ref mut unit) => {
+                        unit.mark_dead();
+                        self.agent.on_unit_destroyed(unit);
+                    },
+                    None => ()
+                }
+            }
+        }
+
+        Ok(())
     }
     fn issue_unit_added_events(&mut self) -> Result<()> {
-        unimplemented!("issue unit added events");
+        for ref mut unit in self.units.values_mut() {
+            match self.previous_units.get(&unit.tag) {
+                Some(_) => continue,
+                None => {
+                    if unit.alliance == Alliance::Enemy &&
+                        unit.display_type == DisplayType::Visible
+                    {
+                        self.agent.on_unit_detected(unit);
+                    }
+                    else {
+                        self.agent.on_unit_created(unit);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
     fn issue_idle_events(&mut self) -> Result<()> {
-        unimplemented!("issue idle event");
+        for unit in self.units.values() {
+            if !unit.orders.is_empty() || unit.build_progress < 1.0 {
+                continue;
+            }
+
+            match self.previous_units.get(&unit.tag) {
+                Some(ref prev_unit) => {
+                    if !prev_unit.orders.is_empty() {
+                        self.agent.on_unit_idle(&unit);
+                        continue;
+                    }
+
+                    if prev_unit.build_progress < 1.0 {
+                        self.agent.on_unit_idle(&unit);
+                        continue;
+                    }
+
+                    for tag in &self.commands {
+                        if *tag == unit.tag {
+                            self.agent.on_unit_idle(&unit);
+                        }
+                    }
+                },
+                None => {
+                    self.agent.on_unit_idle(&unit);
+                    continue;
+                }
+            }
+        }
+
+        Ok(())
     }
     fn issue_building_completed_events(&mut self) -> Result<()> {
-        unimplemented!("issue building completed event");
+        for unit in self.units.values() {
+            if unit.build_progress < 1.0 {
+                continue;
+            }
+
+            match self.previous_units.get(&unit.tag) {
+                Some(ref prev_unit) => {
+                    if prev_unit.build_progress < 1.0 {
+                        self.agent.on_building_complete(&unit);
+                    }
+                },
+                None => ()
+            }
+        }
+
+        Ok(())
     }
     fn issue_upgrade_events(&mut self) -> Result<()> {
-        unimplemented!("issue upgrade events");
+        let mut prev_upgrades = HashSet::new();
+
+        for upgrade in &self.previous_upgrades {
+            prev_upgrades.insert(upgrade);
+        }
+
+        for upgrade in &self.upgrades {
+            match prev_upgrades.get(&upgrade) {
+                Some(_) => (),
+                None => {
+                    self.agent.on_upgrade_complete(*upgrade);
+                }
+            }
+        }
+
+        Ok(())
     }
     fn issue_alert_events(&mut self) -> Result<()> {
-        unimplemented!("issue alert events");
+        for alert in self.observation.get_observation().get_alerts() {
+            match *alert {
+                sc2api::Alert::NuclearLaunchDetected => {
+                    self.agent.on_nuke_detected();
+                },
+                sc2api::Alert::NydusWormDetected => {
+                    self.agent.on_nydus_detected();
+                },
+                _ => continue
+            }
+        }
+
+        Ok(())
     }
 }

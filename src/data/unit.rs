@@ -52,6 +52,12 @@ pub struct Unit {
     pub last_seen_game_loop:    u32,
 }
 
+impl Unit {
+    pub fn mark_dead(&mut self) {
+        self.is_alive = false;
+    }
+}
+
 impl From<raw::Unit> for Unit {
     fn from(unit: raw::Unit) -> Self {
         Self {
@@ -563,6 +569,7 @@ impl UnitType {
     }
 }
 
+#[derive(PartialEq, Copy, Clone)]
 pub enum DisplayType {
     Visible,
     Snapshot,
@@ -579,6 +586,7 @@ impl From<raw::DisplayType> for DisplayType {
     }
 }
 
+#[derive(PartialEq, Copy, Clone)]
 pub enum Alliance {
     Domestic,
     Ally,

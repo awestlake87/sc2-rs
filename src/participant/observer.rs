@@ -133,9 +133,10 @@ impl Observer for Participant {
         req.mut_observation();
 
         self.send(req)?;
-        let rsp = self.recv()?;
+        let mut rsp = self.recv()?;
 
-        let observation = rsp.get_observation().get_observation();
+        self.observation = rsp.take_observation();
+        let observation = self.observation.get_observation();
 
         self.score = Some(Score::from_proto(observation.get_score()));
 

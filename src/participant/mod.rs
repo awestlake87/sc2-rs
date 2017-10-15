@@ -50,6 +50,8 @@ pub struct Participant {
     base_build:                 Option<u32>,
     data_version:               Option<String>,
 
+    observation:                sc2api::ResponseObservation,
+
     commands:                   Vec<Tag>,
 
     previous_units:             HashMap<Tag, Unit>,
@@ -90,6 +92,8 @@ impl Participant {
             response_pending: MessageType::Unknown,
             base_build: None,
             data_version: None,
+
+            observation: sc2api::ResponseObservation::new(),
 
             commands: vec![ ],
 
