@@ -206,7 +206,6 @@ impl Participant {
 
         if rsp.has_status() {
             self.last_status = AppStatus::from(rsp.get_status());
-            println!("last_status: {:?}", self.last_status)
         }
 
         let pending = self.response_pending;
