@@ -11,12 +11,10 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use utils::Rect;
+use data::{ Rect, Player, PlayerKind, GameSettings };
 use agent::{ Agent };
-use game::{ GameSettings };
 use instance::{ Instance, InstanceSettings, InstanceKind };
-use participant::{ Participant, Control };
-use player::{ Player, PlayerKind };
+use participant::{ Participant, Control, Observer, Actions, AppState };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
@@ -167,8 +165,7 @@ impl Coordinator {
         self.participants[0].create_game(&settings, &player_data)?;
 
         for ref mut p in &mut self.participants {
-            let player = p.player.clone();
-            p.join_game(player)?;
+            p.join_game()?;
         }
 
         for ref mut p in &mut self.participants {
@@ -188,7 +185,38 @@ impl Coordinator {
     }
 
     fn step_agents_realtime(&mut self) -> Result<()> {
-        Ok(())
+        let mut result = Ok(());
+
+        for ref mut p in &mut self.participants {
+            if p.get_app_state() != AppState::Normal {
+                continue;
+            }
+
+            if p.poll_leave_game() {
+                continue;
+            }
+
+            if p.is_finished_game() {
+                continue;
+            }
+
+            p.update_observation();
+            p.issue_events();
+            p.send_actions();
+
+            if !p.is_in_game() {
+                p.agent.on_game_end();
+                match p.leave_game() {
+                    Ok(()) => (),
+                    Err(e) => {
+                        result = Err(e);
+                    }
+                }
+                continue;
+            }
+        }
+
+        result
     }
 
     pub fn cleanup(&mut self) -> Result<()> {

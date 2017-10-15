@@ -1,6 +1,12 @@
 
+mod actions;
 mod control;
+mod debug;
 mod observer;
+mod query;
+mod spatial_actions;
+
+use std::collections::HashMap;
 
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
@@ -8,27 +14,65 @@ use sc2_proto::sc2api::{ Request, Response };
 use super::{ Result, Error };
 use super::agent::Agent;
 use super::client::Client;
+use super::data::{
+    PowerSource,
+    GameState,
+    PlayerData,
+    Player,
+    Unit,
+    Tag,
+    Upgrade,
+    Point2,
+    Action,
+    SpatialAction,
+    Ability,
+    AbilityData,
+    Score
+};
 use super::instance::Instance;
-use super::player::Player;
-use super::game::{ GameState };
 
-pub use self::control::{ Control };
-pub use self::observer::{ Observer };
+pub use self::actions::*;
+pub use self::control::*;
+pub use self::debug::*;
+pub use self::observer::*;
+pub use self::query::*;
+pub use self::spatial_actions::*;
 
 pub struct Participant {
-    pub player:                 Player,
+    player:                     Player,
     pub instance:               Instance,
     client:                     Client,
     pub agent:                  Box<Agent>,
 
-    pub app_state:              AppState,
-    pub last_status:            AppStatus,
+    app_state:                  AppState,
+    last_status:                AppStatus,
     response_pending:           MessageType,
     base_build:                 Option<u32>,
     data_version:               Option<String>,
 
-    pub player_id:              Option<u32>,
-    pub game_state:             GameState,
+    observation:                sc2api::ResponseObservation,
+
+    commands:                   Vec<Tag>,
+
+    previous_units:             HashMap<Tag, Unit>,
+    units:                      HashMap<Tag, Unit>,
+    power_sources:              Vec<PowerSource>,
+    previous_upgrades:          Vec<Upgrade>,
+    upgrades:                   Vec<Upgrade>,
+
+    actions:                    Vec<Action>,
+    requested_actions:          Vec<Action>,
+
+    feature_layer_actions:      Vec<SpatialAction>,
+    ability_data:               HashMap<Ability, AbilityData>,
+
+    player_id:                  Option<u32>,
+    camera_pos:                 Option<Point2>,
+    game_state:                 GameState,
+    player_data:                PlayerData,
+    score:                      Option<Score>,
+
+    use_generalized_ability:    bool
 }
 
 impl Participant {
@@ -49,11 +93,93 @@ impl Participant {
             base_build: None,
             data_version: None,
 
+            observation: sc2api::ResponseObservation::new(),
+
+            commands: vec![ ],
+
+            previous_units: HashMap::new(),
+            units: HashMap::new(),
+            power_sources: vec![ ],
+            previous_upgrades: vec![ ],
+            upgrades: vec![ ],
+
+            actions: vec![ ],
+            requested_actions: vec![ ],
+
+            feature_layer_actions: vec![ ],
+
+            ability_data: HashMap::new(),
+
             player_id: None,
+            camera_pos: None,
             game_state: GameState {
-                current_game_loop: 0
+                current_game_loop: 0,
+                previous_game_loop: 0,
+            },
+            player_data: PlayerData {
+                minerals: 0,
+                vespene: 0,
+                food_cap: 0,
+                food_used: 0,
+                food_army: 0,
+                food_workers: 0,
+                idle_worker_count: 0,
+                army_count: 0,
+                warp_gate_count: 0,
+                larva_count: 0,
+            },
+            score: None,
+
+            use_generalized_ability: true
+        }
+    }
+
+    pub fn get_app_state(&self) -> AppState {
+        self.app_state
+    }
+    pub fn get_last_status(&self) -> AppStatus {
+        self.last_status
+    }
+    pub fn is_in_game(&self) -> bool {
+        if self.get_app_state() == AppState::Normal {
+            match self.get_last_status() {
+                AppStatus::InGame => true,
+                AppStatus::InReplay => true,
+                _ => false
             }
         }
+        else {
+            false
+        }
+    }
+    pub fn is_finished_game(&self) -> bool {
+        if self.get_app_state() != AppState::Normal {
+            true
+        }
+        else if self.is_in_game() {
+            false
+        }
+        // else if self.has_response_pending() { false }
+        else {
+            true
+        }
+    }
+    pub fn is_ready_for_create_game(&self) -> bool {
+        if self.get_app_state() != AppState::Normal {
+            false
+        }
+        // else if self.has_response_pending() { false }
+        else {
+            match self.get_last_status() {
+                AppStatus::Launched => true,
+                AppStatus::Ended => true,
+                _ => false
+            }
+        }
+    }
+
+    pub fn poll_leave_game(&self) -> bool {
+        false
     }
 
     fn send(&mut self, req: Request) -> Result<()> {
@@ -80,7 +206,6 @@ impl Participant {
 
         if rsp.has_status() {
             self.last_status = AppStatus::from(rsp.get_status());
-            println!("last_status: {:?}", self.last_status)
         }
 
         let pending = self.response_pending;

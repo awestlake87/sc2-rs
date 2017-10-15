@@ -9,7 +9,7 @@ use futures::sync::{ oneshot };
 use url::Url;
 
 use super::{ Result, Error };
-use utils::Rect;
+use data::{ Rect };
 use client::{ Client };
 
 #[derive(Copy, Clone)]

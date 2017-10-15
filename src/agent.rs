@@ -1,4 +1,6 @@
 
+use data::{ Unit, Upgrade };
+
 pub trait Agent {
     fn on_game_full_start(&mut self) {
 
@@ -12,24 +14,20 @@ pub trait Agent {
     fn on_step(&mut self) {
 
     }
-    //param const Unit*
-    fn on_unit_destroyed(&mut self) {
+
+    fn on_unit_destroyed(&mut self, _: &Unit) {
 
     }
-    //param const Unit*
-    fn on_unit_created(&mut self) {
+    fn on_unit_created(&mut self, _: &Unit) {
 
     }
-    //param const Unit*
-    fn on_unit_idle(&mut self) {
+    fn on_unit_idle(&mut self, _: &Unit) {
 
     }
-    //param upgrade ID
-    fn on_upgrade_complete(&mut self) {
+    fn on_upgrade_complete(&mut self, _: Upgrade) {
 
     }
-    //param const Unit*
-    fn on_building_complete(&mut self) {
+    fn on_building_complete(&mut self, _: &Unit) {
 
     }
 
@@ -39,8 +37,7 @@ pub trait Agent {
     fn on_nuke_detected(&mut self) {
 
     }
-    //param const Unit*
-    fn on_unit_detected(&mut self) {
+    fn on_unit_detected(&mut self, _: &Unit) {
 
     } //param const Unit*
     //fn on_error(/*client error,protocol error */);
