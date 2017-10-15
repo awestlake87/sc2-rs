@@ -169,11 +169,21 @@ impl Coordinator {
         }
 
         for ref mut p in &mut self.participants {
-            p.agent.on_game_full_start();
+            match p.agent {
+                Some(ref mut agent) => {
+                    agent.on_game_full_start();
+                },
+                None => ()
+            }
         }
 
         for ref mut p in &mut self.participants {
-            p.agent.on_game_start();
+            match p.agent {
+                Some(ref mut agent) => {
+                    agent.on_game_start();
+                },
+                None => ()
+            }
         }
 
         Ok(())
@@ -205,7 +215,12 @@ impl Coordinator {
             p.send_actions();
 
             if !p.is_in_game() {
-                p.agent.on_game_end();
+                match p.agent {
+                    Some(ref mut agent) => {
+                        agent.on_game_end();
+                    },
+                    None => ()
+                }
                 match p.leave_game() {
                     Ok(()) => (),
                     Err(e) => {

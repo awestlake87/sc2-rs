@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
+use super::{ Point2 };
+
 #[derive(Clone)]
 pub enum Map {
     LocalMap(PathBuf),
@@ -29,30 +31,87 @@ pub struct GameSettings {
 
 #[derive(Clone)]
 pub struct GameState {
-    //*** Game State Data ***
-    //unit_pool: UnitPool,
-    //units_previous_map: HashMap<Tag, Unit>,
     pub current_game_loop: u32,
     pub previous_game_loop: u32,
-    //raw_actions: RawActions,
-    //feature_layer_actions: SpatialActions,
-    //power_sources: Vec<PowerSource>,
-    //upgrades: Vec<UpgradeID>,
-    //upgrades_previous: Vec(UpgradeID),
 }
 
-#[derive(Copy, Clone, Debug)]
 pub struct GameInfo {
-    //*** Game Info Data ***
-    //game_info: GameInfo,
-    pub game_info_cached: bool,
-    //use gen ability set init val to true
-    pub use_generalized_ability: bool,
+    pub width:                      i32,
+    pub height:                     i32,
+    //pathing_grid
+    //terrain_height
+    //placement_grid
+    pub playable_min:               Point2,
+    pub playable_max:               Point2,
+    pub enemy_start_location:       Vec<Point2>,
+    //options
+    //player_info
 }
-//proto interface is client
-//observation is self
-//response observation is ???
-//control interface is self
+
+impl Default for GameInfo {
+    fn default() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+
+            playable_min: Point2::new(0.0, 0.0),
+            playable_max: Point2::new(0.0, 0.0),
+
+            enemy_start_location: vec![ ],
+        }
+    }
+}
+
+impl From<sc2api::ResponseGameInfo> for GameInfo {
+    fn from(info: sc2api::ResponseGameInfo) -> Self {
+        let mut w = 0;
+        let mut h = 0;
+        let mut playable_min = Point2::new(0.0, 0.0);
+        let mut playable_max = Point2::new(0.0, 0.0);
+        let mut start_locations = vec![ ];
+
+        if info.has_start_raw() {
+            let start_raw = info.get_start_raw();
+
+            if start_raw.has_map_size() &&
+                start_raw.get_map_size().has_x() &&
+                start_raw.get_map_size().has_y()
+            {
+                w = start_raw.get_map_size().get_x();
+                h = start_raw.get_map_size().get_y();
+            }
+
+            if start_raw.has_playable_area() {
+                let area = start_raw.get_playable_area();
+
+                if area.has_p0() {
+                    playable_min.x = area.get_p0().get_x() as f32;
+                    playable_min.y = area.get_p0().get_y() as f32;
+                }
+                if area.has_p1() {
+                    playable_max.x = area.get_p1().get_x() as f32;
+                    playable_max.y = area.get_p1().get_y() as f32;
+                }
+            }
+
+            for p in start_raw.get_start_locations() {
+                start_locations.push(
+                    Point2::new(p.get_x() as f32, p.get_y() as f32)
+                );
+            }
+        }
+
+        Self {
+            width: w,
+            height: h,
+
+            playable_min: playable_min,
+            playable_max: playable_max,
+
+            enemy_start_location: start_locations,
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct PlayerData {
