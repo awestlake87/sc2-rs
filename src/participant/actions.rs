@@ -110,8 +110,7 @@ impl Actions for Participant {
         if !self.requested_actions.is_empty() {
             self.requested_actions.clear();
             self.send(req)?;
-            let rsp = self.recv()?;
-            println!("received {:#?}", rsp);
+            self.recv()?;
         }
 
         Ok(())

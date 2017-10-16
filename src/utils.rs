@@ -4,8 +4,8 @@ use rand::random;
 use data::{ Rect2, Point2, GameInfo };
 
 pub fn find_random_location_in_rect(r: Rect2) -> Point2 {
-    let w = r.from.x - r.to.x;
-    let h = r.from.y - r.to.y;
+    let w = r.to.x - r.from.x;
+    let h = r.to.y - r.from.y;
 
     Point2::new(
         w * random::<f32>() + r.from.x, h * random::<f32>() + r.from.y
