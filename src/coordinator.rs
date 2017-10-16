@@ -4,7 +4,6 @@ use std::mem;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 use std::process;
 
-use futures::prelude::*;
 use futures::sync::{ oneshot };
 use glob::glob;
 use regex::Regex;
@@ -253,18 +252,14 @@ impl Coordinator {
             }
         };
 
-        let cleanup = async_block! {
-            for cleanup in cleanups {
-                match await!(cleanup) {
-                    Ok(_) => (),
-                    Err(e) => eprintln!("unable to stop process {}", e)
-                }
+        for cleanup in cleanups {
+            match self.core.run(cleanup) {
+                Ok(_) => (),
+                Err(e) => eprintln!("unable to stop process {}", e)
             }
+        }
 
-            Ok(())
-        };
-
-        self.core.run(cleanup)
+        Ok(())
     }
 }
 

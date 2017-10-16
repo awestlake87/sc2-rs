@@ -1,15 +1,15 @@
 #![feature(proc_macro, conservative_impl_trait, generators)]
 
 extern crate bytes;
-extern crate futures_await as futures;
+extern crate futures;
 extern crate glob;
 extern crate nalgebra as na;
 extern crate protobuf;
 extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
-extern crate tokio_core;
 extern crate tungstenite;
+extern crate tokio_core;
 extern crate url;
 
 pub mod agent;

@@ -5,7 +5,7 @@ authors = ["najen"]
 
 [dependencies]
 bytes = "*"
-futures-await = { git = "https://github.com/alexcrichton/futures-await" }
+futures = "*"
 glob = "*"
 glutin = "*"
 nalgebra = "*"
@@ -13,7 +13,7 @@ protobuf = "*"
 rand = "*"
 regex = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
-tokio-core = "0.1.9"
+tokio-core = "*"
 tungstenite = "0.4.0"
 url = "*"
 
