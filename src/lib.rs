@@ -1,5 +1,3 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
-
 extern crate bytes;
 extern crate futures;
 extern crate glob;

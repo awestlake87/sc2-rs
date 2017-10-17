@@ -1,4 +1,3 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
 
 extern crate docopt;
 extern crate glutin;
