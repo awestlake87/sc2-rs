@@ -9,7 +9,7 @@ use docopt::Docopt;
 
 use sc2::agent::{ Agent };
 use sc2::coordinator::{ Coordinator };
-use sc2::data::{ Player, Difficulty, Race, Alliance, Ability };
+use sc2::data::{ PlayerSetup, Difficulty, Race, Alliance, Ability };
 use sc2::participant::{ Participant, Observer, Actions };
 use sc2::utils::{ find_random_location };
 
@@ -86,15 +86,13 @@ fn main() {
     let zerg_cpu = PlayerSetup::Computer {
         race: Race::Zerg,
         difficulty: Difficulty::VeryEasy,
-        agent: None,
     };
     let player = PlayerSetup::Player {
         race: Race::Terran,
-        agent: Some(Box::from(Bot::new())),
     };
 
     match coordinator.start_game(
-        vec![ zerg_cpu, player ],
+        vec![ (zerg_cpu, None), (player, Some(Box::from(Bot::new()))) ],
         game_settings
     ) {
         Ok(_) => println!("game started!"),
