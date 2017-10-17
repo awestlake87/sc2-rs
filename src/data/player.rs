@@ -1,4 +1,7 @@
 
+use sc2_proto::sc2api;
+use sc2_proto::common;
+
 #[derive(Copy, Clone)]
 pub enum PlayerKind {
     Computer,
@@ -11,6 +14,16 @@ pub enum Race {
     Terran,
     Zerg,
     Protoss
+}
+
+impl Race {
+    pub fn to_proto(&self) -> common::Race {
+        match *self {
+            Race::Zerg      => common::Race::Zerg,
+            Race::Terran    => common::Race::Terran,
+            Race::Protoss   => common::Race::Protoss
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -27,40 +40,31 @@ pub enum Difficulty {
     CheatInsane
 }
 
-#[derive(Copy, Clone)]
-pub struct Player {
-    pub kind:           PlayerKind,
-    pub race:           Option<Race>,
-    pub difficulty:     Option<Difficulty>
+impl Difficulty {
+    pub fn to_proto(&self) -> sc2api::Difficulty {
+        match *self {
+            Difficulty::VeryEasy        => sc2api::Difficulty::VeryEasy,
+            Difficulty::Easy            => sc2api::Difficulty::Easy,
+            Difficulty::Medium          => sc2api::Difficulty::Medium,
+            Difficulty::MediumHard      => sc2api::Difficulty::MediumHard,
+            Difficulty::Hard            => sc2api::Difficulty::Hard,
+            Difficulty::Harder          => sc2api::Difficulty::Harder,
+            Difficulty::VeryHard        => sc2api::Difficulty::VeryHard,
+            Difficulty::CheatVision     => sc2api::Difficulty::CheatVision,
+            Difficulty::CheatMoney      => sc2api::Difficulty::CheatMoney,
+            Difficulty::CheatInsane     => sc2api::Difficulty::CheatInsane
+        }
+    }
 }
 
-impl Player {
-    pub fn new_computer(
-        race: Race,
-        difficulty: Difficulty
-    )
-        -> Self
-    {
-        Self {
-            kind: PlayerKind::Computer,
-            race: Some(race),
-            difficulty: Some(difficulty)
-        }
-    }
-
-    pub fn new_participant(race: Race) -> Self {
-        Self {
-            kind: PlayerKind::Participant,
-            race: Some(race),
-            difficulty: None
-        }
-    }
-
-    pub fn new_observer() -> Self {
-        Self {
-            kind: PlayerKind::Observer,
-            race: None,
-            difficulty: None
-        }
-    }
+#[derive(Copy, Clone)]
+pub enum PlayerSetup {
+    Computer {
+        race:           Race,
+        difficulty:     Difficulty
+    },
+    Player {
+        race:           Race
+    },
+    Observer
 }

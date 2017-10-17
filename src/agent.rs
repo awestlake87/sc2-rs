@@ -12,7 +12,7 @@ pub trait Agent {
     fn on_game_end(&mut self) {
 
     }
-    fn on_step(&mut self, participant: &mut Participant) {
+    fn on_step(&mut self, _: &mut Participant) {
 
     }
 

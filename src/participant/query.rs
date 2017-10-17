@@ -1,6 +1,4 @@
 
-use sc2_proto::sc2api;
-
 use super::{ Participant };
 use super::super::{ Result };
 use super::super::data::{ Tag, Point2, Ability, Unit, AvailableAbility };

@@ -12,17 +12,16 @@ use super::super::{ Result, Error };
 use super::super::data::{
     GameSettings,
     Map,
-    Player,
-    PlayerKind,
-    Race,
-    Difficulty,
+    PlayerSetup,
     Alliance,
     DisplayType
 };
 
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
-    fn create_game(&mut self, settings: &GameSettings, players: &Vec<Player>)
+    fn create_game(
+        &mut self, settings: &GameSettings, players: &Vec<PlayerSetup>
+    )
         -> Result<()>
     ;
     fn join_game(&mut self) -> Result<()>;
@@ -51,7 +50,7 @@ impl Control for Participant {
         unimplemented!("save map");
     }
     fn create_game(
-        &mut self, settings: &GameSettings, players: &Vec<Player>
+        &mut self, settings: &GameSettings, players: &Vec<PlayerSetup>
     )
         -> Result<()>
     {
@@ -76,52 +75,22 @@ impl Control for Participant {
         for player in players {
             let mut setup = sc2api::PlayerSetup::new();
 
-            match player.kind {
-                PlayerKind::Computer => {
-                    let difficulty = match player.difficulty {
-                        Some(difficulty) => difficulty,
-                        None => return Err(
-                            Error::Todo("computer must have difficulty")
-                        )
-                    };
-
-                    use sc2_proto::sc2api::Difficulty as Diff;
-
+            match player {
+                &PlayerSetup::Computer { ref difficulty, ref race, .. } => {
                     setup.set_field_type(sc2api::PlayerType::Computer);
 
-                    setup.set_difficulty(
-                        match difficulty {
-                            Difficulty::VeryEasy        => Diff::VeryEasy,
-                            Difficulty::Easy            => Diff::Easy,
-                            Difficulty::Medium          => Diff::Medium,
-                            Difficulty::MediumHard      => Diff::MediumHard,
-                            Difficulty::Hard            => Diff::Hard,
-                            Difficulty::Harder          => Diff::Harder,
-                            Difficulty::VeryHard        => Diff::VeryHard,
-                            Difficulty::CheatVision     => Diff::CheatVision,
-                            Difficulty::CheatMoney      => Diff::CheatMoney,
-                            Difficulty::CheatInsane     => Diff::CheatInsane
-                        }
-                    );
+                    setup.set_difficulty(difficulty.to_proto());
+                    setup.set_race(race.to_proto());
                 },
-                PlayerKind::Participant => {
+                &PlayerSetup::Player { ref race, .. } => {
                     setup.set_field_type(sc2api::PlayerType::Participant);
+
+                    setup.set_race(race.to_proto());
                 },
-                PlayerKind::Observer => {
+                &PlayerSetup::Observer => {
                     setup.set_field_type(sc2api::PlayerType::Observer);
                 }
             }
-
-            match player.race {
-                Some(race) => setup.set_race(
-                    match race {
-                        Race::Zerg      => common::Race::Zerg,
-                        Race::Terran    => common::Race::Terran,
-                        Race::Protoss   => common::Race::Protoss
-                    }
-                ),
-                None => ()
-            };
 
             req.mut_create_game().mut_player_setup().push(setup);
         }
@@ -142,15 +111,14 @@ impl Control for Participant {
         {
             let join_game = &mut req.mut_join_game();
 
-            match self.player.race {
-                Some(race) => join_game.set_race(
-                    match race {
-                        Race::Zerg      => common::Race::Zerg,
-                        Race::Terran    => common::Race::Terran,
-                        Race::Protoss   => common::Race::Protoss
-                    }
+            match self.player {
+                PlayerSetup::Computer { race, .. } => join_game.set_race(
+                    race.to_proto()
                 ),
-                None => join_game.set_race(common::Race::NoRace)
+                PlayerSetup::Player { race, .. } => join_game.set_race(
+                    race.to_proto()
+                ),
+                _ => join_game.set_race(common::Race::NoRace)
             };
 
             let options = &mut join_game.mut_options();
@@ -392,8 +360,7 @@ impl InnerControl for Participant {
                         },
                         None => ()
                     }
-                },
-                _ => continue
+                }
             }
         }
 

@@ -10,7 +10,7 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use data::{ Rect, Player, PlayerKind, GameSettings };
+use data::{ Rect, PlayerSetup, GameSettings };
 use agent::{ Agent };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{ Participant, Control, Observer, Actions, AppState };
@@ -106,7 +106,7 @@ impl Coordinator {
 
     pub fn start_game(
         &mut self,
-        players: Vec<(Player, Option<Box<Agent>>)>,
+        players: Vec<(PlayerSetup, Option<Box<Agent>>)>,
         settings: GameSettings
     )
         -> Result<()>
@@ -115,11 +115,9 @@ impl Coordinator {
         let mut player_data = vec![ ];
 
         for &(player, _) in &players {
-            match player.kind {
-                PlayerKind::Computer => (),
-                _ => {
-                    instances.push(Some(self.launch()?));
-                }
+            match player {
+                PlayerSetup::Computer { .. } => (),
+                _ => instances.push(Some(self.launch()?)),
             };
 
             player_data.push(player);
@@ -131,32 +129,25 @@ impl Coordinator {
 
         let mut i = 0;
         for (player, agent) in players {
-            match player.kind {
-                PlayerKind::Computer => (),
-                _ => match agent {
-                    Some(agent) => {
-                        let instance = mem::replace(&mut instances[i], None)
-                            .unwrap()
-                        ;
+            match player {
+                PlayerSetup::Computer { .. } => (),
+                _ => {
+                    let instance = mem::replace(&mut instances[i], None)
+                        .unwrap()
+                    ;
 
-                        let client = instance.connect()?;
+                    let client = instance.connect()?;
 
-                        self.participants.push(
-                            Participant::new(
-                                instance,
-                                client,
-                                player,
-                                agent
-                            )
-                        );
-
-                        i += 1;
-                    }
-                    None => return Err(
-                        Error::Todo(
-                            "agent must be specified for non cpu player"
+                    self.participants.push(
+                        Participant::new(
+                            instance,
+                            client,
+                            player,
+                            agent
                         )
-                    )
+                    );
+
+                    i += 1;
                 }
             };
         }
@@ -209,9 +200,19 @@ impl Coordinator {
                 continue;
             }
 
-            p.update_observation();
-            p.issue_events();
-            p.send_actions();
+            // not ideal maybe, but works for now
+            match p.update_observation() {
+                Err(e) => result = Err(e),
+                _ => ()
+            };
+            match p.issue_events() {
+                Err(e) => result = Err(e),
+                _ => ()
+            };
+            match p.send_actions() {
+                Err(e) => result = Err(e),
+                _ => ()
+            };
 
             if !p.is_in_game() {
                 match p.agent {

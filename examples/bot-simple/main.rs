@@ -83,14 +83,18 @@ fn main() {
         coordinator_settings
     ).unwrap();
 
-    let zerg_cpu = Player::new_computer(
-        Race::Zerg,
-        Difficulty::VeryEasy
-    );
-    let player = Player::new_participant(Race::Terran);
+    let zerg_cpu = PlayerSetup::Computer {
+        race: Race::Zerg,
+        difficulty: Difficulty::VeryEasy,
+        agent: None,
+    };
+    let player = PlayerSetup::Player {
+        race: Race::Terran,
+        agent: Some(Box::from(Bot::new())),
+    };
 
     match coordinator.start_game(
-        vec![ (zerg_cpu, None), (player, Some(Box::from(Bot::new()))) ],
+        vec![ zerg_cpu, player ],
         game_settings
     ) {
         Ok(_) => println!("game started!"),

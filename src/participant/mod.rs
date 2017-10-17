@@ -20,7 +20,7 @@ use super::data::{
     GameState,
     GameInfo,
     PlayerData,
-    Player,
+    PlayerSetup,
     Unit,
     Tag,
     Upgrade,
@@ -41,7 +41,7 @@ pub use self::query::*;
 pub use self::spatial_actions::*;
 
 pub struct Participant {
-    player:                     Player,
+    player:                     PlayerSetup,
     pub instance:               Instance,
     client:                     Client,
     pub agent:                  Option<Box<Agent>>,
@@ -80,7 +80,10 @@ pub struct Participant {
 
 impl Participant {
     pub fn new(
-        instance: Instance, client: Client, player: Player, agent: Box<Agent>
+        instance: Instance,
+        client: Client,
+        player: PlayerSetup,
+        agent: Option<Box<Agent>>
     )
         -> Participant
     {
@@ -88,7 +91,7 @@ impl Participant {
             player: player,
             instance: instance,
             client: client,
-            agent: Some(agent),
+            agent: agent,
 
             app_state: AppState::Normal,
             last_status: AppStatus::Launched,
