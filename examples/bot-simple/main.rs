@@ -20,12 +20,12 @@ use examples_common::{
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct Bot {
-
+    last_update: u32
 }
 
 impl Bot {
     fn new() -> Self {
-        Self { }
+        Self { last_update: 0 }
     }
 }
 
@@ -38,9 +38,9 @@ impl Agent for Bot {
     }
 
     fn on_step(&mut self, game: &mut Participant) {
-        let game_loop = game.get_game_loop();
+        if game.get_game_loop() > self.last_update + 100 {
+            self.last_update = game.get_game_loop();
 
-        if game_loop % 100 == 0 {
             let units = game.filter_units(
                 |unit| unit.alliance == Alliance::Domestic
             );
@@ -58,7 +58,7 @@ impl Agent for Bot {
                     &vec![ unit ], Ability::Smart, target
                 );
             }
-            println!("100 steps...");
+            println!("player {} 100 steps...", game.get_player_id().unwrap());
         }
     }
 }
@@ -83,18 +83,24 @@ fn main() {
         coordinator_settings
     ).unwrap();
 
-    let zerg_cpu = PlayerSetup::Computer {
+    let p1 = PlayerSetup::Player {
         race: Race::Zerg,
-        difficulty: Difficulty::VeryEasy,
     };
-    let player = PlayerSetup::Player {
+    let p2 = PlayerSetup::Player {
         race: Race::Terran,
     };
 
-    match coordinator.start_game(
-        vec![ (zerg_cpu, None), (player, Some(Box::from(Bot::new()))) ],
-        game_settings
+    match coordinator.launch_starcraft(
+        vec![
+            (p1, Some(Box::from(Bot::new()))),
+            (p2, Some(Box::from(Bot::new())))
+        ]
     ) {
+        Ok(_) => println!("launched!"),
+        Err(e) => println!("unable to launch game: {}", e)
+    };
+
+    match coordinator.start_game(game_settings) {
         Ok(_) => println!("game started!"),
         Err(e) => eprintln!("unable to start game: {}", e)
     };

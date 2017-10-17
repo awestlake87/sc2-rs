@@ -7,10 +7,11 @@ use std::rc::Rc;
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::{ Participant };
+use super::{ Participant, Observer };
 use super::super::{ Result, Error };
 use super::super::data::{
     GameSettings,
+    GamePorts,
     Map,
     PlayerSetup,
     Alliance,
@@ -24,7 +25,9 @@ pub trait Control {
     )
         -> Result<()>
     ;
-    fn join_game(&mut self) -> Result<()>;
+    fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()>;
+    fn await_join_game(&mut self) -> Result<()>;
+
     fn leave_game(&mut self) -> Result<()>;
 
     fn step(&mut self, count: usize) -> Result<()>;
@@ -105,30 +108,62 @@ impl Control for Participant {
         Ok(())
     }
 
-    fn join_game(&mut self) -> Result<()> {
+    fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()> {
         let mut req = sc2api::Request::new();
 
+        match self.player {
+            PlayerSetup::Computer { race, .. } => {
+                req.mut_join_game().set_race(race.to_proto());
+            },
+            PlayerSetup::Player { race, .. } => {
+                req.mut_join_game().set_race(race.to_proto());
+            },
+            _ => req.mut_join_game().set_race(common::Race::NoRace)
+        };
+
+        match ports {
+            &Some(ref ports) => {
+                req.mut_join_game().set_shared_port(ports.shared_port as i32);
+
+                {
+                    let s = req.mut_join_game().mut_server_ports();
+
+                    s.set_game_port(ports.server_ports.game_port as i32);
+                    s.set_base_port(ports.server_ports.base_port as i32);
+                }
+
+                {
+                    let client_ports = req.mut_join_game().mut_client_ports();
+
+                    for c in &ports.client_ports {
+                        let mut p = sc2api::PortSet::new();
+
+                        p.set_game_port(c.game_port as i32);
+                        p.set_base_port(c.base_port as i32);
+
+                        client_ports.push(p);
+                    }
+                }
+            },
+            &None => (),
+        }
+
         {
-            let join_game = &mut req.mut_join_game();
-
-            match self.player {
-                PlayerSetup::Computer { race, .. } => join_game.set_race(
-                    race.to_proto()
-                ),
-                PlayerSetup::Player { race, .. } => join_game.set_race(
-                    race.to_proto()
-                ),
-                _ => join_game.set_race(common::Race::NoRace)
-            };
-
-            let options = &mut join_game.mut_options();
+            let options = req.mut_join_game().mut_options();
 
             options.set_raw(true);
             options.set_score(true);
         }
 
         self.send(req)?;
+
+        Ok(())
+    }
+
+    fn await_join_game(&mut self) -> Result<()> {
         let rsp = self.recv()?;
+
+        println!("recv: {:#?}", rsp);
 
         self.player_id = Some(rsp.get_join_game().get_player_id());
 
@@ -148,10 +183,7 @@ impl Control for Participant {
     }
 
     fn issue_events(&mut self) -> Result<()> {
-        if
-            self.game_state.current_game_loop ==
-            self.game_state.previous_game_loop
-        {
+        if self.get_game_loop() == self.game_state.previous_game_loop {
             return Ok(())
         }
 

@@ -41,7 +41,7 @@ pub use self::query::*;
 pub use self::spatial_actions::*;
 
 pub struct Participant {
-    player:                     PlayerSetup,
+    pub player:                 PlayerSetup,
     pub instance:               Instance,
     client:                     Client,
     pub agent:                  Option<Box<Agent>>,

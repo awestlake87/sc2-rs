@@ -10,7 +10,7 @@ use regex::Regex;
 use tokio_core::reactor;
 
 use super::{ Result, Error };
-use data::{ Rect, PlayerSetup, GameSettings };
+use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use agent::{ Agent };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{ Participant, Control, Observer, Actions, AppState };
@@ -50,7 +50,9 @@ pub struct Coordinator {
     cleanups:               Vec<
         oneshot::Receiver<io::Result<process::ExitStatus>>
     >,
-    participants:           Vec<Participant>
+    participants:           Vec<Participant>,
+    players:                Vec<PlayerSetup>,
+    ports:                  Option<GamePorts>,
 }
 
 impl Coordinator {
@@ -72,7 +74,9 @@ impl Coordinator {
                 current_port:   settings.port,
                 window:         settings.window,
                 cleanups:       vec![ ],
-                participants:   vec![ ]
+                participants:   vec![ ],
+                players:        vec![ ],
+                ports:          None,
             }
         )
     }
@@ -104,15 +108,9 @@ impl Coordinator {
         Ok(instance)
     }
 
-    pub fn start_game(
-        &mut self,
-        players: Vec<(PlayerSetup, Option<Box<Agent>>)>,
-        settings: GameSettings
-    )
-        -> Result<()>
-    {
+    pub fn launch_starcraft(&mut self, players: Vec<(PlayerSetup, Option<Box<Agent>>)>) -> Result<()> {
         let mut instances = vec![ ];
-        let mut player_data = vec![ ];
+        self.players.clear();
 
         for &(player, _) in &players {
             match player {
@@ -120,7 +118,7 @@ impl Coordinator {
                 _ => instances.push(Some(self.launch()?)),
             };
 
-            player_data.push(player);
+            self.players.push(player);
         }
 
         if instances.len() < 1 {
@@ -152,10 +150,49 @@ impl Coordinator {
             };
         }
 
-        self.participants[0].create_game(&settings, &player_data)?;
+        if self.participants.len() > 1 {
+            let mut p = self.current_port;
 
-        for ref mut p in &mut self.participants {
-            p.join_game()?;
+            let mut ports = GamePorts {
+                shared_port: p,
+                server_ports: PortSet {
+                    game_port: p + 1,
+                    base_port: p + 2,
+                },
+                client_ports: vec![ ]
+            };
+
+            p += 3;
+
+            for _ in 0..self.participants.len() {
+                ports.client_ports.push(
+                    PortSet {
+                        game_port: p as u16,
+                        base_port: p + 1 as u16,
+                    }
+                );
+
+                p += 2;
+            }
+
+            self.ports = Some(ports);
+            self.current_port = p;
+        }
+
+        Ok(())
+    }
+
+    pub fn start_game(&mut self, settings: GameSettings) -> Result<()> {
+        assert!(self.participants.len() > 0);
+
+        self.participants[0].create_game(&settings, &self.players)?;
+
+        for p in &mut self.participants {
+            p.req_join_game(&self.ports)?;
+        }
+
+        for p in &mut self.participants {
+            p.await_join_game()?;
         }
 
         for ref mut p in &mut self.participants {
@@ -187,7 +224,7 @@ impl Coordinator {
     fn step_agents_realtime(&mut self) -> Result<()> {
         let mut result = Ok(());
 
-        for ref mut p in &mut self.participants {
+        for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
                 continue;
             }

@@ -12,16 +12,16 @@ pub enum Map {
 }
 
 #[derive(Copy, Clone)]
-pub struct EndpointPorts {
+pub struct PortSet {
     pub game_port:      u16,
     pub base_port:      u16
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct GamePorts {
     pub shared_port:    u16,
-    pub server_ports:   EndpointPorts,
-    pub client_ports:   EndpointPorts
+    pub server_ports:   PortSet,
+    pub client_ports:   Vec<PortSet>
 }
 
 #[derive(Clone)]
