@@ -37,6 +37,7 @@ pub struct GameState {
     pub previous_game_loop: u32,
 }
 
+#[derive(Clone)]
 pub struct GameInfo {
     pub width:                      i32,
     pub height:                     i32,
@@ -45,7 +46,7 @@ pub struct GameInfo {
     //placement_grid
     pub playable_min:               Point2,
     pub playable_max:               Point2,
-    pub enemy_start_location:       Vec<Point2>,
+    pub enemy_start_locations:       Vec<Point2>,
     //options
     //player_info
 }
@@ -59,7 +60,7 @@ impl Default for GameInfo {
             playable_min: Point2::new(0.0, 0.0),
             playable_max: Point2::new(0.0, 0.0),
 
-            enemy_start_location: vec![ ],
+            enemy_start_locations: vec![ ],
         }
     }
 }
@@ -110,7 +111,7 @@ impl From<sc2api::ResponseGameInfo> for GameInfo {
             playable_min: playable_min,
             playable_max: playable_max,
 
-            enemy_start_location: start_locations,
+            enemy_start_locations: start_locations,
         }
     }
 }

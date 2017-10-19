@@ -2,12 +2,14 @@
 extern crate glutin;
 extern crate nalgebra as na;
 extern crate num;
+extern crate rand;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate sc2;
 
-pub mod marine_micro_bot;
+mod marine_micro_bot;
+mod terran_bot;
 
 use std::path::PathBuf;
 
@@ -16,6 +18,7 @@ use sc2::data::{ GameSettings, Map };
 use sc2::{ Result, Error };
 
 pub use marine_micro_bot::{ MarineMicroBot };
+pub use terran_bot::{ TerranBot };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.

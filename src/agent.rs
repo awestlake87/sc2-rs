@@ -3,13 +3,13 @@ use participant::Participant;
 use data::{ Unit, Upgrade };
 
 pub trait Agent {
-    fn on_game_full_start(&mut self) {
+    fn on_game_full_start(&mut self, _: &mut Participant) {
 
     }
-    fn on_game_start(&mut self) {
+    fn on_game_start(&mut self, _: &mut Participant) {
 
     }
-    fn on_game_end(&mut self) {
+    fn on_game_end(&mut self, _: &mut Participant) {
 
     }
     fn on_step(&mut self, _: &mut Participant) {

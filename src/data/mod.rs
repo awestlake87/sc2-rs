@@ -8,7 +8,7 @@ mod score;
 mod unit;
 mod upgrade;
 
-use na::{ Vector2, Vector3 };
+use na;
 use na::geometry;
 
 use sc2_proto::raw;
@@ -30,6 +30,8 @@ pub struct Rect<T> {
     pub h: T
 }
 
+pub type Vector2 = na::Vector2<f32>;
+pub type Vector3 = na::Vector3<f32>;
 pub type Point2 = geometry::Point2<f32>;
 pub type Point3 = geometry::Point3<f32>;
 
@@ -39,8 +41,8 @@ pub struct Rect2 {
     pub to:                 Point2,
 }
 
-pub type Point2I = Vector2<i32>;
-pub type Point3I = Vector3<i32>;
+pub type Point2I = na::Vector2<i32>;
+pub type Point3I = na::Vector3<i32>;
 
 #[derive(Copy, Clone)]
 pub struct Rect2I {

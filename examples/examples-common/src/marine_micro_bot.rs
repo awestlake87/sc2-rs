@@ -26,7 +26,7 @@ impl MarineMicroBot {
 }
 
 impl Agent for MarineMicroBot {
-    fn on_game_start(&mut self) {
+    fn on_game_start(&mut self, _: &mut Participant) {
         self.move_back = false;
         self.targeted_zergling = None;
     }

@@ -26,6 +26,11 @@ crate-type = ["bin"]
 path = "examples/bot-micro/main.rs"
 
 [[example]]
+name = "bot-mp"
+crate-type = ["bin"]
+path = "examples/bot-mp/main.rs"
+
+[[example]]
 name = "bot-simple"
 crate-type = ["bin"]
 path = "examples/bot-simple/main.rs"

@@ -8,7 +8,7 @@ extern crate examples_common;
 use docopt::Docopt;
 
 use sc2::coordinator::{ Coordinator };
-use sc2::data::{ PlayerSetup, Difficulty, Race };
+use sc2::data::{ PlayerSetup, Race };
 
 use examples_common::{
     USAGE,
@@ -16,7 +16,7 @@ use examples_common::{
     get_coordinator_settings,
     get_game_settings,
     poll_escape,
-    MarineMicroBot
+    TerranBot
 };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -30,7 +30,7 @@ fn main() {
     ;
 
     if args.flag_version {
-        println!("bot-micro version {}", VERSION);
+        println!("bot-mp version {}", VERSION);
         return;
     }
 
@@ -41,36 +41,38 @@ fn main() {
         coordinator_settings
     ).unwrap();
 
-    let marines = PlayerSetup::Player { race: Race::Terran };
-    let zerg = PlayerSetup::Computer {
-        race: Race::Zerg,
-        difficulty: Difficulty::VeryEasy
-    };
+    let p1 = PlayerSetup::Player { race: Race::Terran };
+    let p2 = PlayerSetup::Player { race: Race::Terran };
 
     match coordinator.launch_starcraft(
         vec![
-            (marines, Some(Box::from(MarineMicroBot::new()))),
-            (zerg, None)
+            (p1, Some(Box::from(TerranBot::new()))),
+            (p2, Some(Box::from(TerranBot::new())))
         ]
     ) {
         Ok(_) => println!("launched!"),
         Err(e) => println!("unable to launch game: {}", e)
     };
 
-    match coordinator.start_game(game_settings) {
-        Ok(_) => println!("game started!"),
-        Err(e) => eprintln!("unable to start game: {}", e)
-    };
+    let mut done = false;
 
-    while !poll_escape(&mut events) {
-         match coordinator.update() {
-             Ok(_) => (),
-             Err(e) => {
-                 eprintln!("update failed: {}", e);
-                 break
+    while !done {
+        match coordinator.start_game(game_settings.clone()) {
+            Ok(_) => println!("game started!"),
+            Err(e) => eprintln!("unable to start game: {}", e)
+        };
+
+        while !done {
+             match coordinator.update() {
+                 Ok(_) => (),
+                 Err(e) => eprintln!("update failed: {}", e)
+             };
+
+             if poll_escape(&mut events) {
+                 done = true;
              }
-         };
-    };
+        }
+    }
 
     match coordinator.cleanup() {
         Ok(_) => println!("shutdown successful"),

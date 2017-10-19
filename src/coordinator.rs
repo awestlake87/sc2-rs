@@ -190,18 +190,24 @@ impl Coordinator {
         }
 
         for p in &mut self.participants {
-            match p.agent {
-                Some(ref mut agent) => {
-                    agent.on_game_full_start();
+            let agent = mem::replace(&mut p.agent, None);
+
+            match agent {
+                Some(mut agent) => {
+                    agent.on_game_full_start(p);
+                    mem::replace(&mut p.agent, Some(agent));
                 },
                 None => ()
             }
         }
 
         for p in &mut self.participants {
-            match p.agent {
-                Some(ref mut agent) => {
-                    agent.on_game_start();
+            let agent = mem::replace(&mut p.agent, None);
+
+            match agent {
+                Some(mut agent) => {
+                    agent.on_game_start(p);
+                    mem::replace(&mut p.agent, Some(agent));
                 },
                 None => ()
             }
@@ -267,9 +273,12 @@ impl Coordinator {
             }
 
             if !p.is_in_game() {
-                match p.agent {
-                    Some(ref mut agent) => {
-                        agent.on_game_end();
+                let agent = mem::replace(&mut p.agent, None);
+
+                match agent {
+                    Some(mut agent) => {
+                        agent.on_game_end(p);
+                        mem::replace(&mut p.agent, Some(agent));
                     },
                     None => ()
                 }
@@ -334,9 +343,12 @@ impl Coordinator {
             }*/
 
             if !p.is_in_game() {
-                match p.agent {
-                    Some(ref mut agent) => {
-                        agent.on_game_end();
+                let agent = mem::replace(&mut p.agent, None);
+
+                match agent {
+                    Some(mut agent) => {
+                        agent.on_game_end(p);
+                        mem::replace(&mut p.agent, Some(agent));
                     },
                     None => ()
                 }

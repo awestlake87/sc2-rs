@@ -30,10 +30,10 @@ impl Bot {
 }
 
 impl Agent for Bot {
-    fn on_game_full_start(&mut self) {
+    fn on_game_full_start(&mut self, _: &mut Participant) {
         println!("FULL FUCK YEYA!");
     }
-    fn on_game_start(&mut self) {
+    fn on_game_start(&mut self, _: &mut Participant) {
         println!("FUCK YEYA!");
     }
 
@@ -72,7 +72,7 @@ fn main() {
     ;
 
     if args.flag_version {
-        println!("nuro version {}", VERSION);
+        println!("bot-simple version {}", VERSION);
         return;
     }
 
