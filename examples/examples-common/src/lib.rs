@@ -12,31 +12,35 @@ use sc2::data::{ GameSettings, Map };
 use sc2::{ Result, Error };
 
 pub const USAGE: &'static str = "
-Simple StarCraft II Bot.
+StarCraft II Rust API Example.
 
 Usage:
-  bot-simple (-h | --help)
-  bot-simple [options]
-  bot-simple --version
+  example (-h | --help)
+  example [options]
+  example --version
 
 Options:
-  -h --help                     Show this screen.
-  -d <path> --dir=<path>        Path to the StarCraft II directory.
-  -p <port> --port=<port>       Port to make StarCraft II listen on.
-  -m <name> --map=<name>        Name of the Blizzard StarCraft II map.
-  --local-map=<path>            Path to a local StarCraft II map.
-  --wine                        Use Wine to run StarCraft II (for Linux users).
-  --version                     Show version.
+  -h --help                         Show this screen.
+  -d <path> --dir=<path>            Path to the StarCraft II installation.
+  -p <port> --port=<port>           Port to make StarCraft II listen on.
+  -m <name> --map=<name>            Name of the Blizzard StarCraft II map.
+  -r --realtime                     Run StarCraft II in real time
+  -s <count> --step-size=<count>    How many steps to take per call.
+  --local-map=<path>                Path to a local StarCraft II map.
+  --wine                            Use Wine to run StarCraft II (for Linux).
+  --version                         Show version.
 ";
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
-    pub flag_dir:       Option<PathBuf>,
-    pub flag_port:      Option<u16>,
-    pub flag_map:       Option<String>,
-    pub flag_local_map: Option<PathBuf>,
-    pub flag_wine:      bool,
-    pub flag_version:   bool
+    pub flag_dir:                   Option<PathBuf>,
+    pub flag_port:                  Option<u16>,
+    pub flag_map:                   Option<String>,
+    pub flag_local_map:             Option<PathBuf>,
+    pub flag_wine:                  bool,
+    pub flag_version:               bool,
+    pub flag_realtime:              bool,
+    pub flag_step_size:             Option<usize>,
 }
 
 pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
@@ -65,10 +69,16 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
         }
     };
 
+    let step_size = match args.flag_step_size {
+        Some(step_size) => step_size,
+        None => 1
+    };
+
     Ok(
         GameSettings {
             map: map,
-            is_realtime: false
+            is_realtime: args.flag_realtime,
+            step_size: step_size,
         }
     )
 }

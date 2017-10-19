@@ -228,6 +228,10 @@ impl Coordinator {
 
     fn step_agents(&mut self) -> Result<()> {
         let mut result = Ok(());
+        let step_size = match self.game_settings {
+            Some(ref settings) => settings.step_size,
+            None => return Err(Error::Todo("game not started"))
+        };
 
         for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
@@ -242,7 +246,7 @@ impl Coordinator {
                 continue;
             }
 
-            match p.req_step(1) {
+            match p.req_step(step_size) {
                 Err(e) => result = Err(e),
                 _ => ()
             }

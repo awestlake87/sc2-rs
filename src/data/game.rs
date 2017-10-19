@@ -28,6 +28,7 @@ pub struct GamePorts {
 pub struct GameSettings {
     pub map:            Map,
     pub is_realtime:    bool,
+    pub step_size:      usize,
 }
 
 #[derive(Clone)]
