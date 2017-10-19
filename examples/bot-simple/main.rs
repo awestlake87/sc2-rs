@@ -9,7 +9,7 @@ use docopt::Docopt;
 
 use sc2::agent::{ Agent };
 use sc2::coordinator::{ Coordinator };
-use sc2::data::{ PlayerSetup, Difficulty, Race, Alliance, Ability };
+use sc2::data::{ PlayerSetup, Race, Alliance, Ability };
 use sc2::participant::{ Participant, Observer, Actions };
 use sc2::utils::{ find_random_location };
 

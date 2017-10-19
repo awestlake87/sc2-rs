@@ -1,11 +1,9 @@
 
 use std::path::PathBuf;
-use std::io;
 use std::time;
 use std::thread;
 use std::process;
 
-use futures::sync::{ oneshot };
 use url::Url;
 
 use super::{ Result, Error };
@@ -32,7 +30,8 @@ pub struct Instance {
     exe:            PathBuf,
     pwd:            Option<PathBuf>,
     address:        (String, u16),
-    window_rect:    Rect<u32>
+    window_rect:    Rect<u32>,
+    child:          Option<process::Child>,
 }
 
 impl Instance {
@@ -55,62 +54,48 @@ impl Instance {
                 exe:            exe,
                 pwd:            settings.pwd,
                 address:        settings.address,
-                window_rect:    settings.window_rect
+                window_rect:    settings.window_rect,
+                child:          None,
             }
         )
     }
 
-    pub fn start(&self)
-        -> Result<oneshot::Receiver<io::Result<process::ExitStatus>>>
-    {
+    pub fn start(&mut self) -> Result<()> {
         let kind = self.kind;
         let exe = self.exe.clone();
         let pwd = self.pwd.clone();
         let (_, port) = self.address;
         let window = self.window_rect;
 
-        let (tx, rx) = oneshot::channel();
-
-        thread::spawn(
-            move || {
-                let mut cmd = match kind {
-                    InstanceKind::Native => process::Command::new(exe),
-                    InstanceKind::Wine => {
-                        let mut cmd = process::Command::new("wine");
-                        cmd.arg(exe);
-                        cmd
-                    }
-                };
-
-                match pwd {
-                    Some(pwd) => {
-                        cmd.current_dir(pwd);
-                    },
-                    None => ()
-                };
-
-                cmd.arg("-listen").arg("127.0.0.1")
-                    .arg("-port").arg(port.to_string())
-                    .arg("-displayMode").arg("0")
-
-                    .arg("-windowx").arg(window.x.to_string())
-                    .arg("-windowy").arg(window.y.to_string())
-                    .arg("-windowWidth").arg(window.w.to_string())
-                    .arg("-windowHeight").arg(window.h.to_string())
-                ;
-
-                let mut child = cmd.spawn().unwrap();
-
-                match tx.send(child.wait()) {
-                    Ok(_) => (),
-                    Err(e) => eprintln!(
-                        "unable to send instance result: {:?}", e
-                    )
-                }
+        let mut cmd = match kind {
+            InstanceKind::Native => process::Command::new(exe),
+            InstanceKind::Wine => {
+                let mut cmd = process::Command::new("wine");
+                cmd.arg(exe);
+                cmd
             }
-        );
+        };
 
-        Ok(rx)
+        match pwd {
+            Some(pwd) => {
+                cmd.current_dir(pwd);
+            },
+            None => ()
+        };
+
+        cmd.arg("-listen").arg("127.0.0.1")
+            .arg("-port").arg(port.to_string())
+            .arg("-displayMode").arg("0")
+
+            .arg("-windowx").arg(window.x.to_string())
+            .arg("-windowy").arg(window.y.to_string())
+            .arg("-windowWidth").arg(window.w.to_string())
+            .arg("-windowHeight").arg(window.h.to_string())
+        ;
+
+        self.child = Some(cmd.spawn().unwrap());
+
+        Ok(())
     }
 
     pub fn connect(&self) -> Result<Client> {
@@ -132,5 +117,15 @@ impl Instance {
         };
 
         Err(Error::WebsockOpenFailed)
+    }
+
+    pub fn kill(&mut self) -> Result<()> {
+        match self.child {
+            Some(ref mut child) => match child.kill() {
+                Ok(_) => Ok(()),
+                Err(_) => Err(Error::Todo("unable to kill process"))
+            },
+            None => Ok(())
+        }
     }
 }

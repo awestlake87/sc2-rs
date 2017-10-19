@@ -67,7 +67,8 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 
     Ok(
         GameSettings {
-            map: map
+            map: map,
+            is_realtime: false
         }
     )
 }

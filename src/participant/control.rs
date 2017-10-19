@@ -7,7 +7,7 @@ use std::rc::Rc;
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::{ Participant, Observer };
+use super::{ Participant, Observer, AppState };
 use super::super::{ Result, Error };
 use super::super::data::{
     GameSettings,
@@ -30,7 +30,8 @@ pub trait Control {
 
     fn leave_game(&mut self) -> Result<()>;
 
-    fn step(&mut self, count: usize) -> Result<()>;
+    fn req_step(&mut self, count: usize) -> Result<()>;
+    fn await_step(&mut self) -> Result<()>;
 
     fn save_replay(&mut self, path: PathBuf) -> Result<()>;
 
@@ -98,7 +99,7 @@ impl Control for Participant {
             req.mut_create_game().mut_player_setup().push(setup);
         }
 
-        req.mut_create_game().set_realtime(true);
+        req.mut_create_game().set_realtime(settings.is_realtime);
 
         self.send(req)?;
         let rsp = self.recv()?;
@@ -174,8 +175,30 @@ impl Control for Participant {
         unimplemented!("leave game");
     }
 
-    fn step(&mut self, _: usize) -> Result<()> {
-        unimplemented!("step");
+    fn req_step(&mut self, count: usize) -> Result<()> {
+        if self.get_app_state() != AppState::Normal {
+            return Err(Error::Todo("app is in bad state"))
+        }
+
+        let mut req = sc2api::Request::new();
+
+        req.mut_step().set_count(count as u32);
+
+        self.send(req)?;
+
+        Ok(())
+    }
+
+    fn await_step(&mut self) -> Result<()> {
+        let rsp = self.recv()?;
+
+        if !rsp.has_step() || rsp.get_error().len() > 0 {
+            return Err(Error::Todo("step error"))
+        }
+
+        self.update_observation()?;
+
+        Ok(())
     }
 
     fn save_replay(&mut self, _: PathBuf) -> Result<()> {

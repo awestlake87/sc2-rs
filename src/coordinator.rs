@@ -1,19 +1,17 @@
 
-use std::io;
 use std::mem;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
-use std::process;
 
-use futures::sync::{ oneshot };
 use glob::glob;
 use regex::Regex;
-use tokio_core::reactor;
 
 use super::{ Result, Error };
 use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use agent::{ Agent };
 use instance::{ Instance, InstanceSettings, InstanceKind };
-use participant::{ Participant, Control, Observer, Actions, AppState };
+use participant::{
+    Participant, Control, Observer, Actions, SpatialActions, AppState
+};
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
@@ -42,17 +40,14 @@ impl Default for CoordinatorSettings {
 
 pub struct Coordinator {
     use_wine:               bool,
-    core:                   reactor::Core,
     exe:                    PathBuf,
     pwd:                    Option<PathBuf>,
     current_port:           u16,
     window:                 Rect<u32>,
-    cleanups:               Vec<
-        oneshot::Receiver<io::Result<process::ExitStatus>>
-    >,
     participants:           Vec<Participant>,
     players:                Vec<PlayerSetup>,
     ports:                  Option<GamePorts>,
+    game_settings:          Option<GameSettings>,
 }
 
 impl Coordinator {
@@ -68,21 +63,20 @@ impl Coordinator {
         Ok(
             Self {
                 use_wine:       settings.use_wine,
-                core:           reactor::Core::new().unwrap(),
                 exe:            exe,
                 pwd:            pwd,
                 current_port:   settings.port,
                 window:         settings.window,
-                cleanups:       vec![ ],
                 participants:   vec![ ],
                 players:        vec![ ],
                 ports:          None,
+                game_settings:  None,
             }
         )
     }
 
     fn launch(&mut self) -> Result<Instance> {
-        let instance = Instance::from_settings(
+        let mut instance = Instance::from_settings(
             InstanceSettings {
                 kind: {
                     if self.use_wine {
@@ -101,9 +95,7 @@ impl Coordinator {
 
         self.current_port += 1;
 
-        let cleanup = instance.start()?;
-
-        self.cleanups.push(cleanup);
+        instance.start()?;
 
         Ok(instance)
     }
@@ -187,6 +179,8 @@ impl Coordinator {
 
         self.participants[0].create_game(&settings, &self.players)?;
 
+        self.game_settings = Some(settings);
+
         for p in &mut self.participants {
             p.req_join_game(&self.ports)?;
         }
@@ -195,7 +189,7 @@ impl Coordinator {
             p.await_join_game()?;
         }
 
-        for ref mut p in &mut self.participants {
+        for p in &mut self.participants {
             match p.agent {
                 Some(ref mut agent) => {
                     agent.on_game_full_start();
@@ -204,7 +198,7 @@ impl Coordinator {
             }
         }
 
-        for ref mut p in &mut self.participants {
+        for p in &mut self.participants {
             match p.agent {
                 Some(ref mut agent) => {
                     agent.on_game_start();
@@ -217,8 +211,88 @@ impl Coordinator {
     }
 
     pub fn update(&mut self) -> Result<()> {
-        self.step_agents_realtime()?;
+        let realtime = match self.game_settings {
+            Some(ref settings) => settings.is_realtime,
+            None => return Err(Error::Todo("game not started"))
+        };
+
+        if realtime {
+            self.step_agents_realtime()?;
+        }
+        else {
+            self.step_agents()?;
+        }
+
         Ok(())
+    }
+
+    fn step_agents(&mut self) -> Result<()> {
+        let mut result = Ok(());
+
+        for p in &mut self.participants {
+            if p.get_app_state() != AppState::Normal {
+                continue;
+            }
+
+            if p.poll_leave_game() {
+                continue;
+            }
+
+            if p.is_finished_game() {
+                continue;
+            }
+
+            match p.req_step(1) {
+                Err(e) => result = Err(e),
+                _ => ()
+            }
+        }
+
+        for p in &mut self.participants {
+            match p.await_step() {
+                Err(e) => result = Err(e),
+                _ => (),
+            }
+
+            if p.get_app_state() != AppState::Normal {
+                continue;
+            }
+
+            if p.poll_leave_game() {
+                continue;
+            }
+
+            if !p.is_in_game() {
+                match p.agent {
+                    Some(ref mut agent) => {
+                        agent.on_game_end();
+                    },
+                    None => ()
+                }
+
+                match p.leave_game() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }
+            }
+
+            match p.issue_events() {
+                Err(e) => result = Err(e),
+                _ => ()
+            }
+
+            match p.send_actions() {
+                Err(e) => result = Err(e),
+                _ => ()
+            }
+
+            /*TODO: match p.send_spatial_actions() {
+                Err(e) => result = Err(e),
+                _ => ()
+            }*/
+        }
+
+        result
     }
 
     fn step_agents_realtime(&mut self) -> Result<()> {
@@ -250,6 +324,10 @@ impl Coordinator {
                 Err(e) => result = Err(e),
                 _ => ()
             };
+            /*TODO: match p.send_spatial_actions() {
+                Err(e) => result = Err(e),
+                _ => ()
+            }*/
 
             if !p.is_in_game() {
                 match p.agent {
@@ -259,10 +337,8 @@ impl Coordinator {
                     None => ()
                 }
                 match p.leave_game() {
-                    Ok(()) => (),
-                    Err(e) => {
-                        result = Err(e);
-                    }
+                    Err(e) => result = Err(e),
+                    _ => ()
                 }
                 continue;
             }
@@ -272,9 +348,8 @@ impl Coordinator {
     }
 
     pub fn cleanup(&mut self) -> Result<()> {
-        let cleanups = mem::replace(&mut self.cleanups, vec! [ ]);
+        for p in &mut self.participants {
 
-        for ref mut p in &mut self.participants {
             match p.quit() {
                 Ok(_) => (),
                 Err(e) => {
@@ -288,14 +363,14 @@ impl Coordinator {
                     eprintln!("unable to close client: {}", e);
                 }
             }
-        };
 
-        for cleanup in cleanups {
-            match self.core.run(cleanup) {
+            match p.instance.kill() {
                 Ok(_) => (),
-                Err(e) => eprintln!("unable to stop process {}", e)
+                Err(e) => {
+                    eprintln!("unable to terminate process: {}", e);
+                }
             }
-        }
+        };
 
         Ok(())
     }
