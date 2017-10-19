@@ -243,33 +243,49 @@ impl Control for Participant {
 
 impl InnerControl for Participant {
     fn issue_unit_destroyed_events(&mut self) -> Result<()> {
+        let mut destroyed_units = vec![ ];
+
         if !self.observation.get_observation().has_raw_data() {
             return Ok(())
         }
 
-        let raw = self.observation.get_observation().get_raw_data();
-        if raw.has_event() {
-            let event = raw.get_event();
+        {
+            let raw = self.observation.get_observation().get_raw_data();
 
-            for tag in event.get_dead_units() {
-                match self.units.get_mut(tag) {
-                    Some(ref mut unit) => {
-                        Rc::get_mut(unit).unwrap().mark_dead();
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_unit_destroyed(unit);
-                            },
-                            None => ()
-                        }
-                    },
-                    None => ()
+            if raw.has_event() {
+                let event = raw.get_event();
+
+                for tag in event.get_dead_units() {
+                    match self.previous_units.get_mut(tag) {
+                        Some(ref mut unit) => {
+                            Rc::get_mut(unit).unwrap().mark_dead();
+                            destroyed_units.push(Rc::clone(unit));
+                        },
+                        None => ()
+                    }
                 }
             }
+        }
+
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for ref u in destroyed_units {
+                    agent.on_unit_destroyed(self, u);
+                }
+
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
         }
 
         Ok(())
     }
     fn issue_unit_added_events(&mut self) -> Result<()> {
+        let mut created_units = vec![ ];
+        let mut detected_units = vec![ ];
+
         for ref mut unit in self.units.values_mut() {
             match self.previous_units.get(&unit.tag) {
                 Some(_) => continue,
@@ -277,28 +293,37 @@ impl InnerControl for Participant {
                     if unit.alliance == Alliance::Enemy &&
                         unit.display_type == DisplayType::Visible
                     {
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_unit_detected(unit);
-                            },
-                            None => ()
-                        }
+                        detected_units.push(Rc::clone(unit));
                     }
                     else {
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_unit_created(unit);
-                            },
-                            None => ()
-                        }
+                        created_units.push(Rc::clone(unit));
                     }
                 }
             }
         }
 
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for ref u in detected_units {
+                    agent.on_unit_detected(self, u);
+                }
+
+                for ref u in created_units {
+                    agent.on_unit_created(self, u);
+                }
+
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
+        }
+
         Ok(())
     }
     fn issue_idle_events(&mut self) -> Result<()> {
+        let mut idle_units = vec![ ];
+
         for unit in self.units.values() {
             if !unit.orders.is_empty() || unit.build_progress < 1.0 {
                 continue;
@@ -307,51 +332,45 @@ impl InnerControl for Participant {
             match self.previous_units.get(&unit.tag) {
                 Some(ref prev_unit) => {
                     if !prev_unit.orders.is_empty() {
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_unit_idle(&unit);
-                            },
-                            None => ()
-                        }
+                        idle_units.push(Rc::clone(unit));
                         continue;
                     }
 
                     if prev_unit.build_progress < 1.0 {
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_unit_idle(&unit);
-                            },
-                            None => ()
-                        }
+                        idle_units.push(Rc::clone(unit));
                         continue;
                     }
 
                     for tag in &self.commands {
                         if *tag == unit.tag {
-                            match self.agent {
-                                Some(ref mut agent) => {
-                                    agent.on_unit_idle(&unit);
-                                },
-                                None => ()
-                            }
+                            idle_units.push(Rc::clone(unit));
                         }
                     }
                 },
                 None => {
-                    match self.agent {
-                        Some(ref mut agent) => {
-                            agent.on_unit_idle(&unit);
-                        },
-                        None => ()
-                    }
+                    idle_units.push(Rc::clone(unit));
                     continue;
                 }
             }
         }
 
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for ref u in idle_units {
+                    agent.on_unit_idle(self, u);
+                }
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
+        }
+
         Ok(())
     }
     fn issue_building_completed_events(&mut self) -> Result<()> {
+        let mut building_completed_units = vec![ ];
+
         for unit in self.units.values() {
             if unit.build_progress < 1.0 {
                 continue;
@@ -360,63 +379,83 @@ impl InnerControl for Participant {
             match self.previous_units.get(&unit.tag) {
                 Some(ref prev_unit) => {
                     if prev_unit.build_progress < 1.0 {
-                        match self.agent {
-                            Some(ref mut agent) => {
-                                agent.on_building_complete(&unit);
-                            },
-                            None => ()
-                        }
+                        building_completed_units.push(Rc::clone(unit));
                     }
                 },
                 None => ()
             }
         }
 
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for ref u in building_completed_units {
+                    agent.on_building_complete(self, u);
+                }
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
+        }
+
         Ok(())
     }
     fn issue_upgrade_events(&mut self) -> Result<()> {
         let mut prev_upgrades = HashSet::new();
+        let mut new_upgrades = vec![ ];
 
         for upgrade in &self.previous_upgrades {
-            prev_upgrades.insert(upgrade);
+            prev_upgrades.insert(*upgrade);
         }
 
         for upgrade in &self.upgrades {
-            match prev_upgrades.get(&upgrade) {
+            match prev_upgrades.get(upgrade) {
                 Some(_) => (),
                 None => {
-                    match self.agent {
-                        Some(ref mut agent) => {
-                            agent.on_upgrade_complete(*upgrade);
-                        },
-                        None => ()
-                    }
+                    new_upgrades.push(*upgrade);
                 }
             }
+        }
+
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for u in new_upgrades {
+                    agent.on_upgrade_complete(self, u);
+                }
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
         }
 
         Ok(())
     }
     fn issue_alert_events(&mut self) -> Result<()> {
+        let mut nukes = 0;
+        let mut nydus_worms = 0;
+
         for alert in self.observation.get_observation().get_alerts() {
             match *alert {
-                sc2api::Alert::NuclearLaunchDetected => {
-                    match self.agent {
-                        Some(ref mut agent) => {
-                            agent.on_nuke_detected();
-                        },
-                        None => ()
-                    }
-                },
-                sc2api::Alert::NydusWormDetected => {
-                    match self.agent {
-                        Some(ref mut agent) => {
-                            agent.on_nydus_detected();
-                        },
-                        None => ()
-                    }
-                }
+                sc2api::Alert::NuclearLaunchDetected => nukes += 1,
+                sc2api::Alert::NydusWormDetected => nydus_worms += 1
             }
+        }
+
+        let agent = mem::replace(&mut self.agent, None);
+
+        match agent {
+            Some(mut agent) => {
+                for _ in 0..nukes {
+                    agent.on_nuke_detected(self);
+                }
+                for _ in 0..nydus_worms {
+                    agent.on_nydus_detected(self);
+                }
+
+                mem::replace(&mut self.agent, Some(agent));
+            },
+            None => ()
         }
 
         Ok(())

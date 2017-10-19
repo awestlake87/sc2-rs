@@ -1,15 +1,21 @@
 
 extern crate glutin;
+extern crate nalgebra as na;
+extern crate num;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate sc2;
+
+pub mod marine_micro_bot;
 
 use std::path::PathBuf;
 
 use sc2::coordinator::{ CoordinatorSettings };
 use sc2::data::{ GameSettings, Map };
 use sc2::{ Result, Error };
+
+pub use marine_micro_bot::{ MarineMicroBot };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.

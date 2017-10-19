@@ -13,7 +13,7 @@ pub trait Actions {
         &mut self, units: &Vec<Rc<Unit>>, ability: Ability, location: Point2
     );
     fn command_units_to_target(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: &Unit
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: Tag
     );
     fn get_commands(&self) -> &Vec<Tag>;
     fn send_actions(&mut self) -> Result<()>;
@@ -42,13 +42,13 @@ impl Actions for Participant {
         );
     }
     fn command_units_to_target(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: &Unit
+        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: Tag
     ) {
         self.requested_actions.push(
             Action {
                 ability: ability,
                 unit_tags: units.iter().map(|u| u.tag).collect(),
-                target: Some(ActionTarget::UnitTag(target.tag)),
+                target: Some(ActionTarget::UnitTag(target)),
             }
         )
     }

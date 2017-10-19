@@ -143,6 +143,7 @@ impl From<raw::Unit> for Unit {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UnitType {
     Invalid,
 

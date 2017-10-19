@@ -21,6 +21,11 @@ url = "*"
 members = ["examples/examples-common"]
 
 [[example]]
+name = "bot-micro"
+crate-type = ["bin"]
+path = "examples/bot-micro/main.rs"
+
+[[example]]
 name = "bot-simple"
 crate-type = ["bin"]
 path = "examples/bot-simple/main.rs"
