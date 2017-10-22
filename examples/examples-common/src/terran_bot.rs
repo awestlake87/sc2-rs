@@ -82,7 +82,7 @@ impl TerranBot {
 
     fn try_build_supply_depot(&mut self, p: &mut Participant) -> bool {
         // if we are not supply capped, don't build a supply depot
-        if p.get_food_used() <= p.get_food_cap() - 2 {
+        if p.get_food_used() + 2 <= p.get_food_cap() {
             return false
         }
 
