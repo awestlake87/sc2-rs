@@ -244,8 +244,9 @@ impl Coordinator {
                 continue;
             }
 
-            if p.poll_leave_game() {
-                continue;
+            match p.poll_leave_game() {
+                Ok(true) => continue,
+                _ => ()
             }
 
             if p.is_finished_game() {
@@ -268,8 +269,9 @@ impl Coordinator {
                 continue;
             }
 
-            if p.poll_leave_game() {
-                continue;
+            match p.poll_leave_game() {
+                Ok(true) => continue,
+                _ => ()
             }
 
             if !p.is_in_game() {
@@ -283,7 +285,7 @@ impl Coordinator {
                     None => ()
                 }
 
-                match p.leave_game() {
+                match p.req_leave_game() {
                     Err(e) => result = Err(e),
                     _ => ()
                 }
@@ -316,8 +318,9 @@ impl Coordinator {
                 continue;
             }
 
-            if p.poll_leave_game() {
-                continue;
+            match p.poll_leave_game() {
+                Ok(true) => continue,
+                _ => ()
             }
 
             if p.is_finished_game() {
@@ -352,7 +355,7 @@ impl Coordinator {
                     },
                     None => ()
                 }
-                match p.leave_game() {
+                match p.req_leave_game() {
                     Err(e) => result = Err(e),
                     _ => ()
                 }

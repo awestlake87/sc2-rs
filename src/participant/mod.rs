@@ -185,8 +185,14 @@ impl Participant {
         }
     }
 
-    pub fn poll_leave_game(&self) -> bool {
-        false
+    pub fn poll_leave_game(&mut self) -> Result<bool> {
+        if self.response_pending != MessageType::LeaveGame {
+            return Ok(!self.is_in_game())
+        }
+
+        self.recv()?;
+
+        Ok(true)
     }
 
     fn send(&mut self, req: Request) -> Result<()> {
@@ -222,7 +228,7 @@ impl Participant {
             unimplemented!("errors in response");
         }
         else if pending != get_response_type(&rsp) {
-            unimplemented!("unexpected response type");
+            unimplemented!("unexpected response type {:#?}", rsp);
         }
 
         Ok(rsp)

@@ -6,8 +6,9 @@ extern crate protobuf;
 extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
-extern crate tungstenite;
 extern crate tokio_core;
+extern crate tokio_tungstenite;
+extern crate tungstenite;
 extern crate url;
 
 pub mod agent;

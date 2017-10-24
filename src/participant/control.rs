@@ -28,7 +28,7 @@ pub trait Control {
     fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()>;
     fn await_join_game(&mut self) -> Result<()>;
 
-    fn leave_game(&mut self) -> Result<()>;
+    fn req_leave_game(&mut self) -> Result<()>;
 
     fn req_step(&mut self, count: usize) -> Result<()>;
     fn await_step(&mut self) -> Result<()>;
@@ -171,8 +171,14 @@ impl Control for Participant {
         Ok(())
     }
 
-    fn leave_game(&mut self) -> Result<()> {
-        unimplemented!("leave game");
+    fn req_leave_game(&mut self) -> Result<()> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_leave_game();
+
+        self.send(req)?;
+
+        Ok(())
     }
 
     fn req_step(&mut self, count: usize) -> Result<()> {

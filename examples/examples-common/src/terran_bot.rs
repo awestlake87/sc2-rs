@@ -169,7 +169,7 @@ impl TerranBot {
             p.command_units_to_location(
                 &vec![ Rc::clone(&units[0]) ],
                 ability,
-                Point2::new(units[0].pos.x, units[0].pos.y) + r * 15.0
+                Point2::new(units[0].pos.x, units[0].pos.y) + r * 5.0
             );
 
             true
