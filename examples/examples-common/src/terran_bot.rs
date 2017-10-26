@@ -166,10 +166,12 @@ impl TerranBot {
         if !units.is_empty() {
             let r = Vector2::new(random(), random());
 
+            let u = random::<usize>() % units.len();
+
             p.command_units_to_location(
-                &vec![ Rc::clone(&units[0]) ],
+                &vec![ Rc::clone(&units[u]) ],
                 ability,
-                Point2::new(units[0].pos.x, units[0].pos.y) + r * 5.0
+                Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0
             );
 
             true

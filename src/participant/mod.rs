@@ -8,6 +8,7 @@ mod spatial_actions;
 
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Duration;
 
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
@@ -207,7 +208,7 @@ impl Participant {
 
         self.last_status = AppStatus::Unknown;
 
-        let rsp = match self.client.recv() {
+        let rsp = match self.client.recv(Duration::from_secs(30)) {
             Ok(rsp) => rsp,
             Err(e) => {
                 // the game instance is not responsive

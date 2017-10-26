@@ -59,13 +59,19 @@ fn main() {
     while !done {
         match coordinator.start_game(game_settings.clone()) {
             Ok(_) => println!("game started!"),
-            Err(e) => eprintln!("unable to start game: {}", e)
+            Err(e) => {
+                eprintln!("unable to start game: {}", e);
+                break
+            }
         };
 
         while !done {
              match coordinator.update() {
                  Ok(_) => (),
-                 Err(e) => eprintln!("update failed: {}", e)
+                 Err(e) => {
+                     eprintln!("update failed: {}", e);
+                     break
+                 }
              };
 
              if poll_escape(&mut events) {

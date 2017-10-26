@@ -10,7 +10,7 @@ use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use agent::{ Agent };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
-    Participant, Control, Observer, Actions, SpatialActions, AppState
+    Participant, Control, Observer, Actions, AppState
 };
 
 #[derive(Copy, Clone, PartialEq)]
