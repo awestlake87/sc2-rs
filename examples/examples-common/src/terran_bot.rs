@@ -65,6 +65,8 @@ impl TerranBot {
                     p.command_units_to_target(
                         &vec![ Rc::clone(u) ], Ability::Attack, enemy_tag
                     );
+
+                    return
                 },
                 None => ()
             }
@@ -74,6 +76,8 @@ impl TerranBot {
                     p.command_units_to_location(
                         &vec![ Rc::clone(u) ], Ability::Smart, target_pos
                     );
+
+                    return
                 },
                 None => ()
             }
