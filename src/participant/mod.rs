@@ -167,7 +167,9 @@ impl Participant {
         else if self.is_in_game() {
             false
         }
-        // else if self.has_response_pending() { false }
+        else if self.has_response_pending() {
+            false
+        }
         else {
             true
         }
@@ -176,7 +178,9 @@ impl Participant {
         if self.get_app_state() != AppState::Normal {
             false
         }
-        // else if self.has_response_pending() { false }
+        else if self.has_response_pending() {
+            false
+        }
         else {
             match self.get_last_status() {
                 AppStatus::Launched => true,
@@ -185,10 +189,17 @@ impl Participant {
             }
         }
     }
+    pub fn has_response_pending(&self) -> bool {
+        self.response_pending != MessageType::Unknown
+    }
 
     pub fn poll_leave_game(&mut self) -> Result<bool> {
         if self.response_pending != MessageType::LeaveGame {
             return Ok(!self.is_in_game())
+        }
+
+        if !self.poll() {
+            return Ok(true)
         }
 
         self.recv()?;
@@ -206,6 +217,7 @@ impl Participant {
             return Err(Error::Todo("app is in a bad state"))
         }
 
+        let prev_status = self.last_status;
         self.last_status = AppStatus::Unknown;
 
         let rsp = match self.client.recv(Duration::from_secs(30)) {
@@ -220,6 +232,10 @@ impl Participant {
 
         if rsp.has_status() {
             self.last_status = AppStatus::from(rsp.get_status());
+
+            if self.last_status != prev_status {
+                println!("new status: {:?}", self.last_status);
+            }
         }
 
         let pending = self.response_pending;
@@ -249,6 +265,10 @@ impl Participant {
         );
 
         Ok(())
+    }
+
+    pub fn poll(&self) -> bool {
+        self.client.poll()
     }
 
     pub fn close(&mut self) -> Result<()> {

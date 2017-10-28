@@ -204,4 +204,8 @@ impl Client {
             }
         }
     }
+
+    pub fn poll(&self) -> bool {
+        !self.queue.0.lock().unwrap().is_empty()
+    }
 }

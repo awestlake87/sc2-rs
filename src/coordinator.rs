@@ -48,6 +48,7 @@ pub struct Coordinator {
     players:                Vec<PlayerSetup>,
     ports:                  Option<GamePorts>,
     game_settings:          Option<GameSettings>,
+    relaunched:             bool,
 }
 
 impl Coordinator {
@@ -71,6 +72,7 @@ impl Coordinator {
                 players:        vec![ ],
                 ports:          None,
                 game_settings:  None,
+                relaunched: false,
             }
         )
     }
@@ -216,7 +218,7 @@ impl Coordinator {
         Ok(())
     }
 
-    pub fn update(&mut self) -> Result<()> {
+    pub fn update(&mut self) -> Result<bool> {
         let realtime = match self.game_settings {
             Some(ref settings) => settings.is_realtime,
             None => return Err(Error::Todo("game not started"))
@@ -229,7 +231,7 @@ impl Coordinator {
             self.step_agents()?;
         }
 
-        Ok(())
+        Ok(!self.are_all_games_ended() || self.relaunched)
     }
 
     fn step_agents(&mut self) -> Result<()> {
@@ -250,61 +252,72 @@ impl Coordinator {
             }
 
             if p.is_finished_game() {
-                continue;
+                continue
             }
 
             match p.req_step(step_size) {
-                Err(e) => result = Err(e),
+                Err(e) => {
+                    eprintln!("step err: {}", e);
+                    result = Err(e)
+                },
                 _ => ()
             }
         }
 
         for p in &mut self.participants {
+            if p.get_app_state() != AppState::Normal {
+                continue
+            }
+
             match p.await_step() {
-                Err(e) => result = Err(e),
+                Err(e) => {
+                    eprintln!("await step err: {}", e);
+                    result = Err(e)
+                },
                 _ => (),
             }
 
-            if p.get_app_state() != AppState::Normal {
-                continue;
-            }
+            if p.is_in_game() {
+                match p.issue_events() {
+                    Err(e) => {
+                        eprintln!("issue events err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => ()
+                }
 
-            match p.poll_leave_game() {
-                Ok(true) => continue,
-                _ => ()
-            }
+                match p.send_actions() {
+                    Err(e) => {
+                        eprintln!("send actions err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => ()
+                }
 
-            if !p.is_in_game() {
+                /*TODO: match p.send_spatial_actions() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }*/
+            }
+            else {
                 let agent = mem::replace(&mut p.agent, None);
 
                 match agent {
                     Some(mut agent) => {
                         agent.on_game_end(p);
-                        mem::replace(&mut p.agent, Some(agent));
+                        p.agent = Some(agent);
                     },
                     None => ()
                 }
 
-                match p.req_leave_game() {
-                    Err(e) => result = Err(e),
-                    _ => ()
+                match p.leave_game() {
+                    Err(e) => {
+                        eprintln!("leave game err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => println!("leave game")
                 }
             }
-
-            match p.issue_events() {
-                Err(e) => result = Err(e),
-                _ => ()
-            }
-
-            match p.send_actions() {
-                Err(e) => result = Err(e),
-                _ => ()
-            }
-
-            /*TODO: match p.send_spatial_actions() {
-                Err(e) => result = Err(e),
-                _ => ()
-            }*/
         }
 
         result
@@ -355,7 +368,7 @@ impl Coordinator {
                     },
                     None => ()
                 }
-                match p.req_leave_game() {
+                match p.leave_game() {
                     Err(e) => result = Err(e),
                     _ => ()
                 }
@@ -364,6 +377,16 @@ impl Coordinator {
         }
 
         result
+    }
+
+    fn are_all_games_ended(&self) -> bool {
+        for p in &self.participants {
+            if p.is_in_game() || p.has_response_pending() {
+                return false
+            }
+        }
+
+        true
     }
 
     pub fn cleanup(&mut self) -> Result<()> {

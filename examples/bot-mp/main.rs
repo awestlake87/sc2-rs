@@ -57,6 +57,8 @@ fn main() {
     let mut done = false;
 
     while !done {
+        println!("starting game");
+
         match coordinator.start_game(game_settings.clone()) {
             Ok(_) => println!("game started!"),
             Err(e) => {
@@ -67,7 +69,11 @@ fn main() {
 
         while !done {
              match coordinator.update() {
-                 Ok(_) => (),
+                 Ok(true) => (),
+                 Ok(false) => {
+                     println!("stop updating");
+                     break
+                 },
                  Err(e) => {
                      eprintln!("update failed: {}", e);
                      break
