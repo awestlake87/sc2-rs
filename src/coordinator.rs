@@ -269,6 +269,7 @@ impl Coordinator {
                 continue
             }
 
+            // TODO: should it be awaiting steps if it's possible to skip reqs?
             match p.await_step() {
                 Err(e) => {
                     eprintln!("await step err: {}", e);
@@ -337,28 +338,44 @@ impl Coordinator {
             }
 
             if p.is_finished_game() {
+                continue
+            }
+
+            match p.update_observation() {
+                Err(e) => {
+                    eprintln!("update observation err: {}", e);
+                    result = Err(e)
+                },
+                _ => ()
+            }
+        }
+
+        for p in &mut self.participants {
+            if p.get_app_state() != AppState::Normal {
                 continue;
             }
 
-            // not ideal maybe, but works for now
-            match p.update_observation() {
-                Err(e) => result = Err(e),
-                _ => ()
-            };
-            match p.issue_events() {
-                Err(e) => result = Err(e),
-                _ => ()
-            };
-            match p.send_actions() {
-                Err(e) => result = Err(e),
-                _ => ()
-            };
-            /*TODO: match p.send_spatial_actions() {
-                Err(e) => result = Err(e),
-                _ => ()
-            }*/
-
-            if !p.is_in_game() {
+            if p.is_in_game() {
+                match p.issue_events() {
+                    Err(e) => {
+                        eprintln!("issue events err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => ()
+                }
+                match p.send_actions() {
+                    Err(e) => {
+                        eprintln!("send actions err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => ()
+                }
+                /*TODO: match p.send_spatial_actions() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }*/
+            }
+            else {
                 let agent = mem::replace(&mut p.agent, None);
 
                 match agent {
@@ -368,11 +385,14 @@ impl Coordinator {
                     },
                     None => ()
                 }
+
                 match p.leave_game() {
-                    Err(e) => result = Err(e),
-                    _ => ()
+                    Err(e) => {
+                        eprintln!("leave game err: {}", e);
+                        result = Err(e)
+                    },
+                    _ => println!("leave game")
                 }
-                continue;
             }
         }
 

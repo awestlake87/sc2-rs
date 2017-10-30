@@ -112,8 +112,8 @@ impl Instance {
                 Ok(client) => return Ok(client),
                 Err(_) => ()
             };
-            thread::sleep(time::Duration::from_millis(3000));
-            println!("retrying {}...", i);
+            thread::sleep(time::Duration::from_millis(5000));
+            println!("retrying {}...", 10 - i);
         };
 
         Err(Error::WebsockOpenFailed)
