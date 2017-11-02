@@ -13,15 +13,26 @@ pub enum PlayerKind {
 pub enum Race {
     Terran,
     Zerg,
-    Protoss
+    Protoss,
+    Random,
 }
 
 impl Race {
+    pub fn from_proto(race: common::Race) -> Option<Self> {
+        match race {
+            common::Race::Terran => Some(Race::Terran),
+            common::Race::Zerg => Some(Race::Zerg),
+            common::Race::Protoss => Some(Race::Protoss),
+            common::Race::Random => Some(Race::Random),
+            common::Race::NoRace => None,
+        }
+    }
     pub fn to_proto(&self) -> common::Race {
         match *self {
             Race::Zerg      => common::Race::Zerg,
             Race::Terran    => common::Race::Terran,
-            Race::Protoss   => common::Race::Protoss
+            Race::Protoss   => common::Race::Protoss,
+            Race::Random    => common::Race::Random,
         }
     }
 }

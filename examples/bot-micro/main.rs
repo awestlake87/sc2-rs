@@ -9,6 +9,7 @@ use docopt::Docopt;
 
 use sc2::coordinator::{ Coordinator };
 use sc2::data::{ PlayerSetup, Difficulty, Race };
+use sc2::participant::{ User };
 
 use examples_common::{
     USAGE,
@@ -49,7 +50,7 @@ fn main() {
 
     match coordinator.launch_starcraft(
         vec![
-            (marines, Some(Box::from(MarineMicroBot::new()))),
+            (marines, Some(User::Agent(Box::from(MarineMicroBot::new())))),
             (zerg, None)
         ]
     ) {

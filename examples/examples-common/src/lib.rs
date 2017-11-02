@@ -62,6 +62,17 @@ pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
             Some(port) => port,
             None => default_settings.port
         },
+
+        replay_files: vec![
+            "/home/najen/Sc2-3.16.1/Replays/00a0a1b139395dbbba8058a0ec42128b2356cf92abd1dd0ae7059692c37124be.SC2Replay".to_string()
+        ],
+
+        is_realtime: args.flag_realtime,
+        step_size: match args.flag_step_size {
+            Some(step_size) => step_size,
+            None => default_settings.step_size
+        },
+
         ..default_settings
     }
 }
@@ -78,16 +89,9 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
         }
     };
 
-    let step_size = match args.flag_step_size {
-        Some(step_size) => step_size,
-        None => 1
-    };
-
     Ok(
         GameSettings {
             map: map,
-            is_realtime: args.flag_realtime,
-            step_size: step_size,
         }
     )
 }

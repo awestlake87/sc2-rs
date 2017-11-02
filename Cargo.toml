@@ -36,6 +36,11 @@ name = "bot-simple"
 crate-type = ["bin"]
 path = "examples/bot-simple/main.rs"
 
+[[example]]
+name = "replay"
+crate-type = ["bin"]
+path = "examples/replay/main.rs"
+
 [dev-dependencies]
 docopt = "0.8"
 examples-common = { path = "examples/examples-common" }

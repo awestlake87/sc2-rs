@@ -10,8 +10,9 @@ use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use agent::{ Agent };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
-    Participant, Control, Observer, Actions, AppState
+    Participant, Control, Observer, Actions, Replay, AppState, User
 };
+use replay_observer::{ ReplayObserver };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {
@@ -25,6 +26,10 @@ pub struct CoordinatorSettings {
     pub dir:                Option<PathBuf>,
     pub port:               u16,
     pub window:             Rect<u32>,
+
+    pub replay_files:       Vec<String>,
+    pub is_realtime:        bool,
+    pub step_size:          usize,
 }
 
 impl Default for CoordinatorSettings {
@@ -33,7 +38,11 @@ impl Default for CoordinatorSettings {
             use_wine:       false,
             dir:            None,
             port:           9168,
-            window:         Rect::<u32> { x: 10, y: 10, w: 800, h: 600 }
+            window:         Rect::<u32> { x: 10, y: 10, w: 800, h: 600 },
+
+            replay_files:   vec![ ],
+            is_realtime:    false,
+            step_size:      1
         }
     }
 }
@@ -45,10 +54,14 @@ pub struct Coordinator {
     current_port:           u16,
     window:                 Rect<u32>,
     participants:           Vec<Participant>,
+    replay_observers:       Vec<Participant>,
+    replay_files:           Vec<String>,
     players:                Vec<PlayerSetup>,
     ports:                  Option<GamePorts>,
     game_settings:          Option<GameSettings>,
     relaunched:             bool,
+    is_realtime:            bool,
+    step_size:              usize,
 }
 
 impl Coordinator {
@@ -63,16 +76,20 @@ impl Coordinator {
 
         Ok(
             Self {
-                use_wine:       settings.use_wine,
-                exe:            exe,
-                pwd:            pwd,
-                current_port:   settings.port,
-                window:         settings.window,
-                participants:   vec![ ],
-                players:        vec![ ],
-                ports:          None,
-                game_settings:  None,
-                relaunched: false,
+                use_wine:           settings.use_wine,
+                exe:                exe,
+                pwd:                pwd,
+                current_port:       settings.port,
+                window:             settings.window,
+                participants:       vec![ ],
+                replay_observers:   vec![ ],
+                replay_files:       settings.replay_files,
+                players:            vec![ ],
+                ports:              None,
+                game_settings:      None,
+                relaunched:         false,
+                is_realtime:        settings.is_realtime,
+                step_size:          settings.step_size,
             }
         )
     }
@@ -102,9 +119,10 @@ impl Coordinator {
         Ok(instance)
     }
 
-    pub fn launch_starcraft(&mut self, players: Vec<(PlayerSetup, Option<Box<Agent>>)>) -> Result<()> {
+    pub fn launch_starcraft(&mut self, players: Vec<(PlayerSetup, Option<User>)>) -> Result<()> {
+        self.cleanup()?;
+
         let mut instances = vec![ ];
-        self.players.clear();
 
         for &(player, _) in &players {
             match player {
@@ -120,7 +138,7 @@ impl Coordinator {
         }
 
         let mut i = 0;
-        for (player, agent) in players {
+        for (player, user) in players {
             match player {
                 PlayerSetup::Computer { .. } => (),
                 _ => {
@@ -130,14 +148,25 @@ impl Coordinator {
 
                     let client = instance.connect()?;
 
-                    self.participants.push(
-                        Participant::new(
-                            instance,
-                            client,
-                            player,
-                            agent
-                        )
-                    );
+                    match player {
+                        PlayerSetup::Observer => self.replay_observers.push(
+                            Participant::new(
+                                instance,
+                                client,
+                                player,
+                                user
+                            )
+                        ),
+                        PlayerSetup::Player { .. } => self.participants.push(
+                            Participant::new(
+                                instance,
+                                client,
+                                player,
+                                user
+                            )
+                        ),
+                        _ => panic!("rekt")
+                    }
 
                     i += 1;
                 }
@@ -179,7 +208,9 @@ impl Coordinator {
     pub fn start_game(&mut self, settings: GameSettings) -> Result<()> {
         assert!(self.participants.len() > 0);
 
-        self.participants[0].create_game(&settings, &self.players)?;
+        self.participants[0].create_game(
+            &settings, &self.players, self.is_realtime
+        )?;
 
         self.game_settings = Some(settings);
 
@@ -192,24 +223,24 @@ impl Coordinator {
         }
 
         for p in &mut self.participants {
-            let agent = mem::replace(&mut p.agent, None);
+            let user = mem::replace(&mut p.user, None);
 
-            match agent {
-                Some(mut agent) => {
-                    agent.on_game_full_start(p);
-                    mem::replace(&mut p.agent, Some(agent));
+            match user {
+                Some(mut user) => {
+                    user.on_game_full_start(p);
+                    mem::replace(&mut p.user, Some(user));
                 },
                 None => ()
             }
         }
 
         for p in &mut self.participants {
-            let agent = mem::replace(&mut p.agent, None);
+            let user = mem::replace(&mut p.user, None);
 
-            match agent {
-                Some(mut agent) => {
-                    agent.on_game_start(p);
-                    mem::replace(&mut p.agent, Some(agent));
+            match user {
+                Some(mut user) => {
+                    user.on_game_start(p);
+                    mem::replace(&mut p.user, Some(user));
                 },
                 None => ()
             }
@@ -219,16 +250,20 @@ impl Coordinator {
     }
 
     pub fn update(&mut self) -> Result<bool> {
-        let realtime = match self.game_settings {
-            Some(ref settings) => settings.is_realtime,
-            None => return Err(Error::Todo("game not started"))
-        };
-
-        if realtime {
+        if self.is_realtime {
             self.step_agents_realtime()?;
         }
         else {
             self.step_agents()?;
+        }
+
+        if !self.replay_observers.is_empty() {
+            if self.is_realtime {
+                unimplemented!("realtime replays");
+            }
+            else {
+                self.step_replay_observers()?;
+            }
         }
 
         Ok(!self.are_all_games_ended() || self.relaunched)
@@ -236,10 +271,6 @@ impl Coordinator {
 
     fn step_agents(&mut self) -> Result<()> {
         let mut result = Ok(());
-        let step_size = match self.game_settings {
-            Some(ref settings) => settings.step_size,
-            None => return Err(Error::Todo("game not started"))
-        };
 
         for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
@@ -255,7 +286,7 @@ impl Coordinator {
                 continue
             }
 
-            match p.req_step(step_size) {
+            match p.req_step(self.step_size) {
                 Err(e) => {
                     eprintln!("step err: {}", e);
                     result = Err(e)
@@ -301,12 +332,12 @@ impl Coordinator {
                 }*/
             }
             else {
-                let agent = mem::replace(&mut p.agent, None);
+                let user = mem::replace(&mut p.user, None);
 
-                match agent {
-                    Some(mut agent) => {
-                        agent.on_game_end(p);
-                        p.agent = Some(agent);
+                match user {
+                    Some(mut user) => {
+                        user.on_game_end(p);
+                        p.user = Some(user);
                     },
                     None => ()
                 }
@@ -352,7 +383,7 @@ impl Coordinator {
 
         for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
-                continue;
+                continue
             }
 
             if p.is_in_game() {
@@ -376,12 +407,12 @@ impl Coordinator {
                 }*/
             }
             else {
-                let agent = mem::replace(&mut p.agent, None);
+                let user = mem::replace(&mut p.user, None);
 
-                match agent {
-                    Some(mut agent) => {
-                        agent.on_game_end(p);
-                        mem::replace(&mut p.agent, Some(agent));
+                match user {
+                    Some(mut user) => {
+                        user.on_game_end(p);
+                        mem::replace(&mut p.user, Some(user));
                     },
                     None => ()
                 }
@@ -399,8 +430,126 @@ impl Coordinator {
         result
     }
 
+    fn start_replays(&mut self) -> Result<()> {
+        let mut result = Ok(());
+
+        for r in &mut self.replay_observers {
+            if !r.is_in_game() && r.is_ready_for_create_game() {
+                let replay_files = mem::replace(
+                    &mut self.replay_files, vec![ ]
+                );
+
+                for file in replay_files {
+                    let consume = match mem::replace(&mut r.user, None) {
+                        Some(user) => {
+                            match r.gather_replay_info(&file, true) {
+                                Err(e) => result = Err(e),
+                                _ => ()
+                            }
+
+                            //TODO: find out why this value is used
+                            let player_id = 0;
+
+                            let should_consume = {
+                                if !user.should_ignore(
+                                    r.get_replay_info(), player_id
+                                ) {
+                                    match
+                                        r.req_start_replay(&file, player_id)
+                                    {
+                                        Err(e) => result = Err(e),
+                                        _ => ()
+                                    }
+
+                                    true
+                                }
+                                else {
+                                    false
+                                }
+                            };
+
+                            r.user = Some(user);
+
+                            should_consume
+                        },
+                        None => false,
+                    };
+
+                    // TODO should relaunch
+
+                    if !consume {
+                        self.replay_files.push(file);
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    fn step_replay_observers(&mut self) -> Result<()> {
+        self.start_replays()?;
+
+        let mut result = Ok(());
+
+        for r in &mut self.replay_observers {
+            if r.get_app_state() != AppState::Normal {
+                continue
+            }
+
+            if r.has_response_pending() {
+                if !r.poll() {
+                    continue
+                }
+
+                match r.await_replay() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }
+            }
+
+            if r.is_in_game() {
+                match r.req_step(self.step_size) {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }
+
+                match r.await_step() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }
+
+                if !r.is_in_game() {
+                    let user = mem::replace(&mut r.user, None);
+
+                    match user {
+                        Some(mut user) => {
+                            user.on_game_end(r);
+
+                            r.user = Some(user);
+                        },
+                        None => ()
+                    }
+                }
+            }
+        }
+
+        for r in &mut self.replay_observers {
+            if r.get_app_state() != AppState::Normal {
+                continue
+            }
+
+            match r.issue_events() {
+                Err(e) => result = Err(e),
+                _ => ()
+            }
+        }
+
+        result
+    }
+
     fn are_all_games_ended(&self) -> bool {
-        for p in &self.participants {
+        for p in self.participants.iter().chain(self.replay_observers.iter()) {
             if p.is_in_game() || p.has_response_pending() {
                 return false
             }
@@ -410,14 +559,15 @@ impl Coordinator {
     }
 
     pub fn cleanup(&mut self) -> Result<()> {
-        for p in &mut self.participants {
-
+        for p in self.participants.iter_mut().chain(
+            self.replay_observers.iter_mut()
+        ) {
             match p.quit() {
                 Ok(_) => (),
                 Err(e) => {
                     eprintln!("unable to send quit: {}", e);
                 }
-            };
+            }
 
             match p.close() {
                 Ok(_) => (),
@@ -432,7 +582,11 @@ impl Coordinator {
                     eprintln!("unable to terminate process: {}", e);
                 }
             }
-        };
+        }
+
+        self.players.clear();
+        self.participants.clear();
+        self.replay_observers.clear();
 
         Ok(())
     }

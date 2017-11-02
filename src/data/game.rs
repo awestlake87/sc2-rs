@@ -5,6 +5,25 @@ use sc2_proto::sc2api;
 
 use super::{ Point2 };
 
+#[derive(Copy, Clone)]
+pub enum GameResult {
+    Win,
+    Loss,
+    Tie,
+    Undecided,
+}
+
+impl From<sc2api::Result> for GameResult {
+    fn from(r: sc2api::Result) -> GameResult {
+        match r {
+            sc2api::Result::Victory => GameResult::Win,
+            sc2api::Result::Defeat => GameResult::Loss,
+            sc2api::Result::Tie => GameResult::Tie,
+            sc2api::Result::Undecided => GameResult::Undecided,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Map {
     LocalMap(PathBuf),
@@ -27,8 +46,6 @@ pub struct GamePorts {
 #[derive(Clone)]
 pub struct GameSettings {
     pub map:            Map,
-    pub is_realtime:    bool,
-    pub step_size:      usize,
 }
 
 #[derive(Clone)]

@@ -9,6 +9,7 @@ use sc2_proto::sc2api;
 
 use super::{ Participant, Observer, AppState };
 use super::super::{ Result, Error };
+use super::super::agent::{ Agent };
 use super::super::data::{
     GameSettings,
     GamePorts,
@@ -21,7 +22,10 @@ use super::super::data::{
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
     fn create_game(
-        &mut self, settings: &GameSettings, players: &Vec<PlayerSetup>
+        &mut self,
+        settings: &GameSettings,
+        players: &Vec<PlayerSetup>,
+        is_realtime: bool
     )
         -> Result<()>
     ;
@@ -54,7 +58,10 @@ impl Control for Participant {
         unimplemented!("save map");
     }
     fn create_game(
-        &mut self, settings: &GameSettings, players: &Vec<PlayerSetup>
+        &mut self,
+        settings: &GameSettings,
+        players: &Vec<PlayerSetup>,
+        is_realtime: bool
     )
         -> Result<()>
     {
@@ -99,7 +106,7 @@ impl Control for Participant {
             req.mut_create_game().mut_player_setup().push(setup);
         }
 
-        req.mut_create_game().set_realtime(settings.is_realtime);
+        req.mut_create_game().set_realtime(is_realtime);
 
         self.send(req)?;
         let rsp = self.recv()?;
@@ -229,12 +236,12 @@ impl Control for Participant {
         self.issue_upgrade_events()?;
         self.issue_alert_events()?;
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
-                agent.on_step(self);
-                mem::replace(&mut self.agent, Some(agent));
+        match user {
+            Some(mut user) => {
+                user.on_step(self);
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -277,15 +284,15 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for ref u in destroyed_units {
-                    agent.on_unit_destroyed(self, u);
+                    user.on_unit_destroyed(self, u);
                 }
 
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -312,19 +319,19 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for ref u in detected_units {
-                    agent.on_unit_detected(self, u);
+                    user.on_unit_detected(self, u);
                 }
 
                 for ref u in created_units {
-                    agent.on_unit_created(self, u);
+                    user.on_unit_created(self, u);
                 }
 
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -364,14 +371,14 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for ref u in idle_units {
-                    agent.on_unit_idle(self, u);
+                    user.on_unit_idle(self, u);
                 }
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -396,14 +403,14 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for ref u in building_completed_units {
-                    agent.on_building_complete(self, u);
+                    user.on_building_complete(self, u);
                 }
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -427,14 +434,14 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for u in new_upgrades {
-                    agent.on_upgrade_complete(self, u);
+                    user.on_upgrade_complete(self, u);
                 }
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }
@@ -452,18 +459,18 @@ impl InnerControl for Participant {
             }
         }
 
-        let agent = mem::replace(&mut self.agent, None);
+        let user = mem::replace(&mut self.user, None);
 
-        match agent {
-            Some(mut agent) => {
+        match user {
+            Some(mut user) => {
                 for _ in 0..nukes {
-                    agent.on_nuke_detected(self);
+                    user.on_nuke_detected(self);
                 }
                 for _ in 0..nydus_worms {
-                    agent.on_nydus_detected(self);
+                    user.on_nydus_detected(self);
                 }
 
-                mem::replace(&mut self.agent, Some(agent));
+                mem::replace(&mut self.user, Some(user));
             },
             None => ()
         }

@@ -9,6 +9,7 @@ use docopt::Docopt;
 
 use sc2::coordinator::{ Coordinator };
 use sc2::data::{ PlayerSetup, Race };
+use sc2::participant::{ User };
 
 use examples_common::{
     USAGE,
@@ -46,8 +47,8 @@ fn main() {
 
     match coordinator.launch_starcraft(
         vec![
-            (p1, Some(Box::from(TerranBot::new()))),
-            (p2, Some(Box::from(TerranBot::new())))
+            (p1, Some(User::Agent(Box::from(TerranBot::new())))),
+            (p2, Some(User::Agent(Box::from(TerranBot::new()))))
         ]
     ) {
         Ok(_) => println!("launched!"),

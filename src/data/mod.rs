@@ -12,6 +12,7 @@ use na;
 use na::geometry;
 
 use sc2_proto::raw;
+use sc2_proto::sc2api;
 
 pub use self::ability::*;
 pub use self::action::*;
@@ -21,6 +22,7 @@ pub use self::player::*;
 pub use self::score::*;
 pub use self::unit::*;
 pub use self::upgrade::*;
+
 
 #[derive(Copy, Clone)]
 pub struct Rect<T> {
@@ -184,6 +186,74 @@ impl From<raw::PowerSource> for PowerSource {
                 Point2::new(pos.get_x(), pos.get_y())
             },
             radius: source.get_radius(),
+        }
+    }
+}
+
+
+pub struct ReplayPlayerInfo {
+    pub player_id:              u32,
+    pub mmr:                    i32,
+    pub apm:                    i32,
+
+    pub race:                   Race,
+    pub race_selected:          Option<Race>, // if player selected Random
+    pub game_result:            Option<GameResult>,
+}
+
+pub struct ReplayInfo {
+    pub map_name:               String,
+    pub map_path:               String,
+    pub game_version:           String,
+    pub data_version:           String,
+
+    pub duration:               f32,
+    pub num_steps:              u32,
+
+    pub data_build:             u32,
+    pub base_build:             u32,
+
+    pub players:                Vec<ReplayPlayerInfo>
+}
+
+impl ReplayInfo {
+    pub fn from_proto(info: &sc2api::ResponseReplayInfo) -> Self {
+        Self {
+            map_name: info.get_map_name().to_string(),
+            map_path: info.get_local_map_path().to_string(),
+            game_version: info.get_game_version().to_string(),
+            data_version: info.get_data_version().to_string(),
+
+            duration: info.get_game_duration_seconds(),
+            num_steps: info.get_game_duration_loops(),
+
+            data_build: info.get_data_build(),
+            base_build: info.get_base_build(),
+
+            players: info.get_player_info().iter().map(
+                |p| ReplayPlayerInfo {
+                    player_id: p.get_player_info().get_player_id(),
+
+                    race: Race::from_proto(
+                        p.get_player_info().get_race_actual()
+                    ).unwrap(),
+                    race_selected: Race::from_proto(
+                        p.get_player_info().get_race_requested()
+                    ),
+
+                    mmr: p.get_player_mmr(),
+                    apm: p.get_player_apm(),
+
+                    game_result: {
+                        if p.has_player_result() {
+                            Some(p.get_player_result().get_result().into())
+                        }
+                        else {
+                            None
+                        }
+                    }
+                }
+            ).collect()
         }
     }
 }

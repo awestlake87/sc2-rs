@@ -17,6 +17,7 @@ pub mod coordinator;
 pub mod data;
 mod instance;
 pub mod participant;
+pub mod replay_observer;
 pub mod utils;
 
 use std::result;

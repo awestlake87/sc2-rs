@@ -4,6 +4,7 @@ mod control;
 mod debug;
 mod observer;
 mod query;
+mod replay;
 mod spatial_actions;
 
 use std::collections::HashMap;
@@ -30,22 +31,116 @@ use super::data::{
     SpatialAction,
     Ability,
     AbilityData,
-    Score
+    Score,
+    ReplayInfo
 };
 use super::instance::Instance;
+use super::replay_observer::ReplayObserver;
 
 pub use self::actions::*;
 pub use self::control::*;
 pub use self::debug::*;
 pub use self::observer::*;
 pub use self::query::*;
+pub use self::replay::*;
 pub use self::spatial_actions::*;
+
+pub enum User {
+    Agent(Box<Agent>),
+    Observer(Box<ReplayObserver>),
+}
+
+impl Agent for User {
+    fn on_game_full_start(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_game_full_start(p),
+            &mut User::Observer(ref mut o) => o.on_game_full_start(p),
+        }
+    }
+    fn on_game_start(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_game_start(p),
+            &mut User::Observer(ref mut o) => o.on_game_start(p),
+        }
+    }
+    fn on_game_end(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_game_end(p),
+            &mut User::Observer(ref mut o) => o.on_game_end(p),
+        }
+    }
+    fn on_step(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_step(p),
+            &mut User::Observer(ref mut o) => o.on_step(p),
+        }
+    }
+
+    fn on_unit_destroyed(&mut self, p: &mut Participant, u: &Unit) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_unit_destroyed(p, u),
+            &mut User::Observer(ref mut o) => o.on_unit_destroyed(p, u),
+        }
+    }
+    fn on_unit_created(&mut self, p: &mut Participant, u: &Unit) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_unit_created(p, u),
+            &mut User::Observer(ref mut o) => o.on_unit_created(p, u),
+        }
+    }
+    fn on_unit_idle(&mut self, p: &mut Participant, u: &Unit) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_unit_idle(p, u),
+            &mut User::Observer(ref mut o) => o.on_unit_idle(p, u),
+        }
+    }
+    fn on_upgrade_complete(&mut self, p: &mut Participant, u: Upgrade) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_upgrade_complete(p, u),
+            &mut User::Observer(ref mut o) => o.on_upgrade_complete(p, u),
+        }
+    }
+    fn on_building_complete(&mut self, p: &mut Participant, u: &Unit) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_building_complete(p, u),
+            &mut User::Observer(ref mut o) => o.on_building_complete(p, u),
+        }
+    }
+
+    fn on_nydus_detected(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_nydus_detected(p),
+            &mut User::Observer(ref mut o) => o.on_nydus_detected(p),
+        }
+    }
+    fn on_nuke_detected(&mut self, p: &mut Participant) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_nuke_detected(p),
+            &mut User::Observer(ref mut o) => o.on_nuke_detected(p),
+        }
+    }
+    fn on_unit_detected(&mut self, p: &mut Participant, u: &Unit) {
+        match self {
+            &mut User::Agent(ref mut a) => a.on_unit_detected(p, u),
+            &mut User::Observer(ref mut o) => o.on_unit_detected(p, u),
+        }
+    }
+}
+
+impl ReplayObserver for User {
+    fn should_ignore(&self, info: &ReplayInfo, player_id: u32) -> bool {
+        match self {
+            &User::Observer(ref o) => o.should_ignore(info, player_id),
+            _ => panic!("user is not a replay observer")
+        }
+    }
+}
 
 pub struct Participant {
     pub player:                 PlayerSetup,
     pub instance:               Instance,
     client:                     Client,
-    pub agent:                  Option<Box<Agent>>,
+    pub user:                  Option<User>,
 
     app_state:                  AppState,
     last_status:                AppStatus,
@@ -76,6 +171,8 @@ pub struct Participant {
     player_data:                PlayerData,
     score:                      Option<Score>,
 
+    replay_info:                Option<ReplayInfo>,
+
     use_generalized_ability:    bool
 }
 
@@ -84,7 +181,7 @@ impl Participant {
         instance: Instance,
         client: Client,
         player: PlayerSetup,
-        agent: Option<Box<Agent>>
+        user: Option<User>
     )
         -> Participant
     {
@@ -92,7 +189,7 @@ impl Participant {
             player: player,
             instance: instance,
             client: client,
-            agent: agent,
+            user: user,
 
             app_state: AppState::Normal,
             last_status: AppStatus::Launched,
@@ -137,6 +234,8 @@ impl Participant {
                 larva_count: 0,
             },
             score: None,
+
+            replay_info: None,
 
             use_generalized_ability: true
         }
