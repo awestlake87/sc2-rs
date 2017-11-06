@@ -30,14 +30,15 @@ Usage:
 
 Options:
   -h --help                         Show this screen.
+  --version                         Show version.
+  --wine                            Use Wine to run StarCraft II (for Linux).
   -d <path> --dir=<path>            Path to the StarCraft II installation.
   -p <port> --port=<port>           Port to make StarCraft II listen on.
   -m <name> --map=<name>            Name of the Blizzard StarCraft II map.
   -r --realtime                     Run StarCraft II in real time
   -s <count> --step-size=<count>    How many steps to take per call.
   --local-map=<path>                Path to a local StarCraft II map.
-  --wine                            Use Wine to run StarCraft II (for Linux).
-  --version                         Show version.
+  --replay-dir=<path>               Path to a replay pack
 ";
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +47,7 @@ pub struct Args {
     pub flag_port:                  Option<u16>,
     pub flag_map:                   Option<String>,
     pub flag_local_map:             Option<PathBuf>,
+    pub flag_replay_dir:            Option<PathBuf>,
     pub flag_wine:                  bool,
     pub flag_version:               bool,
     pub flag_realtime:              bool,
@@ -63,9 +65,7 @@ pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
             None => default_settings.port
         },
 
-        replay_files: vec![
-            "/home/najen/Sc2-3.16.1/Replays/00a0a1b139395dbbba8058a0ec42128b2356cf92abd1dd0ae7059692c37124be.SC2Replay".to_string()
-        ],
+        replay_files: vec![ ],
 
         is_realtime: args.flag_realtime,
         step_size: match args.flag_step_size {

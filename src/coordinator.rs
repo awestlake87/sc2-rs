@@ -27,7 +27,7 @@ pub struct CoordinatorSettings {
     pub port:               u16,
     pub window:             Rect<u32>,
 
-    pub replay_files:       Vec<String>,
+    pub replay_files:       Vec<PathBuf>,
     pub is_realtime:        bool,
     pub step_size:          usize,
 }
@@ -55,7 +55,7 @@ pub struct Coordinator {
     window:                 Rect<u32>,
     participants:           Vec<Participant>,
     replay_observers:       Vec<Participant>,
-    replay_files:           Vec<String>,
+    replay_files:           Vec<PathBuf>,
     players:                Vec<PlayerSetup>,
     ports:                  Option<GamePorts>,
     game_settings:          Option<GameSettings>,
@@ -220,6 +220,7 @@ impl Coordinator {
 
         for p in &mut self.participants {
             p.await_join_game()?;
+            p.update_data()?;
         }
 
         for p in &mut self.participants {
@@ -434,15 +435,28 @@ impl Coordinator {
         let mut result = Ok(());
 
         for r in &mut self.replay_observers {
+            let mut started = false;
+
             if !r.is_in_game() && r.is_ready_for_create_game() {
                 let replay_files = mem::replace(
                     &mut self.replay_files, vec![ ]
                 );
 
                 for file in replay_files {
-                    let consume = match mem::replace(&mut r.user, None) {
+                    let user = {
+                        if !started {
+                            mem::replace(&mut r.user, None)
+                        }
+                        else {
+                            None
+                        }
+                    };
+
+                    let consume = match user {
                         Some(user) => {
-                            match r.gather_replay_info(&file, true) {
+                            match r.gather_replay_info(
+                                &file.to_string_lossy(), true
+                            ) {
                                 Err(e) => result = Err(e),
                                 _ => ()
                             }
@@ -450,18 +464,19 @@ impl Coordinator {
                             //TODO: find out why this value is used
                             let player_id = 0;
 
-                            let should_consume = {
+                            started = {
                                 if !user.should_ignore(
                                     r.get_replay_info(), player_id
                                 ) {
-                                    match
-                                        r.req_start_replay(&file, player_id)
-                                    {
-                                        Err(e) => result = Err(e),
-                                        _ => ()
+                                    match r.req_start_replay(
+                                        &file.to_string_lossy(), player_id
+                                    ) {
+                                        Err(e) => {
+                                            result = Err(e);
+                                            false
+                                        },
+                                        _ => true
                                     }
-
-                                    true
                                 }
                                 else {
                                     false
@@ -470,7 +485,7 @@ impl Coordinator {
 
                             r.user = Some(user);
 
-                            should_consume
+                            started
                         },
                         None => false,
                     };
@@ -488,8 +503,6 @@ impl Coordinator {
     }
 
     fn step_replay_observers(&mut self) -> Result<()> {
-        self.start_replays()?;
-
         let mut result = Ok(());
 
         for r in &mut self.replay_observers {
@@ -503,6 +516,11 @@ impl Coordinator {
                 }
 
                 match r.await_replay() {
+                    Err(e) => result = Err(e),
+                    _ => ()
+                }
+
+                match r.update_data() {
                     Err(e) => result = Err(e),
                     _ => ()
                 }
@@ -545,7 +563,10 @@ impl Coordinator {
             }
         }
 
-        result
+        match result {
+            Ok(_) => self.start_replays(),
+            Err(e) => Err(e)
+        }
     }
 
     fn are_all_games_ended(&self) -> bool {

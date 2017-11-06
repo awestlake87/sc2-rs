@@ -11,6 +11,7 @@ mod upgrade;
 use na;
 use na::geometry;
 
+use sc2_proto::data;
 use sc2_proto::raw;
 use sc2_proto::sc2api;
 
@@ -22,7 +23,6 @@ pub use self::player::*;
 pub use self::score::*;
 pub use self::unit::*;
 pub use self::upgrade::*;
-
 
 #[derive(Copy, Clone)]
 pub struct Rect<T> {
@@ -109,8 +109,25 @@ pub enum Attribute {
     Structure,
     Hover,
     Heroic,
-    Summoned,
-    Invalid
+    Summoned
+}
+
+impl From<data::Attribute> for Attribute {
+    fn from(a: data::Attribute) -> Self {
+        match a {
+            data::Attribute::Light => Attribute::Light,
+            data::Attribute::Armored => Attribute::Armored,
+            data::Attribute::Biological => Attribute::Biological,
+            data::Attribute::Mechanical => Attribute::Mechanical,
+            data::Attribute::Robotic => Attribute::Robotic,
+            data::Attribute::Psionic => Attribute::Psionic,
+            data::Attribute::Massive => Attribute::Massive,
+            data::Attribute::Structure => Attribute::Structure,
+            data::Attribute::Hover => Attribute::Hover,
+            data::Attribute::Heroic => Attribute::Heroic,
+            data::Attribute::Summoned => Attribute::Summoned,
+        }
+    }
 }
 
 pub struct DamageBonus {
@@ -118,11 +135,29 @@ pub struct DamageBonus {
     pub bonus:                  f32,
 }
 
+impl DamageBonus {
+    pub fn from_proto(b: &data::DamageBonus) -> Self {
+        Self {
+            attribute: Attribute::from(b.get_attribute()),
+            bonus: b.get_bonus()
+        }
+    }
+}
+
 pub enum WeaponTargetType {
     Ground,
     Air,
     Any,
-    Invalid,
+}
+
+impl From<data::Weapon_TargetType> for WeaponTargetType {
+    fn from(target: data::Weapon_TargetType) -> Self {
+        match target {
+            data::Weapon_TargetType::Ground => WeaponTargetType::Ground,
+            data::Weapon_TargetType::Air => WeaponTargetType::Air,
+            data::Weapon_TargetType::Any => WeaponTargetType::Any,
+        }
+    }
 }
 
 pub struct Weapon {
@@ -134,13 +169,28 @@ pub struct Weapon {
     pub speed:                  f32,
 }
 
+impl Weapon {
+    pub fn from_proto(w: &data::Weapon) -> Self {
+        Self {
+            target_type: WeaponTargetType::from(w.get_field_type()),
+            damage: w.get_damage(),
+            damage_bonus: w.get_damage_bonus().iter().map(
+                |b| DamageBonus::from_proto(b)
+            ).collect(),
+            attacks: w.get_attacks(),
+            range: w.get_range(),
+            speed: w.get_speed(),
+        }
+    }
+}
+
 pub struct UnitTypeData {
     pub unit_type:              UnitType,
     pub name:                   String,
     pub available:              bool,
     pub cargo_size:             u32,
-    pub mineral_cost:           i32,
-    pub vespene_cost:           i32,
+    pub mineral_cost:           u32,
+    pub vespene_cost:           u32,
     pub attributes:             Vec<Attribute>,
     pub movement_speed:         f32,
     pub armor:                  f32,
@@ -148,13 +198,60 @@ pub struct UnitTypeData {
     pub food_required:          f32,
     pub food_provided:          f32,
     pub ability:                Ability,
-    pub race:                   Race,
+    pub race:                   Option<Race>,
     pub build_time:             f32,
     pub has_minerals:           bool,
     pub has_vespene:            bool,
     pub tech_alias:             Vec<UnitType>,
+    pub unit_alias:             UnitType,
     pub tech_requirement:       UnitType,
     pub require_attached:       bool,
+}
+
+impl UnitTypeData {
+    pub fn from_proto(data: &data::UnitTypeData) -> Self {
+        Self {
+            unit_type: UnitType::from_id(data.get_unit_id()),
+            name: data.get_name().to_string(),
+            available: data.get_available(),
+            cargo_size: data.get_cargo_size(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
+
+            attributes: {
+                let mut attributes = vec![ ];
+
+                for a in data.get_attributes() {
+                    attributes.push(Attribute::from(*a));
+                }
+
+                attributes
+            },
+
+            movement_speed: data.get_movement_speed(),
+            armor: data.get_armor(),
+            weapons: data.get_weapons().iter().map(
+                |w| Weapon::from_proto(w)
+            ).collect(),
+            food_required: data.get_food_required(),
+            food_provided: data.get_food_provided(),
+
+            ability: Ability::from_id(data.get_ability_id()),
+            race: Race::from_proto(data.get_race()),
+            build_time: data.get_build_time(),
+            has_minerals: data.get_has_minerals(),
+            has_vespene: data.get_has_vespene(),
+
+            tech_alias: data.get_tech_alias().iter().map(
+                |a| UnitType::from_id(*a)
+            ).collect(),
+            unit_alias: UnitType::from_id(data.get_unit_alias()),
+            tech_requirement: UnitType::from_id(
+                data.get_tech_requirement()
+            ),
+            require_attached: data.get_require_attached()
+        }
+    }
 }
 
 pub struct UpgradeData {

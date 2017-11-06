@@ -32,7 +32,9 @@ use super::data::{
     Ability,
     AbilityData,
     Score,
-    ReplayInfo
+    ReplayInfo,
+    UnitType,
+    UnitTypeData,
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
@@ -152,6 +154,8 @@ pub struct Participant {
 
     commands:                   Vec<Tag>,
 
+    unit_type_data:             HashMap<UnitType, UnitTypeData>,
+
     previous_units:             HashMap<Tag, Rc<Unit>>,
     units:                      HashMap<Tag, Rc<Unit>>,
     power_sources:              Vec<PowerSource>,
@@ -200,6 +204,8 @@ impl Participant {
             observation: sc2api::ResponseObservation::new(),
 
             commands: vec![ ],
+
+            unit_type_data: HashMap::new(),
 
             previous_units: HashMap::new(),
             units: HashMap::new(),

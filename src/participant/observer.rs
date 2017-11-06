@@ -18,7 +18,9 @@ use super::super::data::{
     Point3,
     Action,
     SpatialAction,
-    Score
+    Score,
+    UnitType,
+    UnitTypeData
 };
 
 pub trait Observer {
@@ -36,7 +38,7 @@ pub trait Observer {
     fn get_upgrades(&self) -> &Vec<Upgrade>;
     fn get_score(&self) -> &Score;
     //fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
-    //fn get_unit_type_data(&self)
+    fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData>;
     //fn get_upgrade_data(&self)
     //fn get_buff_data(&self)
     fn get_game_info(&mut self) -> Result<&GameInfo>;
@@ -57,6 +59,7 @@ pub trait Observer {
     fn is_placable(&self, point: Point2) -> bool;
     fn get_terrain_height(&self, point: Point2) -> f32;
 
+    fn update_data(&mut self) -> Result<()>;
     fn update_observation(&mut self) -> Result<()>;
 }
 
@@ -98,6 +101,12 @@ impl Observer for Participant {
     fn get_score(&self) -> &Score {
         unimplemented!("get score");
     }
+    //fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
+    fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData> {
+        &self.unit_type_data
+    }
+    //fn get_upgrade_data(&self)
+    //fn get_buff_data(&self)
 
     fn get_game_info(&mut self) -> Result<&GameInfo> {
         let mut req = sc2api::Request::new();
@@ -156,6 +165,24 @@ impl Observer for Participant {
     }
     fn get_terrain_height(&self, _: Point2) -> f32 {
         unimplemented!("get terrain height");
+    }
+
+    fn update_data(&mut self) -> Result<()> {
+        let mut req = sc2api::Request::new();
+        req.mut_data().set_unit_type_id(true);
+
+        self.send(req)?;
+        let rsp = self.recv()?;
+
+        self.unit_type_data.clear();
+
+        for data in rsp.get_data().get_units() {
+            let u = UnitTypeData::from_proto(data);
+
+            self.unit_type_data.insert(u.unit_type, u);
+        }
+
+        Ok(())
     }
 
     fn update_observation(&mut self) -> Result<()> {
