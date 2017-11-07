@@ -13,9 +13,10 @@ mod terran_bot;
 
 use std::path::PathBuf;
 
-use sc2::coordinator::{ CoordinatorSettings };
-use sc2::data::{ GameSettings, Map };
-use sc2::{ Result, Error };
+use rand::random;
+
+use sc2::{ CoordinatorSettings, Result, Error };
+use sc2::data::{ Rect2, Point2, GameInfo, GameSettings, Map };
 
 pub use marine_micro_bot::{ MarineMicroBot };
 pub use terran_bot::{ TerranBot };
@@ -119,4 +120,22 @@ pub fn poll_escape(events: &mut glutin::EventsLoop) -> bool {
     );
 
     escape
+}
+
+pub fn find_random_location_in_rect(r: Rect2) -> Point2 {
+    let w = r.to.x - r.from.x;
+    let h = r.to.y - r.from.y;
+
+    Point2::new(
+        w * random::<f32>() + r.from.x, h * random::<f32>() + r.from.y
+    )
+}
+
+pub fn find_random_location(game_info: &GameInfo) -> Point2 {
+    find_random_location_in_rect(
+        Rect2 {
+            from: game_info.playable_min,
+            to: game_info.playable_max
+        }
+    )
 }

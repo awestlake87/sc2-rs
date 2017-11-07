@@ -1,9 +1,9 @@
 
-use super::{ Participant };
-use super::super::{ Result };
-use super::super::data::{ Ability, Point2I, Rect2I, PointSelectType };
+use super::{ Result };
+use data::{ Ability, Point2I, Rect2I, PointSelectType };
+use participant::{ Participant };
 
-pub trait SpatialActions {
+pub trait FeatureLayerActions {
     fn command_unit_spatial(&mut self, ability: Ability) -> Result<()>;
     fn command_unit_screen(&mut self, ability: Ability, point: Point2I)
         -> Result<()>
@@ -20,7 +20,7 @@ pub trait SpatialActions {
     fn send_spatial_actions(&mut self) -> Result<()>;
 }
 
-impl SpatialActions for Participant {
+impl FeatureLayerActions for Participant {
     fn command_unit_spatial(&mut self, _: Ability) -> Result<()> {
         unimplemented!("command unit spatial");
     }

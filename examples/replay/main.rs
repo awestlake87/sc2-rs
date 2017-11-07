@@ -12,11 +12,8 @@ use std::path::{ MAIN_SEPARATOR };
 use docopt::Docopt;
 use glob::glob;
 
-use sc2::agent::{ Agent };
-use sc2::replay_observer::{ ReplayObserver };
-use sc2::coordinator::{ Coordinator };
+use sc2::{ Agent, Coordinator, Participant, User, Observer, ReplayObserver };
 use sc2::data::{ PlayerSetup, Unit, UnitType };
-use sc2::participant::{ Participant, User, Observer };
 
 use examples_common::{
     USAGE, Args, get_coordinator_settings, poll_escape

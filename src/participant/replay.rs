@@ -6,7 +6,6 @@ use sc2_proto::sc2api::{ Request };
 use super::super::{ Result };
 use super::super::agent::{ Agent };
 use super::super::data::{ ReplayInfo };
-
 use super::{ Participant, Observer };
 
 pub trait Replay {
@@ -18,7 +17,7 @@ pub trait Replay {
         -> Result<()>
     ;
 
-    fn req_start_replay(&mut self, file_path: &str, player_id: u32)
+    fn req_start_replay(&mut self, file_path: &str)
         -> Result<()>
     ;
     fn await_replay(&mut self) -> Result<()>;
@@ -51,9 +50,12 @@ impl Replay for Participant {
         Ok(())
     }
 
-    fn req_start_replay(&mut self, file_path: &str, player_id: u32)
+    fn req_start_replay(&mut self, file_path: &str)
         -> Result<()>
     {
+        //TODO: figure out how to use this value
+        let player_id = 0;
+
         let mut req = Request::new();
 
         req.mut_start_replay().set_replay_path(file_path.to_string());
@@ -81,13 +83,7 @@ impl Replay for Participant {
 
         self.update_observation()?;
 
-        match mem::replace(&mut self.user, None) {
-            Some(mut user) => {
-                user.on_game_start(self);
-                self.user = Some(user);
-            },
-            None => ()
-        }
+        self.on_game_start();
 
         Ok(())
     }

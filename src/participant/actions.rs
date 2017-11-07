@@ -3,9 +3,9 @@ use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
-use super::{ Participant };
-use super::super::{ Result };
-use super::super::data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
+use super::{ Result };
+use data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
+use participant::{ Participant };
 
 pub trait Actions {
     fn command_units(&mut self, units: &Vec<Rc<Unit>>, ability: Ability);

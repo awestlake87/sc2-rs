@@ -2,8 +2,7 @@
 use num::Float;
 
 use sc2::data::{ Tag, Point2, UnitType, Alliance, Ability, Unit };
-use sc2::agent::{ Agent };
-use sc2::participant::{ Participant, Observer, Actions };
+use sc2::{ Agent, Participant, Observer, Actions };
 
 use na::{ distance, distance_squared, normalize };
 

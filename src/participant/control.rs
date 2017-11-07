@@ -7,9 +7,8 @@ use std::rc::Rc;
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::{ Participant, Observer, AppState };
 use super::super::{ Result, Error };
-use super::super::agent::{ Agent };
+use super::super::agent::Agent;
 use super::super::data::{
     GameSettings,
     GamePorts,
@@ -18,6 +17,7 @@ use super::super::data::{
     Alliance,
     DisplayType
 };
+use super::{ Participant, AppState, Observer };
 
 pub trait Control {
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
@@ -236,15 +236,7 @@ impl Control for Participant {
         self.issue_upgrade_events()?;
         self.issue_alert_events()?;
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                user.on_step(self);
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
-        }
+        self.on_step();
 
         Ok(())
     }
@@ -284,17 +276,8 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                for ref u in destroyed_units {
-                    user.on_unit_destroyed(self, u);
-                }
-
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for ref u in destroyed_units {
+            self.on_unit_destroyed(u);
         }
 
         Ok(())
@@ -319,21 +302,12 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
+        for ref u in detected_units {
+            self.on_unit_detected(u);
+        }
 
-        match user {
-            Some(mut user) => {
-                for ref u in detected_units {
-                    user.on_unit_detected(self, u);
-                }
-
-                for ref u in created_units {
-                    user.on_unit_created(self, u);
-                }
-
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for ref u in created_units {
+            self.on_unit_created(u);
         }
 
         Ok(())
@@ -371,16 +345,8 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                for ref u in idle_units {
-                    user.on_unit_idle(self, u);
-                }
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for ref u in idle_units {
+            self.on_unit_idle(u);
         }
 
         Ok(())
@@ -403,16 +369,8 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                for ref u in building_completed_units {
-                    user.on_building_complete(self, u);
-                }
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for ref u in building_completed_units {
+            self.on_building_complete(u);
         }
 
         Ok(())
@@ -434,16 +392,8 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                for u in new_upgrades {
-                    user.on_upgrade_complete(self, u);
-                }
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for u in new_upgrades {
+            self.on_upgrade_complete(u);
         }
 
         Ok(())
@@ -459,20 +409,11 @@ impl InnerControl for Participant {
             }
         }
 
-        let user = mem::replace(&mut self.user, None);
-
-        match user {
-            Some(mut user) => {
-                for _ in 0..nukes {
-                    user.on_nuke_detected(self);
-                }
-                for _ in 0..nydus_worms {
-                    user.on_nydus_detected(self);
-                }
-
-                mem::replace(&mut self.user, Some(user));
-            },
-            None => ()
+        for _ in 0..nukes {
+            self.on_nuke_detected();
+        }
+        for _ in 0..nydus_worms {
+            self.on_nydus_detected();
         }
 
         Ok(())

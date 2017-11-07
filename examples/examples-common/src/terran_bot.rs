@@ -4,8 +4,7 @@ use std::rc::Rc;
 use rand::random;
 
 use sc2::data::{ Tag, Vector2, Point2, GameInfo, Alliance, UnitType, Ability };
-use sc2::agent::{ Agent };
-use sc2::participant::{ Participant, Observer, Actions };
+use sc2::{ Agent, Participant, Observer, Actions };
 
 const TARGET_SCV_COUNT: usize = 15;
 

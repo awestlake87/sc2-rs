@@ -7,9 +7,8 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::coordinator::{ Coordinator };
+use sc2::{ Coordinator, User };
 use sc2::data::{ PlayerSetup, Difficulty, Race };
-use sc2::participant::{ User };
 
 use examples_common::{
     USAGE,

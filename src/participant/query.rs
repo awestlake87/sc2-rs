@@ -1,7 +1,7 @@
 
-use super::{ Participant };
-use super::super::{ Result };
-use super::super::data::{ Tag, Point2, Ability, Unit, AvailableAbility };
+use super::{ Result };
+use data::{ Tag, Point2, Ability, Unit, AvailableAbility };
+use participant::{ Participant };
 
 pub enum PathStart {
     UnitTag(Tag),

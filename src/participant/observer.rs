@@ -5,9 +5,8 @@ use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
-use super::{ Participant, AppState };
-use super::super::{ Result, Error };
-use super::super::data::{
+use super::{ Result, Error };
+use data::{
     PowerSource,
     PlayerData,
     GameState,
@@ -22,6 +21,7 @@ use super::super::data::{
     UnitType,
     UnitTypeData
 };
+use participant::{ Participant, AppState };
 
 pub trait Observer {
     fn get_player_id(&self) -> Option<u32>;

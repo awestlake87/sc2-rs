@@ -8,6 +8,7 @@ mod replay;
 mod spatial_actions;
 
 use std::collections::HashMap;
+use std::mem;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -39,110 +40,23 @@ use super::data::{
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
 
-pub use self::actions::*;
-pub use self::control::*;
-pub use self::debug::*;
-pub use self::observer::*;
-pub use self::query::*;
-pub use self::replay::*;
-pub use self::spatial_actions::*;
+pub use self::actions::Actions;
+pub use self::control::Control;
+pub use self::observer::Observer;
+pub use self::query::Query;
+pub use self::replay::Replay;
+pub use self::spatial_actions::FeatureLayerActions;
 
 pub enum User {
     Agent(Box<Agent>),
     Observer(Box<ReplayObserver>),
 }
 
-impl Agent for User {
-    fn on_game_full_start(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_game_full_start(p),
-            &mut User::Observer(ref mut o) => o.on_game_full_start(p),
-        }
-    }
-    fn on_game_start(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_game_start(p),
-            &mut User::Observer(ref mut o) => o.on_game_start(p),
-        }
-    }
-    fn on_game_end(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_game_end(p),
-            &mut User::Observer(ref mut o) => o.on_game_end(p),
-        }
-    }
-    fn on_step(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_step(p),
-            &mut User::Observer(ref mut o) => o.on_step(p),
-        }
-    }
-
-    fn on_unit_destroyed(&mut self, p: &mut Participant, u: &Unit) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_unit_destroyed(p, u),
-            &mut User::Observer(ref mut o) => o.on_unit_destroyed(p, u),
-        }
-    }
-    fn on_unit_created(&mut self, p: &mut Participant, u: &Unit) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_unit_created(p, u),
-            &mut User::Observer(ref mut o) => o.on_unit_created(p, u),
-        }
-    }
-    fn on_unit_idle(&mut self, p: &mut Participant, u: &Unit) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_unit_idle(p, u),
-            &mut User::Observer(ref mut o) => o.on_unit_idle(p, u),
-        }
-    }
-    fn on_upgrade_complete(&mut self, p: &mut Participant, u: Upgrade) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_upgrade_complete(p, u),
-            &mut User::Observer(ref mut o) => o.on_upgrade_complete(p, u),
-        }
-    }
-    fn on_building_complete(&mut self, p: &mut Participant, u: &Unit) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_building_complete(p, u),
-            &mut User::Observer(ref mut o) => o.on_building_complete(p, u),
-        }
-    }
-
-    fn on_nydus_detected(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_nydus_detected(p),
-            &mut User::Observer(ref mut o) => o.on_nydus_detected(p),
-        }
-    }
-    fn on_nuke_detected(&mut self, p: &mut Participant) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_nuke_detected(p),
-            &mut User::Observer(ref mut o) => o.on_nuke_detected(p),
-        }
-    }
-    fn on_unit_detected(&mut self, p: &mut Participant, u: &Unit) {
-        match self {
-            &mut User::Agent(ref mut a) => a.on_unit_detected(p, u),
-            &mut User::Observer(ref mut o) => o.on_unit_detected(p, u),
-        }
-    }
-}
-
-impl ReplayObserver for User {
-    fn should_ignore(&self, info: &ReplayInfo, player_id: u32) -> bool {
-        match self {
-            &User::Observer(ref o) => o.should_ignore(info, player_id),
-            _ => panic!("user is not a replay observer")
-        }
-    }
-}
-
 pub struct Participant {
     pub player:                 PlayerSetup,
     pub instance:               Instance,
     client:                     Client,
-    pub user:                  Option<User>,
+    user:                       Option<User>,
 
     app_state:                  AppState,
     last_status:                AppStatus,
@@ -378,6 +292,204 @@ impl Participant {
 
     pub fn close(&mut self) -> Result<()> {
         self.client.close()
+    }
+
+
+    pub fn on_game_full_start(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_game_full_start(self),
+                    &mut User::Observer(ref mut o) => {
+                        o.on_game_full_start(self)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+
+    pub fn on_game_start(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_game_start(self),
+                    &mut User::Observer(ref mut o) => o.on_game_start(self),
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_game_end(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_game_end(self),
+                    &mut User::Observer(ref mut o) => o.on_game_end(self),
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_step(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_step(self),
+                    &mut User::Observer(ref mut o) => o.on_step(self),
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+
+    pub fn on_unit_destroyed(&mut self, u: &Unit) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_unit_destroyed(self, u)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_unit_destroyed(self, u)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_unit_created(&mut self, u: &Unit) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_unit_created(self, u),
+                    &mut User::Observer(ref mut o) => {
+                        o.on_unit_created(self, u)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_unit_idle(&mut self, u: &Unit) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => a.on_unit_idle(self, u),
+                    &mut User::Observer(ref mut o) => o.on_unit_idle(self, u),
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_upgrade_complete(&mut self, u: Upgrade) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_upgrade_complete(self, u)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_upgrade_complete(self, u)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_building_complete(&mut self, u: &Unit) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_building_complete(self, u)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_building_complete(self, u)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+
+    pub fn on_nydus_detected(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_nydus_detected(self)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_nydus_detected(self)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_nuke_detected(&mut self) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_nuke_detected(self)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_nuke_detected(self)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+    pub fn on_unit_detected(&mut self, u: &Unit) {
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                match &mut user {
+                    &mut User::Agent(ref mut a) => {
+                        a.on_unit_detected(self, u)
+                    },
+                    &mut User::Observer(ref mut o) => {
+                        o.on_unit_detected(self, u)
+                    },
+                }
+                self.user = Some(user);
+            },
+            None => ()
+        }
+    }
+
+    pub fn should_ignore(&mut self) -> bool {
+        //TODO: figure out how to use this value
+        let player_id = 0;
+
+        match mem::replace(&mut self.user, None) {
+            Some(mut user) => {
+                let should_ignore = match &user {
+                    &User::Observer(ref o) => o.should_ignore(
+                        self.get_replay_info(), player_id
+                    ),
+                    _ => panic!("user is not a replay observer"),
+                };
+
+                self.user = Some(user);
+
+                should_ignore
+            },
+            None => false
+        }
     }
 }
 

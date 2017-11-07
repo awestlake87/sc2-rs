@@ -6,11 +6,11 @@ use glob::glob;
 use regex::Regex;
 
 use super::{ Result, Error };
-use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use agent::{ Agent };
+use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
-    Participant, Control, Observer, Actions, Replay, AppState, User
+    Participant, AppState, User, Actions, Control, Observer, Replay
 };
 use replay_observer::{ ReplayObserver };
 
@@ -224,27 +224,11 @@ impl Coordinator {
         }
 
         for p in &mut self.participants {
-            let user = mem::replace(&mut p.user, None);
-
-            match user {
-                Some(mut user) => {
-                    user.on_game_full_start(p);
-                    mem::replace(&mut p.user, Some(user));
-                },
-                None => ()
-            }
+            p.on_game_full_start();
         }
 
         for p in &mut self.participants {
-            let user = mem::replace(&mut p.user, None);
-
-            match user {
-                Some(mut user) => {
-                    user.on_game_start(p);
-                    mem::replace(&mut p.user, Some(user));
-                },
-                None => ()
-            }
+            p.on_game_start();
         }
 
         Ok(())
@@ -333,15 +317,7 @@ impl Coordinator {
                 }*/
             }
             else {
-                let user = mem::replace(&mut p.user, None);
-
-                match user {
-                    Some(mut user) => {
-                        user.on_game_end(p);
-                        p.user = Some(user);
-                    },
-                    None => ()
-                }
+                p.on_game_end();
 
                 match p.leave_game() {
                     Err(e) => {
@@ -408,15 +384,7 @@ impl Coordinator {
                 }*/
             }
             else {
-                let user = mem::replace(&mut p.user, None);
-
-                match user {
-                    Some(mut user) => {
-                        user.on_game_end(p);
-                        mem::replace(&mut p.user, Some(user));
-                    },
-                    None => ()
-                }
+                p.on_game_end();
 
                 match p.leave_game() {
                     Err(e) => {
@@ -443,56 +411,37 @@ impl Coordinator {
                 );
 
                 for file in replay_files {
-                    let user = {
-                        if !started {
-                            mem::replace(&mut r.user, None)
+                    if !started {
+                        match r.gather_replay_info(
+                            &file.to_string_lossy(), true
+                        ) {
+                            Err(e) => result = Err(e),
+                            _ => ()
                         }
-                        else {
-                            None
-                        }
-                    };
 
-                    let consume = match user {
-                        Some(user) => {
-                            match r.gather_replay_info(
-                                &file.to_string_lossy(), true
-                            ) {
-                                Err(e) => result = Err(e),
-                                _ => ()
-                            }
-
-                            //TODO: find out why this value is used
-                            let player_id = 0;
-
-                            started = {
-                                if !user.should_ignore(
-                                    r.get_replay_info(), player_id
+                        started = {
+                            if !r.should_ignore() {
+                                match r.req_start_replay(
+                                    &file.to_string_lossy()
                                 ) {
-                                    match r.req_start_replay(
-                                        &file.to_string_lossy(), player_id
-                                    ) {
-                                        Err(e) => {
-                                            result = Err(e);
-                                            false
-                                        },
-                                        _ => true
-                                    }
+                                    Err(e) => {
+                                        result = Err(e);
+                                        false
+                                    },
+                                    _ => true
                                 }
-                                else {
-                                    false
-                                }
-                            };
+                            }
+                            else {
+                                false
+                            }
+                        };
+                        // TODO should relaunch
 
-                            r.user = Some(user);
-
-                            started
-                        },
-                        None => false,
-                    };
-
-                    // TODO should relaunch
-
-                    if !consume {
+                        if !started {
+                            self.replay_files.push(file);
+                        }
+                    }
+                    else {
                         self.replay_files.push(file);
                     }
                 }
@@ -538,16 +487,7 @@ impl Coordinator {
                 }
 
                 if !r.is_in_game() {
-                    let user = mem::replace(&mut r.user, None);
-
-                    match user {
-                        Some(mut user) => {
-                            user.on_game_end(r);
-
-                            r.user = Some(user);
-                        },
-                        None => ()
-                    }
+                    r.on_game_end();
                 }
             }
         }

@@ -7,14 +7,16 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::agent::{ Agent };
-use sc2::coordinator::{ Coordinator };
+use sc2::{ Agent, Coordinator, Participant, Observer, Actions, User };
 use sc2::data::{ PlayerSetup, Race, Alliance, Ability };
-use sc2::participant::{ Participant, Observer, Actions, User };
-use sc2::utils::{ find_random_location };
 
 use examples_common::{
-    USAGE, Args, get_coordinator_settings, get_game_settings, poll_escape
+    USAGE,
+    Args,
+    get_coordinator_settings,
+    get_game_settings,
+    poll_escape,
+    find_random_location
 };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
