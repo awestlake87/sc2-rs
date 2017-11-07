@@ -142,7 +142,8 @@ impl From<raw::Unit> for Unit {
         }
     }
 }
-
+/// list of known StarCraft II unit types
+#[allow(missing_docs)]
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum UnitType {
     Invalid,

@@ -1,4 +1,6 @@
 
+/// list of known StarCraft II abilities
+#[allow(missing_docs)]
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Ability {
     Invalid,

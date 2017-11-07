@@ -3,31 +3,35 @@ use std::mem;
 
 use sc2_proto::sc2api::{ Request };
 
-use super::super::{ Result };
-use super::super::agent::{ Agent };
+use super::super::{ Result, GameEvents };
 use super::super::data::{ ReplayInfo };
 use super::{ Participant, Observer };
 
+/// UNSTABLE replay interface
 pub trait Replay {
-    fn get_replay_info(&self) -> &ReplayInfo;
+    /// get replay info that was fetched by gather replay info
+    fn get_replay_info(&self) -> Option<&ReplayInfo>;
 
+    /// ask the game instance for info about the given replay file
     fn gather_replay_info(
         &mut self, file_path: &str, download_data: bool
     )
         -> Result<()>
     ;
 
+    /// send a start replay request to the game instance
     fn req_start_replay(&mut self, file_path: &str)
         -> Result<()>
     ;
+    /// await the response after requesting to start a replay
     fn await_replay(&mut self) -> Result<()>;
 }
 
 impl Replay for Participant {
-    fn get_replay_info(&self) -> &ReplayInfo {
+    fn get_replay_info(&self) -> Option<&ReplayInfo> {
         match self.replay_info {
-            Some(ref info) => info,
-            None => panic!("replay info has not been set yet")
+            Some(ref info) => Some(&info),
+            None => None
         }
     }
 

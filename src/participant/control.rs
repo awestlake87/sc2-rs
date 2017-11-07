@@ -1,14 +1,12 @@
 
 use std::collections::HashSet;
-use std::mem;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::super::{ Result, Error };
-use super::super::agent::Agent;
+use super::super::{ Result, Error, GameEvents };
 use super::super::data::{
     GameSettings,
     GamePorts,

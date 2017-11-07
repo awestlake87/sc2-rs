@@ -1,4 +1,6 @@
 
+/// a list of known StarCraft II upgrades
+#[allow(missing_docs)]
 #[derive(PartialEq, Eq, Copy, Clone, Hash)]
 pub enum Upgrade {
     Invalid,

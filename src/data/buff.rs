@@ -1,4 +1,6 @@
 
+/// list of known StarCraft II buffs
+#[allow(missing_docs)]
 pub enum Buff {
     Invalid,
     GravitonBeam,

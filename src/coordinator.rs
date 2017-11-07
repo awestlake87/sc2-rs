@@ -5,14 +5,12 @@ use std::path::{ PathBuf, MAIN_SEPARATOR };
 use glob::glob;
 use regex::Regex;
 
-use super::{ Result, Error };
-use agent::{ Agent };
+use super::{ Result, Error, GameEvents };
 use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
     Participant, AppState, User, Actions, Control, Observer, Replay
 };
-use replay_observer::{ ReplayObserver };
 
 #[derive(Copy, Clone, PartialEq)]
 enum ExeArch {

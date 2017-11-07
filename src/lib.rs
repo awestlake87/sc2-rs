@@ -32,6 +32,8 @@ pub use participant::{
 };
 pub use replay_observer::{ ReplayObserver };
 
+use data::{ Unit, Upgrade };
+
 /// type used for all results in the API
 pub type Result<T> = result::Result<T, Error>;
 
@@ -75,4 +77,20 @@ impl fmt::Display for Error {
             Error::Todo(ref msg) => write!(f, "todo {:?}", *msg)
         }
     }
+}
+
+trait GameEvents {
+    fn on_game_full_start(&mut self);
+    fn on_game_start(&mut self);
+    fn on_game_end(&mut self);
+    fn on_step(&mut self);
+    fn on_unit_destroyed(&mut self, u: &Unit);
+    fn on_unit_created(&mut self, u: &Unit);
+    fn on_unit_idle(&mut self, u: &Unit);
+    fn on_upgrade_complete(&mut self, u: Upgrade);
+    fn on_building_complete(&mut self, u: &Unit);
+    fn on_nydus_detected(&mut self);
+    fn on_nuke_detected(&mut self);
+    fn on_unit_detected(&mut self, u: &Unit);
+    fn should_ignore(&mut self) -> bool;
 }

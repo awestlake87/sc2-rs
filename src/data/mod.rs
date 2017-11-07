@@ -24,66 +24,105 @@ pub use self::score::*;
 pub use self::unit::*;
 pub use self::upgrade::*;
 
+/// generic structure to represent a 2D rectangle
 #[derive(Copy, Clone)]
 pub struct Rect<T> {
+    /// x position of lefthand corner
     pub x: T,
+    /// y position of lefthand corner
     pub y: T,
+    /// width of the rectangle
     pub w: T,
+    /// height of the rectangle
     pub h: T
 }
 
+/// 2D vector used to specify direction
 pub type Vector2 = na::Vector2<f32>;
+/// 3D vector used to specify direction
 pub type Vector3 = na::Vector3<f32>;
+/// 2D point used to specify location
 pub type Point2 = geometry::Point2<f32>;
+/// 3D point used to specify location
 pub type Point3 = geometry::Point3<f32>;
 
+/// 2D rectangle represented by two points
 #[derive(Copy, Clone)]
 pub struct Rect2 {
     pub from:               Point2,
     pub to:                 Point2,
 }
 
+/// 2D integer point used to specify a location
 pub type Point2I = na::Vector2<i32>;
+/// 3D integer point used to specify a location
 pub type Point3I = na::Vector3<i32>;
 
+/// 2D integer rectangle represented by two points
 #[derive(Copy, Clone)]
 pub struct Rect2I {
     pub from:               Point2I,
     pub to:                 Point2I,
 }
 
+/// data for an ability that is currently available
 pub struct AvailableAbility {
+    /// the ability that is available
     pub ability:                Ability,
+    /// indicates whether the ability requires a point to invoke
     pub requires_point:         bool,
 }
 
+/// target type of the ability
 pub enum AbilityTarget {
+    /// ability targets a location
     Point,
+    /// ability targets another unit
     Unit,
+    /// ability can target either a location or a unit
     PointOrUnit,
+    /// ability can target either a location or nothing
     PointOrNone,
 }
 
+/// data about an ability
 pub struct AbilityData {
+    /// indicates whether the ability is available to the current mods/map
     pub available:              bool,
+    /// stable ID for the ability
     pub ability:                Ability,
+    /// catalog (game data xml) name of the ability
     pub link_name:              String,
+    /// catalog (game data xml) index of the ability
     pub link_index:             u32,
+    /// name of the button for the command card
     pub button_name:            String,
+    /// in case the button name is not descriptive
     pub friendly_name:          String,
+    /// UI hotkey
     pub hotkey:                 String,
+    /// this ability may be represented by this more generic ability
     pub remaps_to_ability:      Option<Ability>,
+    /// other abilities that can remap to this generic ability
     pub remaps_from_ability:    Vec<Ability>,
+    /// type of target that this ability uses
     pub target:                 Option<AbilityTarget>,
+    /// can be cast in the minimap (unimplemented)
     pub allow_minimap:          bool,
+    /// autocast can be set
     pub allow_autocast:         bool,
+    /// requires placement to construct a building
     pub is_building:            bool,
+    /// if the ability is placing a building, give the radius of the footprint
     pub footprint_radius:       f32,
+    /// placement next to an existing structure (an addon like a Tech Lab)
     pub is_instant_placement:   bool,
+    /// range unit can cast ability without needing to approach target
     pub cast_range:             f32,
 }
 
 impl AbilityData {
+    /// get the most generalized id of the ability
     pub fn get_generalized_ability(&self) -> Ability {
         match self.remaps_to_ability {
             Some(remap) => remap,
@@ -92,12 +131,19 @@ impl AbilityData {
     }
 }
 
-pub struct AvailableAbilities {
-    pub abilities:              Vec<AvailableAbilities>,
+/// all abilities available to a unit
+pub struct AvailableUnitAbilities {
+    /// the available abilities
+    pub abilities:              Vec<AvailableAbility>,
+    /// the tag of the unit
     pub unit_tag:               Tag,
+    /// the type of the unit
     pub unit_type:              UnitType,
 }
 
+/// category of unit
+#[allow(missing_docs)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Attribute {
     Light,
     Armored,
@@ -130,12 +176,16 @@ impl From<data::Attribute> for Attribute {
     }
 }
 
+/// damage bonus of a unit
 pub struct DamageBonus {
+    /// affected attribute
     pub attribute:              Attribute,
+    /// damage bonus
     pub bonus:                  f32,
 }
 
 impl DamageBonus {
+    /// convert the protobuf data
     pub fn from_proto(b: &data::DamageBonus) -> Self {
         Self {
             attribute: Attribute::from(b.get_attribute()),
@@ -144,6 +194,7 @@ impl DamageBonus {
     }
 }
 
+/// target type of a weapon
 pub enum WeaponTargetType {
     Ground,
     Air,
@@ -160,16 +211,24 @@ impl From<data::Weapon_TargetType> for WeaponTargetType {
     }
 }
 
+/// unit weapon
 pub struct Weapon {
+    /// weapon's target type
     pub target_type:            WeaponTargetType,
+    /// weapon damage
     pub damage:                 f32,
+    /// any damage bonuses that apply to the weapon
     pub damage_bonus:           Vec<DamageBonus>,
+    /// number of hits per attack (eg. Colossus has 2 beams)
     pub attacks:                u32,
+    /// attack range
     pub range:                  f32,
+    /// time between attacks
     pub speed:                  f32,
 }
 
 impl Weapon {
+    /// convert from protobuf data
     pub fn from_proto(w: &data::Weapon) -> Self {
         Self {
             target_type: WeaponTargetType::from(w.get_field_type()),
@@ -184,31 +243,58 @@ impl Weapon {
     }
 }
 
+/// data about a unit type
+///
+/// this data is derived from the catalog (xml) data of the game and upgrades
 pub struct UnitTypeData {
+    /// stable unit ID
     pub unit_type:              UnitType,
+    /// unit type name (corresponds to the game's catalog)
     pub name:                   String,
+    /// whether this unit is available to the current mods/map
     pub available:              bool,
+    /// number of cargo slots this unit occupies in a transport
     pub cargo_size:             u32,
+    /// cost in minerals to build this unit
     pub mineral_cost:           u32,
+    /// cost in vespene to build this unit
     pub vespene_cost:           u32,
+
+    /// unit attributes (may change based on upgrades)
     pub attributes:             Vec<Attribute>,
+    /// movement speed of this unit
     pub movement_speed:         f32,
+    /// armor of this unit
     pub armor:                  f32,
+    /// weapons on this unit
     pub weapons:                Vec<Weapon>,
+    /// how much food this unit requires
     pub food_required:          f32,
+    /// how much food this unit provides
     pub food_provided:          f32,
+    /// which ability id creates this unit
     pub ability:                Ability,
+    /// the race this unit belongs to
     pub race:                   Option<Race>,
+    /// how long a unit takes to build
     pub build_time:             f32,
+    /// whether this unit can have minerals (mineral patches)
     pub has_minerals:           bool,
+    /// whether this unit can have vespene (vespene geysers)
     pub has_vespene:            bool,
+
+    /// units this is equivalent to in terms of satisfying tech requirements
     pub tech_alias:             Vec<UnitType>,
+    /// units that are morphed variants of the same unit
     pub unit_alias:             UnitType,
+    /// structure required to build this unit (or any with same tech alias)
     pub tech_requirement:       UnitType,
+    /// whether tech requirement is an addon
     pub require_attached:       bool,
 }
 
 impl UnitTypeData {
+    /// convert from protobuf data
     pub fn from_proto(data: &data::UnitTypeData) -> Self {
         Self {
             unit_type: UnitType::from_id(data.get_unit_id()),
@@ -254,23 +340,49 @@ impl UnitTypeData {
     }
 }
 
+/// upgrade data
 pub struct UpgradeData {
+    /// stable upgrade ID
     pub upgrade:                Upgrade,
+    /// upgrade name (corresponds to the game's catalog)
     pub name:                   String,
+    /// mineral cost of researching this upgrade
     pub mineral_cost:           u32,
+    /// vespene cost of researching this upgrade
     pub vespene_cost:           u32,
+    /// ability that researches this upgrade
     pub ability:                Ability,
+    /// time in game steps to research this upgrade
     pub research_time:          f32,
 }
 
+/// buff data
 pub struct BuffData {
+    /// stable buff ID
     pub buff:                   Buff,
+    /// buff name (corresponds to the game's catalog)
     pub name:                   String,
 }
 
+/// effect data
+pub struct EffectData {
+    /// stable effect ID
+    effect:                     Ability,
+    /// effect name (corresponds to game's catalog)
+    name:                       String,
+    /// a more recognizable name of the effect
+    friendly_name:              String,
+    /// size of the circle the effect impacts
+    radius:                     f32,
+}
+
+/// power source information for Protoss
 pub struct PowerSource {
+    /// unit tag of the power source
     pub tag:                    Tag,
+    /// position of the power source
     pub pos:                    Point2,
+    /// radius of the power source
     pub radius:                 f32,
 }
 
