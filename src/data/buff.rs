@@ -50,6 +50,7 @@ pub enum Buff {
 }
 
 impl Buff {
+    /// convert from raw protobuf buff id
     pub fn from_id(id: u32) -> Self {
         match id {
             _ => Buff::Invalid

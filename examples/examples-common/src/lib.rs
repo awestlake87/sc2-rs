@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use rand::random;
 
 use sc2::{ CoordinatorSettings, Result, Error };
-use sc2::data::{ Rect2, Point2, GameInfo, GameSettings, Map };
+use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
 
 pub use marine_micro_bot::{ MarineMicroBot };
 pub use terran_bot::{ TerranBot };
@@ -131,11 +131,6 @@ pub fn find_random_location_in_rect(r: Rect2) -> Point2 {
     )
 }
 
-pub fn find_random_location(game_info: &GameInfo) -> Point2 {
-    find_random_location_in_rect(
-        Rect2 {
-            from: game_info.playable_min,
-            to: game_info.playable_max
-        }
-    )
+pub fn find_random_location(terrain_info: &TerrainInfo) -> Point2 {
+    find_random_location_in_rect(terrain_info.playable_area)
 }

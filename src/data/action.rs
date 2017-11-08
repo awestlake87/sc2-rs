@@ -10,18 +10,26 @@ use sc2_proto::spatial::{
 
 use super::{ Tag, Ability, Point2, Point2I, Rect2I };
 
+/// action target
 pub enum ActionTarget {
+    /// target a unit with this action
     UnitTag(Tag),
+    /// target a location with this action
     Location(Point2),
 }
 
+/// an action (command or ability) applied to a unit or set of units
 pub struct Action {
+    /// the ability to invoke
     pub ability:            Ability,
+    /// units that this action applies to
     pub unit_tags:          Vec<Tag>,
+    /// target of the action
     pub target:             Option<ActionTarget>,
 }
 
 impl Action {
+    /// convert from protobuf data
     pub fn from_proto(action: &raw::ActionRawUnitCommand) -> Self {
         Self {
             ability: Ability::from_id(action.get_ability_id() as u32),
@@ -54,15 +62,23 @@ impl Action {
     }
 }
 
+/// target of a feature layer command
 pub enum SpatialUnitCommandTarget {
+    /// screen coordinate target
     Screen(Point2I),
+    /// minimap coordinate target
     Minimap(Point2I),
 }
 
+/// type of point selection
 pub enum PointSelectType {
+    /// changes selection to unit (equal to normal click)
     Select,
+    /// toggle selection of unit (equal to shift+click)
     Toggle,
+    /// select all units of a given type (equal to ctrl+click)
     All,
+    /// select all units of a given type additively (equal to shift+ctrl+click)
     AddAll
 }
 
@@ -77,26 +93,40 @@ impl From<ProtoPointSelectionType> for PointSelectType {
     }
 }
 
+/// feature layer action
 pub enum SpatialAction {
+    /// issue a feature layer unit command
     UnitCommand {
+        /// ability to invoke
         ability:            Ability,
+        /// target of command
         target:             Option<SpatialUnitCommandTarget>,
+        /// whether this action should replace or queue behind other actions
         queued:             bool
     },
+    /// move the camera to a new location
     CameraMove {
+        /// minimap location
         center_minimap:     Point2I
     },
+    /// select a point on the screen
     SelectPoint {
+        /// point in screen coordinates
         select_screen:      Point2I,
+        /// point selection type
         select_type:        PointSelectType
     },
+    /// select a rectangle on the screen
     SelectRect {
+        /// rectangle in screen coordinates
         select_screen:      Vec<Rect2I>,
+        /// whether selection is additive
         select_add:         bool
     }
 }
 
 impl SpatialAction {
+    /// convert from protobuf data
     pub fn from_unit_command_proto(cmd: &ActionSpatialUnitCommand) -> Self {
         SpatialAction::UnitCommand {
             ability: Ability::from_id(cmd.get_ability_id() as u32),
@@ -125,6 +155,7 @@ impl SpatialAction {
         }
     }
 
+    /// convert from protobuf data
     pub fn from_camera_move_proto(cmd: &ActionSpatialCameraMove) -> Self {
         SpatialAction::CameraMove {
             center_minimap: {
@@ -134,6 +165,7 @@ impl SpatialAction {
         }
     }
 
+    /// convert from protobuf data
     pub fn from_selection_point_proto(cmd: &ActionSpatialUnitSelectionPoint)
         -> Self
     {
@@ -146,6 +178,7 @@ impl SpatialAction {
         }
     }
 
+    /// convert from protobuf data
     pub fn from_selection_rect_proto(cmd: &ActionSpatialUnitSelectionRect)
         -> Self
     {

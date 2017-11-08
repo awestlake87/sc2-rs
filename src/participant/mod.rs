@@ -21,7 +21,7 @@ use super::client::Client;
 use super::data::{
     PowerSource,
     GameState,
-    GameInfo,
+    TerrainInfo,
     PlayerData,
     PlayerSetup,
     Unit,
@@ -98,7 +98,7 @@ pub struct Participant {
     player_id:                  Option<u32>,
     camera_pos:                 Option<Point2>,
     game_state:                 GameState,
-    game_info:                  GameInfo,
+    terrain_info:                  TerrainInfo,
     player_data:                PlayerData,
     score:                      Option<Score>,
 
@@ -154,7 +154,7 @@ impl Participant {
                 current_game_loop: 0,
                 previous_game_loop: 0,
             },
-            game_info: GameInfo::default(),
+            terrain_info: TerrainInfo::default(),
             player_data: PlayerData {
                 minerals: 0,
                 vespene: 0,

@@ -92,6 +92,7 @@ pub enum Upgrade {
 }
 
 impl Upgrade {
+    /// convert from the raw u32 id in the protobufs
     pub fn from_id(id: u32) -> Self {
         match id {
             _ => Upgrade::Invalid

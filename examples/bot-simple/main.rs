@@ -48,7 +48,7 @@ impl Agent for Bot {
             );
 
             for unit in units {
-                let target = match game.get_game_info() {
+                let target = match game.get_terrain_info() {
                     Ok(ref info) => find_random_location(info),
                     Err(e) => {
                         eprintln!("error getting game info {}", e);

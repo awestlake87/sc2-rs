@@ -10,7 +10,7 @@ use data::{
     PowerSource,
     PlayerData,
     GameState,
-    GameInfo,
+    TerrainInfo,
     Unit,
     Upgrade,
     Point2,
@@ -69,8 +69,8 @@ pub trait Observation {
     fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData>;
     /// get buff data
     fn get_buff_data(&self) -> &HashMap<Buff, BuffData>;
-    /// get game info
-    fn get_game_info(&mut self) -> Result<&GameInfo>;
+    /// get terrain info
+    fn get_terrain_info(&mut self) -> Result<&TerrainInfo>;
 
     /// get current mineral count
     fn get_minerals(&self) -> u32;
@@ -176,7 +176,7 @@ impl Observation for Participant {
     //fn get_upgrade_data(&self)
     //fn get_buff_data(&self)
 
-    fn get_game_info(&mut self) -> Result<&GameInfo> {
+    fn get_terrain_info(&mut self) -> Result<&TerrainInfo> {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
 
@@ -184,10 +184,10 @@ impl Observation for Participant {
         let mut rsp = self.recv()?;
 
         if rsp.has_game_info() {
-            self.game_info = rsp.take_game_info().into();
+            self.terrain_info = rsp.take_game_info().into();
         }
 
-        Ok(&self.game_info)
+        Ok(&self.terrain_info)
     }
     fn get_minerals(&self) -> u32 {
         self.player_data.minerals

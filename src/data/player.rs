@@ -2,13 +2,8 @@
 use sc2_proto::sc2api;
 use sc2_proto::common;
 
-#[derive(Copy, Clone)]
-pub enum PlayerKind {
-    Computer,
-    Participant,
-    Observer
-}
-
+/// race of the player
+#[allow(missing_docs)]
 #[derive(Copy, Clone)]
 pub enum Race {
     Terran,
@@ -18,6 +13,7 @@ pub enum Race {
 }
 
 impl Race {
+    /// convert from protobuf data
     pub fn from_proto(race: common::Race) -> Option<Self> {
         match race {
             common::Race::Terran => Some(Race::Terran),
@@ -27,6 +23,7 @@ impl Race {
             common::Race::NoRace => None,
         }
     }
+    /// convert to protobuf data
     pub fn to_proto(&self) -> common::Race {
         match *self {
             Race::Zerg      => common::Race::Zerg,
@@ -37,6 +34,8 @@ impl Race {
     }
 }
 
+/// difficulty setting for built-in StarCraft II AI
+#[allow(missing_docs)]
 #[derive(Copy, Clone)]
 pub enum Difficulty {
     VeryEasy,
@@ -52,6 +51,7 @@ pub enum Difficulty {
 }
 
 impl Difficulty {
+    /// convert to protobuf data
     pub fn to_proto(&self) -> sc2api::Difficulty {
         match *self {
             Difficulty::VeryEasy        => sc2api::Difficulty::VeryEasy,
@@ -68,14 +68,21 @@ impl Difficulty {
     }
 }
 
+/// settings for players
 #[derive(Copy, Clone)]
 pub enum PlayerSetup {
+    /// add a built-in StarCraft II bot with the given race and difficulty
     Computer {
+        /// race of the computer
         race:           Race,
+        /// difficulty setting
         difficulty:     Difficulty
     },
+    /// add a user-controlled player
     Player {
+        /// race of the player
         race:           Race
     },
+    /// add a replay observer (these are separate from the other two)
     Observer
 }

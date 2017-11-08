@@ -3,56 +3,95 @@ use sc2_proto::raw;
 
 use super::{ Ability, Buff, Point2, Point3 };
 
+/// unique tag for a unit instance
 pub type Tag = u64;
 
+/// a unit (could be structure, a worker, or military)
 pub struct Unit {
+    /// whether the unit is shown on screen or not
     pub display_type:           DisplayType,
+    /// relationship of the unit to this player
     pub alliance:               Alliance,
 
+    /// a unique id for the instance of a unit
     pub tag:                    Tag,
+    /// the type of unit
     pub unit_type:              UnitType,
+    /// which player owns this unit
     pub owner:                  i32,
 
+    /// position of the unit in the world
     pub pos:                    Point3,
+    /// direction the unit faces in radians
     pub facing:                 f32,
+    /// radius of the unit
     pub radius:                 f32,
+    /// gives progress under construction (range [0.0, 1.0] where 1.0 is done)
     pub build_progress:         f32,
 
+    /// whether the unit is cloaked
     pub cloak:                  CloakState,
 
+    /// range of detector for detector units
     pub detect_range:           f32,
+    /// range of radar for radar units
     pub radar_range:            f32,
 
+    /// whether this unit is currently selected
     pub is_selected:            bool,
+    /// whether this unit is visible and within the camera frustum
     pub is_on_screen:           bool,
+    /// whether this unit is detected by a sensor tower
     pub is_blip:                bool,
 
+    /// health of the unit (not set for snapshots)
     pub health:                 f32,
+    /// max health of the unit (not set for snapshots)
     pub health_max:             f32,
+    /// shield of the unit (not set for snapshots)
     pub shield:                 f32,
+    /// energy of the unit (not set for snapshots)
     pub energy:                 f32,
+    /// amount of minerals if unit is a mineral field (not set for snapshot)
     pub mineral_contents:       i32,
+    /// amount of vespene if unit is a geyser (not set for snapshots)
     pub vespene_contents:       i32,
+    /// whether the unit is flying (not set for snapshots)
     pub is_flying:              bool,
+    /// whether the unit is burrowed (not set for snapshots)
     pub is_burrowed:            bool,
+    /// time remaining for a weapon on cooldown (not set for snapshots)
     pub weapon_cooldown:        f32,
 
+    /// orders on this unit (only valid for this player's units)
     pub orders:                 Vec<UnitOrder>,
+    /// addon like a tech lab or reactor (only valid for this player's units)
     pub add_on_tag:             Tag,
+    /// passengers in this transport (only valid for this player's units)
     pub passengers:             Vec<PassengerUnit>,
+    /// number of cargo slots used (only valid for this player's units)
     pub cargo_space_taken:      i32,
+    /// max number of cargo slots (only valid for this player's units)
     pub cargo_space_max:        i32,
+    /// number of harvesters associated with town hall
     pub assigned_harvesters:    i32,
+    /// number of harvesters that can be assigned to a town hall
     pub ideal_harvesters:       i32,
+    /// target unit of a unit (only valid for this player's units)
     pub engaged_target_tag:     Tag,
+    /// buffs on this unit (only valid for this player's units)
     pub buffs:                  Vec<Buff>,
+    /// whether this unit is powered by a pylon
     pub is_powered:             bool,
 
+    /// whether this unit is alive or not
     pub is_alive:               bool,
+    /// the last time the unit was seen
     pub last_seen_game_loop:    u32,
 }
 
 impl Unit {
+    /// mark this unit as dead
     pub fn mark_dead(&mut self) {
         self.is_alive = false;
     }
@@ -360,6 +399,7 @@ pub enum UnitType {
 }
 
 impl UnitType {
+    /// convert from raw u32 id in protobufs
     pub fn from_id(id: u32) -> Self {
         match id {
             29  => UnitType::TerranArmory,
@@ -571,10 +611,16 @@ impl UnitType {
     }
 }
 
+/// whether the unit is shown on screen or not
 #[derive(PartialEq, Copy, Clone)]
 pub enum DisplayType {
+    /// unit will be visible
     Visible,
+    /// unit is represented by a snapshot in fog-of-war
+    ///
+    /// the actual unit may be in a different location or state
     Snapshot,
+    /// unit will be hidden to enemies
     Hidden,
 }
 
@@ -588,11 +634,16 @@ impl From<raw::DisplayType> for DisplayType {
     }
 }
 
-#[derive(PartialEq, Copy, Clone)]
+/// relationship to this player
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Alliance {
+    /// unit is owned by this player
     Domestic,
+    /// unit is an ally of this player
     Ally,
+    /// unit is neutral to this player (usually a non-player unit)
     Neutral,
+    /// unit is an enemy of the player
     Enemy,
 }
 
@@ -607,10 +658,16 @@ impl From<raw::Alliance> for Alliance {
     }
 }
 
+/// unit cloak state
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum CloakState {
+    /// unit is invisible to enemies until detected
     Cloaked,
+    /// cloaked, but detected
     CloakedDetected,
+    /// no cloaking
     NotCloaked,
+    /// unable to determine cloak state
     Unknown,
 }
 
@@ -624,33 +681,64 @@ impl From<raw::CloakState> for CloakState {
     }
 }
 
+/// target of a unit order
+pub enum UnitOrderTarget {
+    /// targets another unit
+    UnitTag(Tag),
+    /// targets a location
+    Location(Point2)
+}
+
+/// an order that is active on a unit
 pub struct UnitOrder {
+    /// ability that triggered the order
     pub ability:                Ability,
-    pub target_unit_tag:        Tag,
-    pub target_pos:             Point2,
+    /// target unit of the order
+    pub target:                 Option<UnitOrderTarget>,
+    /// progress of the order
     pub progress:               f32,
 }
 
 impl From<raw::UnitOrder> for UnitOrder {
+    /// convert from protobuf data
     fn from(order: raw::UnitOrder) -> Self {
         Self {
             ability: Ability::from_id(order.get_ability_id()),
-            target_unit_tag: order.get_target_unit_tag(),
-            target_pos: {
-                let target_pos = order.get_target_world_space_pos();
-                Point2::new(target_pos.get_x(), target_pos.get_y())
+            target: {
+                if order.has_target_unit_tag() {
+                    Some(UnitOrderTarget::UnitTag(order.get_target_unit_tag()))
+                }
+                else if order.has_target_world_space_pos() {
+                    let target_pos = order.get_target_world_space_pos();
+
+                    Some(
+                        UnitOrderTarget::Location(
+                            Point2::new(target_pos.get_x(), target_pos.get_y())
+                        )
+                    )
+                }
+                else {
+                    None
+                }
             },
             progress: order.get_progress()
         }
     }
 }
 
+/// a passenger on a transport
 pub struct PassengerUnit {
+    /// tag of the unit in transport
     pub tag:                    Tag,
+    /// health of the unit in transport
     pub health:                 f32,
+    /// max health of the unit in transport
     pub health_max:             f32,
+    /// shield of the unit in transport
     pub shield:                 f32,
+    /// energy of the unit in transport
     pub energy:                 f32,
+    /// type of unit in transport
     pub unit_type:              UnitType,
 }
 

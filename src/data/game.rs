@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
-use super::{ Point2 };
+use super::{ Point2, Rect2 };
 
 /// result of the game
 #[allow(missing_docs)]
@@ -44,12 +44,16 @@ pub enum Map {
     BlizzardMap(String),
 }
 
+/// endpoint port settings
+#[allow(missing_docs)]
 #[derive(Copy, Clone)]
 pub struct PortSet {
     pub game_port:      u16,
     pub base_port:      u16
 }
 
+/// all port settings for a game
+#[allow(missing_docs)]
 #[derive(Clone)]
 pub struct GamePorts {
     pub shared_port:    u16,
@@ -57,46 +61,58 @@ pub struct GamePorts {
     pub client_ports:   Vec<PortSet>
 }
 
+/// settings for a game
 #[derive(Clone)]
 pub struct GameSettings {
+    /// which map to play on
     pub map:            Map,
 }
 
+/// current game state
 #[derive(Clone)]
 pub struct GameState {
+    /// current step
     pub current_game_loop: u32,
+    /// previous step
     pub previous_game_loop: u32,
 }
 
+/// terrain info
 #[derive(Clone)]
-pub struct GameInfo {
+pub struct TerrainInfo {
+    /// width of the terrain
     pub width:                      i32,
+    /// height of the terrain
     pub height:                     i32,
+
     //pathing_grid
     //terrain_height
     //placement_grid
-    pub playable_min:               Point2,
-    pub playable_max:               Point2,
-    pub enemy_start_locations:       Vec<Point2>,
+
+    /// rectangle of the playable area
+    pub playable_area:              Rect2,
+    /// starting locations of the enemy bases
+    pub enemy_start_locations:      Vec<Point2>,
     //options
     //player_info
 }
 
-impl Default for GameInfo {
+impl Default for TerrainInfo {
     fn default() -> Self {
         Self {
             width: 0,
             height: 0,
 
-            playable_min: Point2::new(0.0, 0.0),
-            playable_max: Point2::new(0.0, 0.0),
+            playable_area: Rect2 {
+                from: Point2::new(0.0, 0.0), to: Point2::new(0.0, 0.0)
+            },
 
             enemy_start_locations: vec![ ],
         }
     }
 }
 
-impl From<sc2api::ResponseGameInfo> for GameInfo {
+impl From<sc2api::ResponseGameInfo> for TerrainInfo {
     fn from(info: sc2api::ResponseGameInfo) -> Self {
         let mut w = 0;
         let mut h = 0;
@@ -139,29 +155,36 @@ impl From<sc2api::ResponseGameInfo> for GameInfo {
             width: w,
             height: h,
 
-            playable_min: playable_min,
-            playable_max: playable_max,
+            playable_area: Rect2 { from: playable_min, to: playable_max },
 
             enemy_start_locations: start_locations,
         }
     }
 }
 
+/// current player data as used by the observation interface
 #[derive(Copy, Clone, Debug)]
 pub struct PlayerData {
-    //*** Player Data ***
+    /// current mineral count
     pub minerals: u32,
+    /// current vespene count
     pub vespene: u32,
+    /// current food capacity
     pub food_cap: u32,
+    /// current food used
     pub food_used: u32,
+    /// current food used by army
     pub food_army: u32,
+    /// current food used by workers
     pub food_workers: u32,
+    /// number of idle workers
     pub idle_worker_count: u32,
+    /// number of military units
     pub army_count: u32,
+    /// number of warp gates
     pub warp_gate_count: u32,
+    /// number of larva
     pub larva_count: u32,
-    //camera_pos: Point2D,
-    //start_location: Point3D,
 }
 
 impl From<sc2api::PlayerCommon> for PlayerData {
@@ -179,12 +202,4 @@ impl From<sc2api::PlayerCommon> for PlayerData {
             larva_count: data.get_larva_count()
         }
     }
-}
-
-pub struct GameData {
-    //*** Game Data ***
-    //abilities: Abilities,
-    //unit_types: UnitTypes,
-    //upgrade_ids: Upgrades,
-    //buff_ids: Buffs,
 }

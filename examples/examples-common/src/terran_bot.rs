@@ -4,20 +4,20 @@ use std::rc::Rc;
 use rand::random;
 
 use sc2::data::{
-    Tag, Vector2, Point2, GameInfo, Alliance, UnitType, Ability, ActionTarget
+    Tag, Vector2, Point2, TerrainInfo, Alliance, UnitType, Ability, ActionTarget
 };
 use sc2::{ Agent, Participant, Observation, Actions };
 
 const TARGET_SCV_COUNT: usize = 15;
 
 pub struct TerranBot {
-    game_info:          Option<GameInfo>
+    terrain_info:          Option<TerrainInfo>
 }
 
 impl TerranBot {
     pub fn new() -> Self {
         Self {
-            game_info: None
+            terrain_info: None
         }
     }
 
@@ -39,14 +39,14 @@ impl TerranBot {
     }
 
     fn find_enemy_pos(&self, _: &mut Participant) -> Option<Point2> {
-        match self.game_info {
-            Some(ref game_info) => {
-                if game_info.enemy_start_locations.is_empty() {
+        match self.terrain_info {
+            Some(ref terrain_info) => {
+                if terrain_info.enemy_start_locations.is_empty() {
                     None
                 }
                 else {
                     //TODO: should be random I think
-                    Some(game_info.enemy_start_locations[0])
+                    Some(terrain_info.enemy_start_locations[0])
                 }
             },
             None => None
@@ -197,7 +197,7 @@ impl TerranBot {
 
 impl Agent for TerranBot {
     fn on_game_start(&mut self, p: &mut Participant) {
-        self.game_info = match p.get_game_info() {
+        self.terrain_info = match p.get_terrain_info() {
             Ok(info) => Some(info.clone()),
             Err(e) => {
                 eprintln!("unable to fetch game info {}", e);
