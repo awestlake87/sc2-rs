@@ -9,7 +9,7 @@ use super::{ Result, Error, GameEvents };
 use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
-    Participant, AppState, User, Actions, Control, Observer, Replay
+    Participant, AppState, User, Actions, Control, Observation, Replay
 };
 
 #[derive(Copy, Clone, PartialEq)]

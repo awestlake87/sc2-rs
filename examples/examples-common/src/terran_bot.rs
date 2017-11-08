@@ -3,8 +3,10 @@ use std::rc::Rc;
 
 use rand::random;
 
-use sc2::data::{ Tag, Vector2, Point2, GameInfo, Alliance, UnitType, Ability };
-use sc2::{ Agent, Participant, Observer, Actions };
+use sc2::data::{
+    Tag, Vector2, Point2, GameInfo, Alliance, UnitType, Ability, ActionTarget
+};
+use sc2::{ Agent, Participant, Observation, Actions };
 
 const TARGET_SCV_COUNT: usize = 15;
 
@@ -61,8 +63,10 @@ impl TerranBot {
         for ref u in units {
             match self.find_enemy_structure(p) {
                 Some(enemy_tag) => {
-                    p.command_units_to_target(
-                        &vec![ Rc::clone(u) ], Ability::Attack, enemy_tag
+                    p.command_units(
+                        &vec![ Rc::clone(u) ],
+                        Ability::Attack,
+                        Some(ActionTarget::UnitTag(enemy_tag))
                     );
 
                     return
@@ -72,8 +76,10 @@ impl TerranBot {
 
             match self.find_enemy_pos(p) {
                 Some(target_pos) => {
-                    p.command_units_to_location(
-                        &vec![ Rc::clone(u) ], Ability::Smart, target_pos
+                    p.command_units(
+                        &vec![ Rc::clone(u) ],
+                        Ability::Smart,
+                        Some(ActionTarget::Location(target_pos))
                     );
 
                     return
@@ -147,7 +153,7 @@ impl TerranBot {
             false
         }
         else {
-            p.command_units(&vec![ Rc::clone(&units[0]) ], ability);
+            p.command_units(&vec![ Rc::clone(&units[0]) ], ability, None);
             true
         }
     }
@@ -171,10 +177,14 @@ impl TerranBot {
 
             let u = random::<usize>() % units.len();
 
-            p.command_units_to_location(
+            p.command_units(
                 &vec![ Rc::clone(&units[u]) ],
                 ability,
-                Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0
+                Some(
+                    ActionTarget::Location(
+                        Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0
+                    )
+                )
             );
 
             true

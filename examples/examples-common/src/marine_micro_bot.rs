@@ -1,8 +1,10 @@
 
 use num::Float;
 
-use sc2::data::{ Tag, Point2, UnitType, Alliance, Ability, Unit };
-use sc2::{ Agent, Participant, Observer, Actions };
+use sc2::data::{
+    Tag, Point2, UnitType, Alliance, Ability, Unit, ActionTarget
+};
+use sc2::{ Agent, Participant, Observation, Actions };
 
 use na::{ distance, distance_squared, normalize };
 
@@ -52,8 +54,8 @@ impl Agent for MarineMicroBot {
 
         if !self.move_back {
             match self.targeted_zergling {
-                Some(tag) => game.command_units_to_target(
-                    &units, Ability::Attack, tag
+                Some(tag) => game.command_units(
+                    &units, Ability::Attack, Some(ActionTarget::UnitTag(tag))
                 ),
                 None => ()
             }
@@ -68,7 +70,9 @@ impl Agent for MarineMicroBot {
                 self.move_back = false;
             }
 
-            game.command_units_to_location(&units, Ability::Smart, target);
+            game.command_units(
+                &units, Ability::Smart, Some(ActionTarget::Location(target))
+            );
         }
     }
 

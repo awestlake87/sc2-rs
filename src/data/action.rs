@@ -12,7 +12,7 @@ use super::{ Tag, Ability, Point2, Point2I, Rect2I };
 
 pub enum ActionTarget {
     UnitTag(Tag),
-    Position(Point2),
+    Location(Point2),
 }
 
 pub struct Action {
@@ -41,7 +41,7 @@ impl Action {
                 else if action.has_target_world_space_pos() {
                     let pos = action.get_target_world_space_pos();
                     Some(
-                        ActionTarget::Position(
+                        ActionTarget::Location(
                             Point2::new(pos.get_x(), pos.get_y())
                         )
                     )

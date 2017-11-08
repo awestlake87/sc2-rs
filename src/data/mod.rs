@@ -49,7 +49,9 @@ pub type Point3 = geometry::Point3<f32>;
 /// 2D rectangle represented by two points
 #[derive(Copy, Clone)]
 pub struct Rect2 {
+    /// upper left-hand corner
     pub from:               Point2,
+    /// lower right-hand corner
     pub to:                 Point2,
 }
 
@@ -61,8 +63,20 @@ pub type Point3I = na::Vector3<i32>;
 /// 2D integer rectangle represented by two points
 #[derive(Copy, Clone)]
 pub struct Rect2I {
+    /// upper left-hand corner
     pub from:               Point2I,
+    /// lower right-hand corner
     pub to:                 Point2I,
+}
+
+/// visibility of a point on the terrain
+#[allow(missing_docs)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum Visibility {
+    Hidden,
+    Fogged,
+    Visible,
+    FullHidden
 }
 
 /// data for an ability that is currently available
@@ -195,6 +209,8 @@ impl DamageBonus {
 }
 
 /// target type of a weapon
+#[allow(missing_docs)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum WeaponTargetType {
     Ground,
     Air,
@@ -376,6 +392,14 @@ pub struct EffectData {
     radius:                     f32,
 }
 
+/// visuals of a persistent ability on the map (eg. PsiStorm)
+pub struct Effect {
+    /// stable effect ID
+    pub effect:                 Ability,
+    /// all the positions that this effect is impacting on the map
+    pub positions:              Vec<Point2>,
+}
+
 /// power source information for Protoss
 pub struct PowerSource {
     /// unit tag of the power source
@@ -399,33 +423,50 @@ impl From<raw::PowerSource> for PowerSource {
     }
 }
 
-
+/// information about a player in a replay
 pub struct ReplayPlayerInfo {
+    /// id of the player
     pub player_id:              u32,
+    /// player ranking
     pub mmr:                    i32,
+    /// player actions per minute
     pub apm:                    i32,
 
+    /// actual player race
     pub race:                   Race,
-    pub race_selected:          Option<Race>, // if player selected Random
+    /// selected player race (if Random or None, race will be different)
+    pub race_selected:          Option<Race>,
+    /// if the player won or lost
     pub game_result:            Option<GameResult>,
 }
 
+/// information about a replay file
 pub struct ReplayInfo {
+    /// name of the map
     pub map_name:               String,
+    /// path to the map
     pub map_path:               String,
+    /// version of the game
     pub game_version:           String,
+    /// data version of the game
     pub data_version:           String,
 
+    /// duration in seconds
     pub duration:               f32,
-    pub num_steps:              u32,
+    /// duration in game steps
+    pub duration_steps:              u32,
 
+    /// data build of the game
     pub data_build:             u32,
+    /// required base build of the game
     pub base_build:             u32,
 
+    /// information about specific players
     pub players:                Vec<ReplayPlayerInfo>
 }
 
 impl ReplayInfo {
+    /// convert from the protobuf data
     pub fn from_proto(info: &sc2api::ResponseReplayInfo) -> Self {
         Self {
             map_name: info.get_map_name().to_string(),
@@ -434,7 +475,7 @@ impl ReplayInfo {
             data_version: info.get_data_version().to_string(),
 
             duration: info.get_game_duration_seconds(),
-            num_steps: info.get_game_duration_loops(),
+            duration_steps: info.get_game_duration_loops(),
 
             data_build: info.get_data_build(),
             base_build: info.get_base_build(),

@@ -15,10 +15,14 @@ use super::super::data::{
     Alliance,
     DisplayType
 };
-use super::{ Participant, AppState, Observer };
+use super::{ Participant, AppState, Observation };
 
+/// control interface
 pub trait Control {
+    /// save the map data as a path on the remote end
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
+
+    /// create a game with the given settings
     fn create_game(
         &mut self,
         settings: &GameSettings,
@@ -27,18 +31,27 @@ pub trait Control {
     )
         -> Result<()>
     ;
+
+    /// request to join a multiplayer game with the given port settings
     fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()>;
+    /// await the join response after a join request
     fn await_join_game(&mut self) -> Result<()>;
 
+    /// leave the game
     fn leave_game(&mut self) -> Result<()>;
 
+    /// request to step the game forward
     fn req_step(&mut self, count: usize) -> Result<()>;
+    /// await the step response from the game instance
     fn await_step(&mut self) -> Result<()>;
 
+    /// save the replay data of the last game
     fn save_replay(&mut self, path: PathBuf) -> Result<()>;
 
+    /// issue events to the users
     fn issue_events(&mut self) -> Result<()>;
 
+    /// quit the game instance
     fn quit(&mut self) -> Result<()>;
 }
 
@@ -55,6 +68,7 @@ impl Control for Participant {
     fn save_map(&mut self, _: Vec<u8>, _: PathBuf) -> Result<()> {
         unimplemented!("save map");
     }
+    
     fn create_game(
         &mut self,
         settings: &GameSettings,

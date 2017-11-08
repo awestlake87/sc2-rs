@@ -5,7 +5,7 @@ use sc2_proto::sc2api::{ Request };
 
 use super::super::{ Result, GameEvents };
 use super::super::data::{ ReplayInfo };
-use super::{ Participant, Observer };
+use super::{ Participant, Observation };
 
 /// UNSTABLE replay interface
 pub trait Replay {

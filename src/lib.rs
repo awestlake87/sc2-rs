@@ -28,7 +28,7 @@ use std::path::PathBuf;
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use participant::{
-    Participant, Actions, Control, Observer, Query, Replay, User
+    Participant, Actions, Control, Observation, Query, Replay, User
 };
 pub use replay_observer::{ ReplayObserver };
 

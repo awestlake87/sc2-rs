@@ -3,7 +3,7 @@ mod actions;
 mod control;
 mod debug;
 mod events;
-mod observer;
+mod observation;
 mod query;
 mod replay;
 mod spatial_actions;
@@ -36,13 +36,14 @@ use super::data::{
     ReplayInfo,
     UnitType,
     UnitTypeData,
+    Effect
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
 
 pub use self::actions::Actions;
 pub use self::control::Control;
-pub use self::observer::Observer;
+pub use self::observation::Observation;
 pub use self::query::Query;
 pub use self::replay::Replay;
 pub use self::spatial_actions::FeatureLayerActions;

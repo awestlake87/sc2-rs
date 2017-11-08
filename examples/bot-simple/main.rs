@@ -7,8 +7,8 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::{ Agent, Coordinator, Participant, Observer, Actions, User };
-use sc2::data::{ PlayerSetup, Race, Alliance, Ability };
+use sc2::{ Agent, Coordinator, Participant, Observation, Actions, User };
+use sc2::data::{ PlayerSetup, Race, Alliance, Ability, ActionTarget };
 
 use examples_common::{
     USAGE,
@@ -56,8 +56,10 @@ impl Agent for Bot {
                     }
                 };
 
-                game.command_units_to_location(
-                    &vec![ unit ], Ability::Smart, target
+                game.command_units(
+                    &vec![ unit ],
+                    Ability::Smart,
+                    Some(ActionTarget::Location(target))
                 );
             }
             println!("player {} 100 steps...", game.get_player_id().unwrap());

@@ -19,51 +19,107 @@ use data::{
     SpatialAction,
     Score,
     UnitType,
-    UnitTypeData
+    UnitTypeData,
+    Effect,
+    Ability,
+    AbilityData,
+    UpgradeData,
+    Buff,
+    BuffData,
+    PlayerResult,
+    Visibility,
 };
 use participant::{ Participant, AppState };
 
-pub trait Observer {
+/// the observer interface
+pub trait Observation {
+    /// get the player id associated with the participant
     fn get_player_id(&self) -> Option<u32>;
+    /// get the current game loop (or game step)
     fn get_game_loop(&self) -> u32;
+    /// get a list of all known units at the moment
     fn get_units(&self) -> Vec<Rc<Unit>>;
 
+    /// get a list of all known units that match the filter condition
     fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
         where F: Fn(&Unit) -> bool
     ;
 
+    /// get the actions performed as abilities applied to units
+    ///
+    /// (for use with the raw option)
     fn get_actions(&self) -> &Vec<Action>;
+    /// get the actions performed as abilities applied to the current selection
+    ///
+    /// (for use with the feature layer or rendered options)
     fn get_feature_layer_actions(&self) -> &Vec<SpatialAction>;
+    /// get all power sources associated with the current player
     fn get_power_sources(&self) -> &Vec<PowerSource>;
+    /// get all active effects in vision of the current player
+    fn get_effects(&self) -> &Vec<Effect>;
+    /// get all upgrades
     fn get_upgrades(&self) -> &Vec<Upgrade>;
+    /// get detailed current set of scores
     fn get_score(&self) -> &Score;
-    //fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
+    /// get ability data
+    fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
+    /// get unit type data
     fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData>;
-    //fn get_upgrade_data(&self)
-    //fn get_buff_data(&self)
+    /// get upgrade data
+    fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData>;
+    /// get buff data
+    fn get_buff_data(&self) -> &HashMap<Buff, BuffData>;
+    /// get game info
     fn get_game_info(&mut self) -> Result<&GameInfo>;
+
+    /// get current mineral count
     fn get_minerals(&self) -> u32;
+    /// get current vespene count
     fn get_vespene(&self) -> u32;
+    /// get the total supply cap given the players max supply
     fn get_food_cap(&self) -> u32;
+    /// the total supply used by the player
     fn get_food_used(&self) -> u32;
+    /// the total supply consumed by army units alone
     fn get_food_army(&self) -> u32;
+    /// the total supply consumed by workers alone
     fn get_food_workers(&self) -> u32;
+    /// the number of workers that currently have no orders
     fn get_idle_worker_count(&self) -> u32;
+    /// the number of army units
     fn get_army_count(&self) -> u32;
+    /// the number of warp gates owned by the player
     fn get_warp_gate_count(&self) -> u32;
+    /// position of the center of the camera
     fn get_camera_pos(&self) -> Point2;
+    /// gets the initial start location of the player
     fn get_start_location(&self) -> Point3;
+    /// gets the results of the game
+    fn get_results(&self) -> Option<&Vec<PlayerResult>>;
+    /// check if the given point contains creep
     fn has_creep(&self, point: Point2) -> bool;
-    //fn get_visibility(&self, point: Point2) -> Visibility;
+    /// get the visibility of the given point for the current player
+    fn get_visibility(&self, point: Point2) -> Visibility;
+    /// whether the given point on the terrain is pathable
+    ///
+    /// this does not include pathing blockers like structures, for more
+    /// accurate pathing results, use query interface
     fn is_pathable(&self, point: Point2) -> bool;
+    /// whether the given point on the terrain is buildable
+    ///
+    /// this does not include blockers like other structures. for more
+    /// accurate building placement results, use query interface
     fn is_placable(&self, point: Point2) -> bool;
+    /// returns the terrain height of the given point
     fn get_terrain_height(&self, point: Point2) -> f32;
 
+    /// request a data update
     fn update_data(&mut self) -> Result<()>;
+    /// request an observation update
     fn update_observation(&mut self) -> Result<()>;
 }
 
-impl Observer for Participant {
+impl Observation for Participant {
     fn get_player_id(&self) -> Option<u32> {
         self.player_id
     }
@@ -95,11 +151,23 @@ impl Observer for Participant {
     fn get_power_sources(&self) -> &Vec<PowerSource> {
         &self.power_sources
     }
+    fn get_effects(&self) -> &Vec<Effect> {
+        unimplemented!("get effects");
+    }
     fn get_upgrades(&self) -> &Vec<Upgrade> {
         &self.upgrades
     }
     fn get_score(&self) -> &Score {
         unimplemented!("get score");
+    }
+    fn get_ability_data(&self) -> &HashMap<Ability, AbilityData> {
+        unimplemented!("get ability data");
+    }
+    fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData> {
+        unimplemented!("get upgrade data");
+    }
+    fn get_buff_data(&self) -> &HashMap<Buff, BuffData> {
+        unimplemented!("get buff data");
     }
     //fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
     fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData> {
@@ -154,8 +222,14 @@ impl Observer for Participant {
     fn get_start_location(&self) -> Point3 {
         unimplemented!("get start location");
     }
+    fn get_results(&self) -> Option<&Vec<PlayerResult>> {
+        unimplemented!("get results");
+    }
     fn has_creep(&self, _: Point2) -> bool {
         unimplemented!("has creep");
+    }
+    fn get_visibility(&self, _: Point2) -> Visibility {
+        unimplemented!("get visibility");
     }
     fn is_pathable(&self, _: Point2) -> bool {
         unimplemented!("is pathable");

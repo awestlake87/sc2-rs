@@ -12,7 +12,9 @@ use std::path::{ MAIN_SEPARATOR };
 use docopt::Docopt;
 use glob::glob;
 
-use sc2::{ Agent, Coordinator, Participant, User, Observer, ReplayObserver };
+use sc2::{
+    Agent, Coordinator, Participant, User, Observation, ReplayObserver
+};
 use sc2::data::{ PlayerSetup, Unit, UnitType };
 
 use examples_common::{

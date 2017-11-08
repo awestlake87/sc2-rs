@@ -7,54 +7,38 @@ use super::{ Result };
 use data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
 use participant::{ Participant };
 
+/// interface for sending actions to the game instance
 pub trait Actions {
-    fn command_units(&mut self, units: &Vec<Rc<Unit>>, ability: Ability);
-    fn command_units_to_location(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, location: Point2
+    /// issue a command to the given units
+    fn command_units(
+        &mut self, units: &Vec<Rc<Unit>>,
+        ability: Ability,
+        target: Option<ActionTarget>
     );
-    fn command_units_to_target(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: Tag
-    );
-    fn get_commands(&self) -> &Vec<Tag>;
+
+    /// send the requested actions to the game instance
     fn send_actions(&mut self) -> Result<()>;
-    fn toggle_autocast(&mut self, unit_tags: &Vec<Tag>, ability: Ability);
+
+    /// toggles the autocast of an ability on a list of units
+    fn toggle_autocast(&mut self, unit_tags: &Vec<Rc<Unit>>, ability: Ability)
+        -> Result<()>
+    ;
 }
 
 impl Actions for Participant {
-    fn command_units(&mut self, units: &Vec<Rc<Unit>>, ability: Ability) {
-        self.requested_actions.push(
-            Action {
-                ability: ability,
-                unit_tags: units.iter().map(|u| u.tag).collect(),
-                target: None,
-            }
-        );
-    }
-    fn command_units_to_location(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, location: Point2
+    fn command_units(
+        &mut self,
+        units: &Vec<Rc<Unit>>,
+        ability: Ability,
+        target: Option<ActionTarget>
     ) {
         self.requested_actions.push(
             Action {
                 ability: ability,
                 unit_tags: units.iter().map(|u| u.tag).collect(),
-                target: Some(ActionTarget::Position(location)),
+                target: target,
             }
         );
-    }
-    fn command_units_to_target(
-        &mut self, units: &Vec<Rc<Unit>>, ability: Ability, target: Tag
-    ) {
-        self.requested_actions.push(
-            Action {
-                ability: ability,
-                unit_tags: units.iter().map(|u| u.tag).collect(),
-                target: Some(ActionTarget::UnitTag(target)),
-            }
-        )
-    }
-
-    fn get_commands(&self) -> &Vec<Tag> {
-        &self.commands
     }
 
     fn send_actions(&mut self) -> Result<()> {
@@ -76,7 +60,7 @@ impl Actions for Participant {
                         Some(ActionTarget::UnitTag(tag)) => {
                             cmd.set_target_unit_tag(tag);
                         },
-                        Some(ActionTarget::Position(pos)) => {
+                        Some(ActionTarget::Location(pos)) => {
                             let target = cmd.mut_target_world_space_pos();
                             target.set_x(pos.x);
                             target.set_y(pos.y);
@@ -116,7 +100,9 @@ impl Actions for Participant {
         Ok(())
     }
 
-    fn toggle_autocast(&mut self, _: &Vec<Tag>, _: Ability) {
+    fn toggle_autocast(&mut self, _: &Vec<Rc<Unit>>, _: Ability)
+        -> Result<()>
+    {
         unimplemented!("toggle autocast")
     }
 }

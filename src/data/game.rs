@@ -5,12 +5,23 @@ use sc2_proto::sc2api;
 
 use super::{ Point2 };
 
+/// result of the game
+#[allow(missing_docs)]
 #[derive(Copy, Clone)]
 pub enum GameResult {
     Win,
     Loss,
     Tie,
     Undecided,
+}
+
+/// game result tied to a specific player id
+#[derive(Copy, Clone)]
+pub struct PlayerResult {
+    /// player that the result is associated with
+    pub player_id:              u32,
+    /// result of the game from the perspective of the player
+    pub result:                 GameResult
 }
 
 impl From<sc2api::Result> for GameResult {
@@ -24,9 +35,12 @@ impl From<sc2api::Result> for GameResult {
     }
 }
 
+/// different ways of specifying a map
 #[derive(Clone)]
 pub enum Map {
+    /// specify a map on the local filesystem
     LocalMap(PathBuf),
+    /// specify a known blizzard map
     BlizzardMap(String),
 }
 
