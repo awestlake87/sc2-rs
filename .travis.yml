@@ -12,7 +12,7 @@ matrix:
 cache: cargo
 
 before_deploy:
-  - cargo doc --lib
+  - cargo doc --no-deps
 
 deploy:
   provider: pages
@@ -20,4 +20,4 @@ deploy:
   github_token: $GITHUB_TOKEN # Set in travis-ci.org dashboard
   on:
     branch: master
-  local_dir: target/doc/
+  local_dir: ./target/doc/
