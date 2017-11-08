@@ -35,8 +35,7 @@ use super::data::{
     Score,
     ReplayInfo,
     UnitType,
-    UnitTypeData,
-    Effect
+    UnitTypeData
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;

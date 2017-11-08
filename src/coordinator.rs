@@ -18,15 +18,23 @@ enum ExeArch {
     X32
 }
 
+/// settings for the coordinator
 #[derive(Clone)]
 pub struct CoordinatorSettings {
+    /// run the exe under wine
     pub use_wine:           bool,
+    /// StarCraft II install directory
     pub dir:                Option<PathBuf>,
+    /// base port (all other game ports are incremented from this one)
     pub port:               u16,
+    /// rect for the game instance window
     pub window:             Rect<u32>,
 
+    /// a list of replay files to distribute amongst the replay observers
     pub replay_files:       Vec<PathBuf>,
+    /// whether the game is stepped in realtime
     pub is_realtime:        bool,
+    /// number of steps to request each time in a non-realtime game
     pub step_size:          usize,
 }
 
@@ -45,6 +53,7 @@ impl Default for CoordinatorSettings {
     }
 }
 
+/// central struct in charge of managing participants, games, and replays
 pub struct Coordinator {
     use_wine:               bool,
     exe:                    PathBuf,
@@ -63,6 +72,7 @@ pub struct Coordinator {
 }
 
 impl Coordinator {
+    /// construct a coordinator from settings
     pub fn from_settings(settings: CoordinatorSettings) -> Result<Self> {
         let dir = match settings.dir {
             Some(dir) => dir,
@@ -117,7 +127,12 @@ impl Coordinator {
         Ok(instance)
     }
 
-    pub fn launch_starcraft(&mut self, players: Vec<(PlayerSetup, Option<User>)>) -> Result<()> {
+    /// launch any game instances necessary for the following players
+    pub fn launch_starcraft(
+        &mut self, players: Vec<(PlayerSetup, Option<User>)>
+    )
+        -> Result<()>
+    {
         self.cleanup()?;
 
         let mut instances = vec![ ];
@@ -203,6 +218,11 @@ impl Coordinator {
         Ok(())
     }
 
+    /// start a game with the given settings
+    ///
+    /// this will only work if one or more players was supplied to the
+    /// coordinator. the coordinator cannot start a game between two computers,
+    /// and replay observers are handled separately.
     pub fn start_game(&mut self, settings: GameSettings) -> Result<()> {
         assert!(self.participants.len() > 0);
 
@@ -232,6 +252,15 @@ impl Coordinator {
         Ok(())
     }
 
+    /// trigger an update on all participants and replay observers
+    ///
+    /// this will step the game if non-realtime, or update each agent with
+    /// realtime game data. any idle replay observers will be assigned a replay
+    /// if one is queued, and any running replays will be stepped.
+    ///
+    /// returns Ok(true) if update loop should continue, Ok(false) if update
+    /// loop is finished (mainly for replays) and an Err if something went
+    /// wrong
     pub fn update(&mut self) -> Result<bool> {
         if self.is_realtime {
             self.step_agents_realtime()?;
@@ -517,6 +546,7 @@ impl Coordinator {
         true
     }
 
+    /// cleanly shut down all managed participants
     pub fn cleanup(&mut self) -> Result<()> {
         for p in self.participants.iter_mut().chain(
             self.replay_observers.iter_mut()

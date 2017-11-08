@@ -1,6 +1,4 @@
 
-use std::mem;
-
 use sc2_proto::sc2api::{ Request };
 
 use super::super::{ Result, GameEvents };

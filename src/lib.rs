@@ -1,5 +1,10 @@
 #![warn(missing_docs)]
 
+//! StarCraft II API for Rust
+//!
+//! this API is intended to provide functionality similar to that of Blizzard
+//! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
+
 extern crate bytes;
 extern crate futures;
 extern crate glob;
@@ -16,10 +21,11 @@ extern crate url;
 mod agent;
 mod client;
 mod coordinator;
-pub mod data;
 mod instance;
 mod participant;
 mod replay_observer;
+
+pub mod data;
 
 use std::result;
 use std::fmt;

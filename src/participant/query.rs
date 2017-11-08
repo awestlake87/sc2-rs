@@ -29,7 +29,7 @@ pub struct PlacementQuery {
     pub placing_unit_tag:   Option<Tag>,
 }
 
-/// the query interface
+/// UNSTABLE query trait
 pub trait Query {
     /// returns the available abilities for each unit
     ///

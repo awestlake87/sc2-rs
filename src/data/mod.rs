@@ -1,3 +1,4 @@
+//! contains useful data exposed through interfaces to the game instance
 
 mod ability;
 mod action;
@@ -383,13 +384,13 @@ pub struct BuffData {
 /// effect data
 pub struct EffectData {
     /// stable effect ID
-    effect:                     Ability,
+    pub effect:                 Ability,
     /// effect name (corresponds to game's catalog)
-    name:                       String,
+    pub name:                   String,
     /// a more recognizable name of the effect
-    friendly_name:              String,
+    pub friendly_name:          String,
     /// size of the circle the effect impacts
-    radius:                     f32,
+    pub radius:                 f32,
 }
 
 /// visuals of a persistent ability on the map (eg. PsiStorm)

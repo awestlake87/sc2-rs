@@ -4,10 +4,10 @@ use std::rc::Rc;
 use sc2_proto::sc2api;
 
 use super::{ Result };
-use data::{ Ability, Action, ActionTarget, Unit, Tag, Point2 };
+use data::{ Ability, Action, ActionTarget, Unit };
 use participant::{ Participant };
 
-/// interface for sending actions to the game instance
+/// UNSTABLE trait for sending actions to the game instance
 pub trait Actions {
     /// issue a command to the given units
     fn command_units(

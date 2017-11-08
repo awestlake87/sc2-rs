@@ -17,7 +17,7 @@ use super::super::data::{
 };
 use super::{ Participant, AppState, Observation };
 
-/// control interface
+/// UNSTABLE control trait
 pub trait Control {
     /// save the map data as a path on the remote end
     fn save_map(&mut self, data: Vec<u8>, remote_path: PathBuf) -> Result<()>;
@@ -68,7 +68,7 @@ impl Control for Participant {
     fn save_map(&mut self, _: Vec<u8>, _: PathBuf) -> Result<()> {
         unimplemented!("save map");
     }
-    
+
     fn create_game(
         &mut self,
         settings: &GameSettings,

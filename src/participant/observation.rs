@@ -31,7 +31,7 @@ use data::{
 };
 use participant::{ Participant, AppState };
 
-/// the observer interface
+/// UNSTABLE observation trait
 pub trait Observation {
     /// get the player id associated with the participant
     fn get_player_id(&self) -> Option<u32>;

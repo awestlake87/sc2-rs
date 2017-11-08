@@ -3,6 +3,7 @@ use super::{ Result };
 use data::{ Ability, Point2I, Rect2I, PointSelectType };
 use participant::{ Participant };
 
+/// UNSTABLE feature layer trait
 pub trait FeatureLayerActions {
     fn command_unit_spatial(&mut self, ability: Ability) -> Result<()>;
     fn command_unit_screen(&mut self, ability: Ability, point: Point2I)
