@@ -6,7 +6,7 @@ use std::rc::Rc;
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::super::{ Result, Error, GameEvents };
+use super::super::{ Result, GameEvents };
 use super::super::data::{
     GameSettings,
     GamePorts,
@@ -84,9 +84,7 @@ impl Control for Participant {
                 req.mut_create_game().mut_local_map().set_map_path(
                     match path.clone().into_os_string().into_string() {
                         Ok(s) => s,
-                        Err(_) => return Err(
-                            Error::Todo("invalid path string")
-                        )
+                        Err(_) => bail!("invalid path string")
                     }
                 );
             },
@@ -206,7 +204,7 @@ impl Control for Participant {
 
     fn req_step(&mut self, count: usize) -> Result<()> {
         if self.get_app_state() != AppState::Normal {
-            return Err(Error::Todo("app is in bad state"))
+            bail!("app is in bad state")
         }
 
         let mut req = sc2api::Request::new();
@@ -222,7 +220,7 @@ impl Control for Participant {
         let rsp = self.recv()?;
 
         if !rsp.has_step() || rsp.get_error().len() > 0 {
-            return Err(Error::Todo("step error"))
+            bail!("step error")
         }
 
         self.update_observation()?;

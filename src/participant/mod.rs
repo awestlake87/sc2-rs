@@ -15,7 +15,7 @@ use std::time::Duration;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
-use super::{ Result, Error };
+use super::{ Result };
 use super::agent::Agent;
 use super::client::Client;
 use super::data::{
@@ -260,7 +260,7 @@ impl Participant {
     /// receive and validate a message from the game instance
     fn recv(&mut self) -> Result<Response> {
         if self.app_state != AppState::Normal {
-            return Err(Error::Todo("app is in a bad state"))
+            bail!("app is in a bad state")
         }
 
         let prev_status = self.last_status;

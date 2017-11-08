@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![recursion_limit = "1024"]
 
 //! StarCraft II API for Rust
 //!
@@ -6,6 +7,8 @@
 //! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
 
 extern crate bytes;
+#[macro_use]
+extern crate error_chain;
 extern crate futures;
 extern crate glob;
 extern crate nalgebra as na;
@@ -27,8 +30,6 @@ mod replay_observer;
 
 pub mod data;
 
-use std::result;
-use std::fmt;
 use std::path::PathBuf;
 
 pub use agent::{ Agent };
@@ -40,47 +41,33 @@ pub use replay_observer::{ ReplayObserver };
 
 use data::{ Unit, Upgrade };
 
-/// type used for all results in the API
-pub type Result<T> = result::Result<T, Error>;
+error_chain! {
+    errors {
+        /// exe was not supplied to the coordinator
+        ExeNotSpecified {
+            description("exe not specified")
+            display("StarCraft II exe was not specified")
+        }
+        /// exe supplied to the coordinator does not exist
+        ExeDoesNotExist(exe: PathBuf) {
+            description("exe file does not exist")
+            display("StarCraft II exe does not exist at {:?}", exe)
+        }
 
-
-/// type used for all errors in the API
-#[derive(Debug)]
-pub enum Error {
-    /// the executable supplied to the coordinator does not exist
-    ExeDoesNotExist(PathBuf),
-    /// no executable was supplied to the coordinator
-    ExeNotSpecified,
-
-    /// failed to open the connection to the game instance
-    WebsockOpenFailed,
-    /// failed to send a message to the game instance
-    WebsockSendFailed,
-    /// failed to receive a message from the game instance
-    WebsockRecvFailed,
-
-    /// an error variant has not been created for this situation yet
-    ///
-    /// this should not be used in a release, it's just a placeholder until we
-    /// figure out a good system for error handling
-    Todo(&'static str),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::ExeDoesNotExist(ref path) => write!(
-                f, "starcraft exe {:?} does not exist", path
-            ),
-            Error::ExeNotSpecified => write!(
-                f, "starcraft exe not specified"
-            ),
-
-            Error::WebsockOpenFailed => write!(f, "websocket open failed"),
-            Error::WebsockSendFailed => write!(f, "websocket send failed"),
-            Error::WebsockRecvFailed => write!(f, "websocket recv failed"),
-
-            Error::Todo(ref msg) => write!(f, "todo {:?}", *msg)
+        /// client failed to open connection to the game instance
+        ClientOpenFailed {
+            description("unable to open connection to the game instance")
+            display("client open failed")
+        }
+        /// client failed to send a message to the game instance
+        ClientSendFailed {
+            description("unable to send message to the game instance")
+            display("client send failed")
+        }
+        /// client failed to receive a message from the game instance
+        ClientRecvFailed {
+            description("unable to receive message from game instance")
+            display("client recv failed")
         }
     }
 }

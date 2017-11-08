@@ -1,4 +1,6 @@
 
+#[macro_use]
+extern crate error_chain;
 extern crate glutin;
 extern crate nalgebra as na;
 extern crate num;
@@ -15,7 +17,7 @@ use std::path::PathBuf;
 
 use rand::random;
 
-use sc2::{ CoordinatorSettings, Result, Error };
+use sc2::{ CoordinatorSettings, Result };
 use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
 
 pub use marine_micro_bot::{ MarineMicroBot };
@@ -82,11 +84,11 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     let map = match args.flag_map {
         Some(ref map) => match args.flag_local_map {
             None => Map::BlizzardMap(map.clone()),
-            _ => return Err(Error::Todo("multiple maps specified"))
+            _ => bail!("multiple maps specified")
         },
         None => match args.flag_local_map {
             Some(ref map) => Map::LocalMap(map.clone()),
-            None => return Err(Error::Todo("no map specified"))
+            None => bail!("no map specified")
         }
     };
 

@@ -5,6 +5,7 @@ authors = ["najen"]
 
 [dependencies]
 bytes = "*"
+error-chain = "*"
 futures = "*"
 glob = "*"
 glutin = "*"

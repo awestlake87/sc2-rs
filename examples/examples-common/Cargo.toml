@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 
 [dependencies]
+error-chain = "*"
 glutin = "*"
 nalgebra = "*"
 num = "*"

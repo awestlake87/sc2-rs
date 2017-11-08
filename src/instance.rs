@@ -6,7 +6,7 @@ use std::process;
 
 use url::Url;
 
-use super::{ Result, Error };
+use super::{ Result, ErrorKind };
 use data::{ Rect };
 use client::{ Client };
 
@@ -39,13 +39,13 @@ impl Instance {
         let exe = match settings.exe {
             Some(exe) => {
                 if !exe.as_path().is_file() {
-                    return Err(Error::ExeDoesNotExist(exe.clone()))
+                    bail!(ErrorKind::ExeDoesNotExist(exe.clone()))
                 }
                 else {
                     exe
                 }
             }
-            None => return Err(Error::ExeNotSpecified)
+            None => bail!(ErrorKind::ExeNotSpecified)
         };
 
         Ok(
@@ -116,14 +116,14 @@ impl Instance {
             println!("retrying {}...", 10 - i);
         };
 
-        Err(Error::WebsockOpenFailed)
+        Err(ErrorKind::ClientOpenFailed.into())
     }
 
     pub fn kill(&mut self) -> Result<()> {
         match self.child {
             Some(ref mut child) => match child.kill() {
                 Ok(_) => Ok(()),
-                Err(_) => Err(Error::Todo("unable to kill process"))
+                Err(_) => Err("unable to kill process".into())
             },
             None => Ok(())
         }

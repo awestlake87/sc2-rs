@@ -5,7 +5,7 @@ use std::path::{ PathBuf, MAIN_SEPARATOR };
 use glob::glob;
 use regex::Regex;
 
-use super::{ Result, Error, GameEvents };
+use super::{ Result, ResultExt, ErrorKind, GameEvents };
 use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
@@ -76,7 +76,7 @@ impl Coordinator {
     pub fn from_settings(settings: CoordinatorSettings) -> Result<Self> {
         let dir = match settings.dir {
             Some(dir) => dir,
-            None => return Err(Error::ExeNotSpecified)
+            None => bail!(ErrorKind::ExeNotSpecified)
         };
 
         let (exe, arch) = select_exe(&dir, settings.use_wine)?;
@@ -147,7 +147,7 @@ impl Coordinator {
         }
 
         if instances.len() < 1 {
-            return Err(Error::Todo("expected at least one instance"))
+            bail!("expected at least one instance")
         }
 
         let mut i = 0;
@@ -282,16 +282,18 @@ impl Coordinator {
     }
 
     fn step_agents(&mut self) -> Result<()> {
-        let mut result = Ok(());
+        let mut errors = vec![ ];
 
         for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
-                continue;
+                continue
             }
 
             match p.poll_leave_game() {
                 Ok(true) => continue,
-                _ => ()
+                Ok(false) => (),
+
+                Err(e) => errors.push(e)
             }
 
             if p.is_finished_game() {
@@ -301,7 +303,7 @@ impl Coordinator {
             match p.req_step(self.step_size) {
                 Err(e) => {
                     eprintln!("step err: {}", e);
-                    result = Err(e)
+                    errors.push(e)
                 },
                 _ => ()
             }
@@ -316,7 +318,7 @@ impl Coordinator {
             match p.await_step() {
                 Err(e) => {
                     eprintln!("await step err: {}", e);
-                    result = Err(e)
+                    errors.push(e)
                 },
                 _ => (),
             }
@@ -325,7 +327,7 @@ impl Coordinator {
                 match p.issue_events() {
                     Err(e) => {
                         eprintln!("issue events err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => ()
                 }
@@ -333,7 +335,7 @@ impl Coordinator {
                 match p.send_actions() {
                     Err(e) => {
                         eprintln!("send actions err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => ()
                 }
@@ -349,18 +351,34 @@ impl Coordinator {
                 match p.leave_game() {
                     Err(e) => {
                         eprintln!("leave game err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => println!("leave game")
                 }
             }
         }
 
-        result
+        if errors.is_empty() {
+            Ok(())
+        }
+        else {
+            let mut result = Ok(());
+
+            for e in errors.drain(..) {
+                result = if let Ok(()) = result {
+                    Err(e)
+                }
+                else {
+                    result.chain_err(move || ErrorKind::from(e))
+                }
+            }
+
+            result
+        }
     }
 
     fn step_agents_realtime(&mut self) -> Result<()> {
-        let mut result = Ok(());
+        let mut errors = vec![ ];
 
         for p in &mut self.participants {
             if p.get_app_state() != AppState::Normal {
@@ -369,7 +387,9 @@ impl Coordinator {
 
             match p.poll_leave_game() {
                 Ok(true) => continue,
-                _ => ()
+                Ok(false) => (),
+
+                Err(e) => errors.push(e)
             }
 
             if p.is_finished_game() {
@@ -379,7 +399,7 @@ impl Coordinator {
             match p.update_observation() {
                 Err(e) => {
                     eprintln!("update observation err: {}", e);
-                    result = Err(e)
+                    errors.push(e)
                 },
                 _ => ()
             }
@@ -394,14 +414,14 @@ impl Coordinator {
                 match p.issue_events() {
                     Err(e) => {
                         eprintln!("issue events err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => ()
                 }
                 match p.send_actions() {
                     Err(e) => {
                         eprintln!("send actions err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => ()
                 }
@@ -416,18 +436,34 @@ impl Coordinator {
                 match p.leave_game() {
                     Err(e) => {
                         eprintln!("leave game err: {}", e);
-                        result = Err(e)
+                        errors.push(e)
                     },
                     _ => println!("leave game")
                 }
             }
         }
 
-        result
+        if errors.is_empty() {
+            Ok(())
+        }
+        else {
+            let mut result = Ok(());
+
+            for e in errors.drain(..) {
+                result = if let Ok(()) = result {
+                    Err(e)
+                }
+                else {
+                    result.chain_err(move || ErrorKind::from(e))
+                }
+            }
+
+            result
+        }
     }
 
     fn start_replays(&mut self) -> Result<()> {
-        let mut result = Ok(());
+        let mut errors = vec![ ];
 
         for r in &mut self.replay_observers {
             let mut started = false;
@@ -442,7 +478,7 @@ impl Coordinator {
                         match r.gather_replay_info(
                             &file.to_string_lossy(), true
                         ) {
-                            Err(e) => result = Err(e),
+                            Err(e) => errors.push(e),
                             _ => ()
                         }
 
@@ -452,7 +488,7 @@ impl Coordinator {
                                     &file.to_string_lossy()
                                 ) {
                                     Err(e) => {
-                                        result = Err(e);
+                                        errors.push(e);
                                         false
                                     },
                                     _ => true
@@ -475,11 +511,27 @@ impl Coordinator {
             }
         }
 
-        result
+        if errors.is_empty() {
+            Ok(())
+        }
+        else {
+            let mut result = Ok(());
+
+            for e in errors.drain(..) {
+                result = if let Ok(()) = result {
+                    Err(e)
+                }
+                else {
+                    result.chain_err(move || ErrorKind::from(e))
+                }
+            }
+
+            result
+        }
     }
 
     fn step_replay_observers(&mut self) -> Result<()> {
-        let mut result = Ok(());
+        let mut errors = vec![ ];
 
         for r in &mut self.replay_observers {
             if r.get_app_state() != AppState::Normal {
@@ -492,24 +544,24 @@ impl Coordinator {
                 }
 
                 match r.await_replay() {
-                    Err(e) => result = Err(e),
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
 
                 match r.update_data() {
-                    Err(e) => result = Err(e),
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
             }
 
             if r.is_in_game() {
                 match r.req_step(self.step_size) {
-                    Err(e) => result = Err(e),
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
 
                 match r.await_step() {
-                    Err(e) => result = Err(e),
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
 
@@ -525,14 +577,29 @@ impl Coordinator {
             }
 
             match r.issue_events() {
-                Err(e) => result = Err(e),
+                Err(e) => errors.push(e),
                 _ => ()
             }
         }
 
-        match result {
-            Ok(_) => self.start_replays(),
-            Err(e) => Err(e)
+
+
+        if errors.is_empty() {
+            self.start_replays()
+        }
+        else {
+            let mut result = Ok(());
+
+            for e in errors.drain(..) {
+                result = if let Ok(()) = result {
+                    Err(e)
+                }
+                else {
+                    result.chain_err(move || ErrorKind::from(e))
+                }
+            }
+
+            result
         }
     }
 
@@ -595,21 +662,19 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
         )[..]
     ) {
         Ok(iter) => iter,
-        Err(_) => return Err(Error::Todo("failed to read glob pattern"))
+        Err(_) => bail!("failed to read glob pattern")
     };
 
     let exe_re = match Regex::new(
         &format!("Base([0-9]*){}SC2(_x64)?", separator)[..]
     ) {
         Ok(re) => re,
-        Err(_) => return Err(Error::Todo("failed to parse regex"))
+        Err(_) => bail!("failed to parse regex")
     };
 
     let mut current_version = 0;
     let mut current_arch = ExeArch::X32;
-    let mut exe: Result<(PathBuf, ExeArch)> = Err(
-        Error::Todo("exe not found")
-    );
+    let mut exe: Result<(PathBuf, ExeArch)> = Err("exe not found".into());
 
     for entry in glob_iter {
         match entry {
@@ -629,7 +694,7 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                             Ok(v) => v,
                             Err(_) => {
                                 eprintln!("unable to parse version as int");
-                                continue;
+                                continue
                             }
                         };
 
@@ -638,7 +703,7 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                                 "_x64" => ExeArch::X64,
                                 _ => {
                                     eprintln!("unrecognized suffix");
-                                    continue;
+                                    continue
                                 }
                             },
                             None => ExeArch::X32

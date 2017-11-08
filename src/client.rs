@@ -16,7 +16,7 @@ use tokio_core::reactor;
 use tokio_tungstenite::{ connect_async };
 use url::Url;
 
-use super::{ Result, Error };
+use super::{ Result, ErrorKind };
 
 pub struct Client {
     core_remote: reactor::Remote,
@@ -96,7 +96,7 @@ impl Client {
                     Err(e) => eprintln!("unable to join client: {:?}", e)
                 }
 
-                Err(Error::WebsockOpenFailed)
+                Err(ErrorKind::ClientOpenFailed.into())
             }
         }
     }
@@ -114,7 +114,7 @@ impl Client {
 
         let sender = match mem::replace(&mut self.sender, None) {
             Some(sender) => sender,
-            None => return Err(Error::WebsockSendFailed)
+            None => return Err(ErrorKind::ClientSendFailed.into())
         };
 
         let (tx, rx) = oneshot::channel();
@@ -140,7 +140,7 @@ impl Client {
                 self.sender = Some(sender);
                 Ok(())
             },
-            Err(_) => Err(Error::WebsockSendFailed)
+            Err(_) => Err(ErrorKind::ClientSendFailed.into())
         }
     }
 
@@ -150,12 +150,12 @@ impl Client {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     eprintln!("close failed: {}", e);
-                    Err(Error::WebsockSendFailed)
+                    Err(ErrorKind::ClientSendFailed.into())
                 },
             },
             None => {
                 eprintln!("sender does not exist");
-                Err(Error::WebsockSendFailed)
+                Err(ErrorKind::ClientSendFailed.into())
             }
         }
     }
@@ -173,7 +173,7 @@ impl Client {
                     q.pop_front()
                 }
                 else {
-                    return Err(Error::WebsockRecvFailed)
+                    return Err(ErrorKind::ClientRecvFailed.into())
                 }
             }
             else {
@@ -190,17 +190,17 @@ impl Client {
                     Err(e) => {
                         eprintln!("unable to parse response: {}", e);
 
-                        Err(Error::WebsockRecvFailed)
+                        Err(ErrorKind::ClientRecvFailed.into())
                     }
                 }
             }
             Some(_) => {
                 eprintln!("unexpected non-binary message");
-                Err(Error::WebsockRecvFailed)
+                Err(ErrorKind::ClientRecvFailed.into())
             },
             None => {
                 eprintln!("no item in queue?!");
-                Err(Error::WebsockRecvFailed)
+                Err(ErrorKind::ClientRecvFailed.into())
             }
         }
     }

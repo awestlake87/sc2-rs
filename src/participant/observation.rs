@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
-use super::{ Result, Error };
+use super::super::{ Result };
 use data::{
     PowerSource,
     PlayerData,
@@ -394,12 +394,12 @@ impl Observation for Participant {
         }
 
         if !raw.has_player() {
-            return Err(Error::Todo("no player data"))
+            bail!("no player data")
         }
 
         let player_raw = raw.get_player();
         if !player_raw.has_camera() {
-            return Err(Error::Todo("no camera data"))
+            bail!("no camera data")
         }
 
         self.camera_pos = {
