@@ -649,6 +649,10 @@ impl Coordinator {
 }
 
 fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
+    if cfg!(target_os = "windows") && use_wine {
+        bail!("wine not supported on windows")
+    }
+
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
