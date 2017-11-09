@@ -134,9 +134,4 @@ fn main() {
              done = true;
          }
     }
-
-    match coordinator.cleanup() {
-        Ok(_) => println!("shutdown successful"),
-        Err(e) => eprintln!("error: {}", e)
-    }
 }

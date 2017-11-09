@@ -102,12 +102,12 @@ fn main() {
     ) {
         Ok(_) => println!("launched!"),
         Err(e) => println!("unable to launch game: {}", e)
-    };
+    }
 
     match coordinator.start_game(game_settings) {
         Ok(_) => println!("game started!"),
         Err(e) => eprintln!("unable to start game: {}", e)
-    };
+    }
 
     while !poll_escape(&mut events) {
          match coordinator.update() {
@@ -117,10 +117,5 @@ fn main() {
                  break
              }
          };
-    };
-
-    match coordinator.cleanup() {
-        Ok(_) => println!("shutdown successful"),
-        Err(e) => eprintln!("error: {}", e)
     }
 }

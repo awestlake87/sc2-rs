@@ -614,7 +614,7 @@ impl Coordinator {
     }
 
     /// cleanly shut down all managed participants
-    pub fn cleanup(&mut self) -> Result<()> {
+    fn cleanup(&mut self) -> Result<()> {
         for p in self.participants.iter_mut().chain(
             self.replay_observers.iter_mut()
         ) {
@@ -645,6 +645,14 @@ impl Coordinator {
         self.replay_observers.clear();
 
         Ok(())
+    }
+}
+
+impl Drop for Coordinator {
+    fn drop(&mut self) {
+        if let Err(e) = self.cleanup() {
+            eprintln!("unable to cleanup coordinator {:#?}", e);
+        }
     }
 }
 
