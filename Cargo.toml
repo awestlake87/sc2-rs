@@ -43,4 +43,5 @@ path = "examples/replay/main.rs"
 
 [dev-dependencies]
 docopt = "0.8"
+glutin = "*"
 examples-common = { path = "examples/examples-common" }
