@@ -32,6 +32,7 @@ pub mod colors;
 pub mod data;
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
@@ -93,13 +94,13 @@ trait GameEvents {
     fn on_game_start(&mut self);
     fn on_game_end(&mut self);
     fn on_step(&mut self);
-    fn on_unit_destroyed(&mut self, u: &Unit);
-    fn on_unit_created(&mut self, u: &Unit);
-    fn on_unit_idle(&mut self, u: &Unit);
+    fn on_unit_destroyed(&mut self, u: &Rc<Unit>);
+    fn on_unit_created(&mut self, u: &Rc<Unit>);
+    fn on_unit_idle(&mut self, u: &Rc<Unit>);
     fn on_upgrade_complete(&mut self, u: Upgrade);
-    fn on_building_complete(&mut self, u: &Unit);
+    fn on_building_complete(&mut self, u: &Rc<Unit>);
     fn on_nydus_detected(&mut self);
     fn on_nuke_detected(&mut self);
-    fn on_unit_detected(&mut self, u: &Unit);
+    fn on_unit_detected(&mut self, u: &Rc<Unit>);
     fn should_ignore(&mut self) -> bool;
 }

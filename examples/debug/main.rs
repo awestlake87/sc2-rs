@@ -5,8 +5,9 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
-use docopt::Docopt;
+use std::rc::Rc;
 
+use docopt::Docopt;
 use sc2::{
     Agent,
     Coordinator,
@@ -63,7 +64,7 @@ impl Agent for DebugBot {
         );
     }
 
-    fn on_unit_created(&mut self, p: &mut Participant, u: &Unit) {
+    fn on_unit_created(&mut self, p: &mut Participant, u: &Rc<Unit>) {
         let name = p.get_unit_type_data()[&u.unit_type].name.clone();
 
         p.command_debug(
@@ -103,10 +104,6 @@ impl Agent for DebugBot {
                 }
             );
         }
-    }
-
-    fn on_step(&mut self, p: &mut Participant) {
-        p.send_debug_commands().unwrap();
     }
 }
 

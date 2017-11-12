@@ -9,7 +9,14 @@ use super::{ Result, ResultExt, ErrorKind, GameEvents };
 use data::{ Rect, PlayerSetup, GameSettings, GamePorts, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 use participant::{
-    Participant, AppState, User, Actions, Control, Observation, Replay
+    Participant,
+    AppState,
+    User,
+    Actions,
+    Control,
+    Observation,
+    Replay,
+    Debugging
 };
 
 #[derive(Copy, Clone, PartialEq)]
@@ -301,10 +308,7 @@ impl Coordinator {
             }
 
             match p.req_step(self.step_size) {
-                Err(e) => {
-                    eprintln!("step err: {}", e);
-                    errors.push(e)
-                },
+                Err(e) => errors.push(e),
                 _ => ()
             }
         }
@@ -316,27 +320,23 @@ impl Coordinator {
 
             // TODO: should it be awaiting steps if it's possible to skip reqs?
             match p.await_step() {
-                Err(e) => {
-                    eprintln!("await step err: {}", e);
-                    errors.push(e)
-                },
+                Err(e) => errors.push(e),
                 _ => (),
             }
 
             if p.is_in_game() {
                 match p.issue_events() {
-                    Err(e) => {
-                        eprintln!("issue events err: {}", e);
-                        errors.push(e)
-                    },
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
 
                 match p.send_actions() {
-                    Err(e) => {
-                        eprintln!("send actions err: {}", e);
-                        errors.push(e)
-                    },
+                    Err(e) => errors.push(e),
+                    _ => ()
+                }
+
+                match p.send_debug_commands() {
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
 
@@ -349,11 +349,8 @@ impl Coordinator {
                 p.on_game_end();
 
                 match p.leave_game() {
-                    Err(e) => {
-                        eprintln!("leave game err: {}", e);
-                        errors.push(e)
-                    },
-                    _ => println!("leave game")
+                    Err(e) => errors.push(e),
+                    _ => ()
                 }
             }
         }
@@ -397,10 +394,7 @@ impl Coordinator {
             }
 
             match p.update_observation() {
-                Err(e) => {
-                    eprintln!("update observation err: {}", e);
-                    errors.push(e)
-                },
+                Err(e) => errors.push(e),
                 _ => ()
             }
         }
@@ -412,17 +406,15 @@ impl Coordinator {
 
             if p.is_in_game() {
                 match p.issue_events() {
-                    Err(e) => {
-                        eprintln!("issue events err: {}", e);
-                        errors.push(e)
-                    },
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
                 match p.send_actions() {
-                    Err(e) => {
-                        eprintln!("send actions err: {}", e);
-                        errors.push(e)
-                    },
+                    Err(e) => errors.push(e),
+                    _ => ()
+                }
+                match p.send_debug_commands() {
+                    Err(e) => errors.push(e),
                     _ => ()
                 }
                 /*TODO: match p.send_spatial_actions() {
@@ -434,11 +426,8 @@ impl Coordinator {
                 p.on_game_end();
 
                 match p.leave_game() {
-                    Err(e) => {
-                        eprintln!("leave game err: {}", e);
-                        errors.push(e)
-                    },
-                    _ => println!("leave game")
+                    Err(e) => errors.push(e),
+                    _ => ()
                 }
             }
         }
@@ -580,6 +569,11 @@ impl Coordinator {
                 Err(e) => errors.push(e),
                 _ => ()
             }
+
+            match r.send_debug_commands() {
+                Err(e) => errors.push(e),
+                _ => ()
+            }
         }
 
 
@@ -615,28 +609,24 @@ impl Coordinator {
 
     /// cleanly shut down all managed participants
     fn cleanup(&mut self) -> Result<()> {
+        let mut errors = vec![ ];
+
         for p in self.participants.iter_mut().chain(
             self.replay_observers.iter_mut()
         ) {
             match p.quit() {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("unable to send quit: {}", e);
-                }
+                Err(e) => errors.push(e),
+                _ => ()
             }
 
             match p.close() {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("unable to close client: {}", e);
-                }
+                Err(e) => errors.push(e),
+                _ => ()
             }
 
             match p.instance.kill() {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("unable to terminate process: {}", e);
-                }
+                Err(e) => errors.push(e),
+                _ => ()
             }
         }
 
@@ -644,7 +634,19 @@ impl Coordinator {
         self.participants.clear();
         self.replay_observers.clear();
 
-        Ok(())
+
+        let mut result = Ok(());
+
+        for e in errors.drain(..) {
+            result = if let Ok(()) = result {
+                Err(e)
+            }
+            else {
+                result.chain_err(move || ErrorKind::from(e))
+            }
+        }
+
+        result
     }
 }
 

@@ -1,12 +1,12 @@
 
-use num::Float;
+use std::rc::Rc;
 
+use na::{ distance, distance_squared, normalize };
+use num::Float;
 use sc2::data::{
     Tag, Point2, UnitType, Alliance, Ability, Unit, ActionTarget
 };
 use sc2::{ Agent, Participant, Observation, Actions };
-
-use na::{ distance, distance_squared, normalize };
 
 pub struct MarineMicroBot {
     targeted_zergling:      Option<Tag>,
@@ -76,7 +76,7 @@ impl Agent for MarineMicroBot {
         }
     }
 
-    fn on_unit_destroyed(&mut self, game: &mut Participant, unit: &Unit) {
+    fn on_unit_destroyed(&mut self, game: &mut Participant, unit: &Rc<Unit>) {
         match self.targeted_zergling {
             Some(tag) => {
                 if unit.tag == tag {

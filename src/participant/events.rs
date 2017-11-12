@@ -1,5 +1,6 @@
 
 use std::mem;
+use std::rc::Rc;
 
 use super::super::{ GameEvents };
 use super::super::data::{ Unit, Upgrade };
@@ -58,7 +59,7 @@ impl GameEvents for Participant {
         }
     }
 
-    fn on_unit_destroyed(&mut self, u: &Unit) {
+    fn on_unit_destroyed(&mut self, u: &Rc<Unit>) {
         match mem::replace(&mut self.user, None) {
             Some(mut user) => {
                 match &mut user {
@@ -74,7 +75,7 @@ impl GameEvents for Participant {
             None => ()
         }
     }
-    fn on_unit_created(&mut self, u: &Unit) {
+    fn on_unit_created(&mut self, u: &Rc<Unit>) {
         match mem::replace(&mut self.user, None) {
             Some(mut user) => {
                 match &mut user {
@@ -88,7 +89,7 @@ impl GameEvents for Participant {
             None => ()
         }
     }
-    fn on_unit_idle(&mut self, u: &Unit) {
+    fn on_unit_idle(&mut self, u: &Rc<Unit>) {
         match mem::replace(&mut self.user, None) {
             Some(mut user) => {
                 match &mut user {
@@ -116,7 +117,7 @@ impl GameEvents for Participant {
             None => ()
         }
     }
-    fn on_building_complete(&mut self, u: &Unit) {
+    fn on_building_complete(&mut self, u: &Rc<Unit>) {
         match mem::replace(&mut self.user, None) {
             Some(mut user) => {
                 match &mut user {
@@ -165,7 +166,7 @@ impl GameEvents for Participant {
             None => ()
         }
     }
-    fn on_unit_detected(&mut self, u: &Unit) {
+    fn on_unit_detected(&mut self, u: &Rc<Unit>) {
         match mem::replace(&mut self.user, None) {
             Some(mut user) => {
                 match &mut user {
