@@ -1,7 +1,7 @@
 
 mod actions;
 mod control;
-mod debug;
+mod debugging;
 mod events;
 mod observation;
 mod query;
@@ -15,7 +15,7 @@ use std::time::Duration;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
-use super::{ Result };
+use super::{ Result, ErrorKind };
 use super::agent::Agent;
 use super::client::Client;
 use super::data::{
@@ -42,6 +42,7 @@ use super::replay_observer::ReplayObserver;
 
 pub use self::actions::Actions;
 pub use self::control::Control;
+pub use self::debugging::{ Debugging, DebugCommand, DebugTextTarget };
 pub use self::observation::Observation;
 pub use self::query::Query;
 pub use self::replay::Replay;
@@ -90,6 +91,7 @@ pub struct Participant {
 
     actions:                    Vec<Action>,
     requested_actions:          Vec<Action>,
+    debug_commands:             Vec<DebugCommand>,
 
     feature_layer_actions:      Vec<SpatialAction>,
     ability_data:               HashMap<Ability, AbilityData>,
@@ -142,6 +144,7 @@ impl Participant {
 
             actions: vec![ ],
             requested_actions: vec![ ],
+            debug_commands: vec![ ],
 
             feature_layer_actions: vec![ ],
 
@@ -288,7 +291,13 @@ impl Participant {
         self.response_pending = MessageType::Unknown;
 
         if rsp.get_error().len() != 0 {
-            unimplemented!("errors in response");
+            let mut errors = vec![ ];
+
+            for e in rsp.get_error().iter() {
+                errors.push(e.clone());
+            }
+
+            bail!(ErrorKind::GameErrors(errors))
         }
         else if pending != get_response_type(&rsp) {
             unimplemented!("unexpected response type {:#?}", rsp);

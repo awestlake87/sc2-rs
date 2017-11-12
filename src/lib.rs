@@ -28,6 +28,7 @@ mod instance;
 mod participant;
 mod replay_observer;
 
+pub mod colors;
 pub mod data;
 
 use std::path::PathBuf;
@@ -35,7 +36,16 @@ use std::path::PathBuf;
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use participant::{
-    Participant, Actions, Control, Observation, Query, Replay, User
+    Participant,
+    Actions,
+    Control,
+    Observation,
+    Query,
+    Replay,
+    User,
+    Debugging,
+    DebugTextTarget,
+    DebugCommand
 };
 pub use replay_observer::{ ReplayObserver };
 
@@ -68,6 +78,12 @@ error_chain! {
         ClientRecvFailed {
             description("unable to receive message from game instance")
             display("client recv failed")
+        }
+
+        /// errors received from game instance
+        GameErrors(errors: Vec<String>) {
+            description("errors in game response")
+            display("received errors: {:?}", errors)
         }
     }
 }
