@@ -8,6 +8,7 @@ extern crate examples_common;
 
 use std::collections::{ HashMap };
 use std::path::{ MAIN_SEPARATOR };
+use std::rc::Rc;
 
 use docopt::Docopt;
 use glob::glob;
@@ -42,7 +43,7 @@ impl Agent for Replay {
         self.game += 1;
         self.units_built.clear();
     }
-    fn on_unit_created(&mut self, _: &mut Participant, u: &Unit) {
+    fn on_unit_created(&mut self, _: &mut Participant, u: &Rc<Unit>) {
         *self.units_built.entry(u.unit_type).or_insert(0) += 1;
     }
 
