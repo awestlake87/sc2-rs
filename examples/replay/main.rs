@@ -14,7 +14,7 @@ use docopt::Docopt;
 use glob::glob;
 
 use sc2::{
-    Agent, Coordinator, Participant, User, Observation, ReplayObserver
+    Agent, Coordinator, Participant, User, Observation, ReplayObserver, Result
 };
 use sc2::data::{ PlayerSetup, Unit, UnitType };
 
@@ -39,15 +39,21 @@ impl Replay {
 }
 
 impl Agent for Replay {
-    fn on_game_start(&mut self, _: &mut Participant) {
+    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
         self.game += 1;
         self.units_built.clear();
+
+        Ok(())
     }
-    fn on_unit_created(&mut self, _: &mut Participant, u: &Rc<Unit>) {
+    fn on_unit_created(&mut self, _: &mut Participant, u: &Rc<Unit>)
+        -> Result<()>
+    {
         *self.units_built.entry(u.unit_type).or_insert(0) += 1;
+
+        Ok(())
     }
 
-    fn on_game_end(&mut self, p: &mut Participant) {
+    fn on_game_end(&mut self, p: &mut Participant) -> Result<()> {
         let unit_data = p.get_unit_type_data();
 
         println!("\ngame {} units created: ", self.game);
@@ -58,10 +64,13 @@ impl Agent for Replay {
                 _ => ()
             }
         }
+
+        Ok(())
     }
 }
 
 impl ReplayObserver for Replay {
+    
 }
 
 fn main() {

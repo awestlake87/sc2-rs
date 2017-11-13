@@ -16,7 +16,8 @@ use sc2::{
     Observation,
     DebugCommand,
     DebugTextTarget,
-    User
+    User,
+    Result
 };
 use sc2::colors;
 use sc2::data::{
@@ -44,7 +45,7 @@ impl DebugBot {
 }
 
 impl Agent for DebugBot {
-    fn on_game_start(&mut self, p: &mut Participant) {
+    fn on_game_start(&mut self, p: &mut Participant) -> Result<()> {
         p.command_debug(
             DebugCommand::DrawText {
                 text: "in the corner".to_string(),
@@ -62,9 +63,13 @@ impl Agent for DebugBot {
                 color: colors::GREEN
             }
         );
+
+        Ok(())
     }
 
-    fn on_unit_created(&mut self, p: &mut Participant, u: &Rc<Unit>) {
+    fn on_unit_created(&mut self, p: &mut Participant, u: &Rc<Unit>)
+        -> Result<()>
+    {
         let name = p.get_unit_type_data()[&u.unit_type].name.clone();
 
         p.command_debug(
@@ -104,6 +109,8 @@ impl Agent for DebugBot {
                 }
             );
         }
+
+        Ok(())
     }
 }
 

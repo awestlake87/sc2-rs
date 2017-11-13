@@ -90,17 +90,17 @@ error_chain! {
 }
 
 trait GameEvents {
-    fn on_game_full_start(&mut self);
-    fn on_game_start(&mut self);
-    fn on_game_end(&mut self);
-    fn on_step(&mut self);
-    fn on_unit_destroyed(&mut self, u: &Rc<Unit>);
-    fn on_unit_created(&mut self, u: &Rc<Unit>);
-    fn on_unit_idle(&mut self, u: &Rc<Unit>);
-    fn on_upgrade_complete(&mut self, u: Upgrade);
-    fn on_building_complete(&mut self, u: &Rc<Unit>);
-    fn on_nydus_detected(&mut self);
-    fn on_nuke_detected(&mut self);
-    fn on_unit_detected(&mut self, u: &Rc<Unit>);
+    fn on_game_full_start(&mut self) -> Result<()>;
+    fn on_game_start(&mut self) -> Result<()>;
+    fn on_game_end(&mut self) -> Result<()>;
+    fn on_step(&mut self) -> Result<()>;
+    fn on_unit_destroyed(&mut self, u: &Rc<Unit>) -> Result<()>;
+    fn on_unit_created(&mut self, u: &Rc<Unit>) -> Result<()>;
+    fn on_unit_idle(&mut self, u: &Rc<Unit>) -> Result<()>;
+    fn on_upgrade_complete(&mut self, u: Upgrade) -> Result<()>;
+    fn on_building_complete(&mut self, u: &Rc<Unit>) -> Result<()>;
+    fn on_nydus_detected(&mut self) -> Result<()>;
+    fn on_nuke_detected(&mut self) -> Result<()>;
+    fn on_unit_detected(&mut self, u: &Rc<Unit>) -> Result<()>;
     fn should_ignore(&mut self) -> bool;
 }

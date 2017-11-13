@@ -85,7 +85,7 @@ impl Replay for Participant {
 
         self.update_observation()?;
 
-        self.on_game_start();
+        self.on_game_start()?;
 
         Ok(())
     }

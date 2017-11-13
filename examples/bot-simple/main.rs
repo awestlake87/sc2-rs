@@ -7,7 +7,9 @@ extern crate examples_common;
 
 use docopt::Docopt;
 
-use sc2::{ Agent, Coordinator, Participant, Observation, Actions, User };
+use sc2::{
+    Agent, Coordinator, Participant, Observation, Actions, User, Result
+};
 use sc2::data::{ PlayerSetup, Race, Alliance, Ability, ActionTarget };
 
 use examples_common::{
@@ -32,14 +34,18 @@ impl Bot {
 }
 
 impl Agent for Bot {
-    fn on_game_full_start(&mut self, _: &mut Participant) {
+    fn on_game_full_start(&mut self, _: &mut Participant) -> Result<()> {
         println!("FULL FUCK YEYA!");
+
+        Ok(())
     }
-    fn on_game_start(&mut self, _: &mut Participant) {
+    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
         println!("FUCK YEYA!");
+
+        Ok(())
     }
 
-    fn on_step(&mut self, game: &mut Participant) {
+    fn on_step(&mut self, game: &mut Participant) -> Result<()> {
         if game.get_game_loop() > self.last_update + 100 {
             self.last_update = game.get_game_loop();
 
@@ -48,13 +54,7 @@ impl Agent for Bot {
             );
 
             for unit in units {
-                let target = match game.get_terrain_info() {
-                    Ok(ref info) => find_random_location(info),
-                    Err(e) => {
-                        eprintln!("error getting game info {}", e);
-                        return
-                    }
-                };
+                let target = find_random_location(game.get_terrain_info()?);
 
                 game.command_units(
                     &vec![ unit ],
@@ -64,6 +64,8 @@ impl Agent for Bot {
             }
             println!("player {} 100 steps...", game.get_player_id().unwrap());
         }
+
+        Ok(())
     }
 }
 

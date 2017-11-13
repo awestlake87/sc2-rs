@@ -6,7 +6,7 @@ use rand::random;
 use sc2::data::{
     Tag, Vector2, Point2, TerrainInfo, Alliance, UnitType, Ability, ActionTarget
 };
-use sc2::{ Agent, Participant, Observation, Actions };
+use sc2::{ Agent, Participant, Observation, Actions, Result };
 
 const TARGET_SCV_COUNT: usize = 15;
 
@@ -196,45 +196,51 @@ impl TerranBot {
 }
 
 impl Agent for TerranBot {
-    fn on_game_start(&mut self, p: &mut Participant) {
+    fn on_game_start(&mut self, p: &mut Participant) -> Result<()> {
         self.terrain_info = match p.get_terrain_info() {
             Ok(info) => Some(info.clone()),
             Err(e) => {
                 eprintln!("unable to fetch game info {}", e);
-                return
+                return Ok(())
             }
         };
 
         println!("game started");
+
+        Ok(())
     }
 
-    fn on_step(&mut self, p: &mut Participant) {
+    fn on_step(&mut self, p: &mut Participant) -> Result<()> {
         // if there are marines and the command center is not found, send them
         // scouting.
         self.scout_with_marines(p);
 
         // build supply depots if they are needed
         if self.try_build_supply_depot(p) {
-            return
+            return Ok(())
         }
 
         // build terran SCV's if they are needed
         if self.try_build_scv(p) {
-            return
+            return Ok(())
         }
 
         // build barracks if they are ready to be built
         if self.try_build_barracks(p) {
-            return
+            return Ok(())
         }
 
         // just keep building marines if possible
         if self.try_build_marine(p) {
-            return
+            return Ok(())
         }
+
+        Ok(())
     }
 
-    fn on_game_end(&mut self, _: &mut Participant) {
+    fn on_game_end(&mut self, _: &mut Participant) -> Result<()> {
         println!("game ended");
+
+        Ok(())
     }
 }

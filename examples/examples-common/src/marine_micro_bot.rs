@@ -6,7 +6,7 @@ use num::Float;
 use sc2::data::{
     Tag, Point2, UnitType, Alliance, Ability, Unit, ActionTarget
 };
-use sc2::{ Agent, Participant, Observation, Actions };
+use sc2::{ Agent, Participant, Observation, Actions, Result };
 
 pub struct MarineMicroBot {
     targeted_zergling:      Option<Tag>,
@@ -27,17 +27,19 @@ impl MarineMicroBot {
 }
 
 impl Agent for MarineMicroBot {
-    fn on_game_start(&mut self, _: &mut Participant) {
+    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
         self.move_back = false;
         self.targeted_zergling = None;
+
+        Ok(())
     }
 
-    fn on_step(&mut self, game: &mut Participant) {
+    fn on_step(&mut self, game: &mut Participant) -> Result<()> {
         let mp = match get_position(
             game, UnitType::TerranMarine, Alliance::Domestic
         ) {
             Some(pos) => pos,
-            None => return
+            None => return Ok(())
         };
 
         self.targeted_zergling = get_nearest_zergling(game, mp);
@@ -63,7 +65,7 @@ impl Agent for MarineMicroBot {
         else {
             let target = match self.backup_target {
                 Some(target) => target,
-                None => return
+                None => return Ok(())
             };
 
             if distance(&mp, &target) < 1.5 {
@@ -74,9 +76,13 @@ impl Agent for MarineMicroBot {
                 &units, Ability::Smart, Some(ActionTarget::Location(target))
             );
         }
+
+        Ok(())
     }
 
-    fn on_unit_destroyed(&mut self, game: &mut Participant, unit: &Rc<Unit>) {
+    fn on_unit_destroyed(&mut self, game: &mut Participant, unit: &Rc<Unit>)
+        -> Result<()>
+    {
         match self.targeted_zergling {
             Some(tag) => {
                 if unit.tag == tag {
@@ -84,13 +90,13 @@ impl Agent for MarineMicroBot {
                         game, UnitType::TerranMarine, Alliance::Domestic
                     ) {
                         Some(pos) => pos,
-                        None => return
+                        None => return Ok(())
                     };
                     let zp = match get_position(
                         game, UnitType::ZergZergling, Alliance::Enemy
                     ) {
                         Some(pos) => pos,
-                        None => return
+                        None => return Ok(())
                     };
 
                     let direction = normalize(&(mp - zp));
@@ -103,6 +109,8 @@ impl Agent for MarineMicroBot {
             },
             None => ()
         }
+
+        Ok(())
     }
 }
 

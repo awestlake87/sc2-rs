@@ -249,11 +249,11 @@ impl Coordinator {
         }
 
         for p in &mut self.participants {
-            p.on_game_full_start();
+            p.on_game_full_start()?;
         }
 
         for p in &mut self.participants {
-            p.on_game_start();
+            p.on_game_start()?;
         }
 
         Ok(())
@@ -346,7 +346,10 @@ impl Coordinator {
                 }*/
             }
             else {
-                p.on_game_end();
+                match p.on_game_end() {
+                    Err(e) => errors.push(e),
+                    _ => ()
+                }
 
                 match p.leave_game() {
                     Err(e) => errors.push(e),
@@ -355,23 +358,19 @@ impl Coordinator {
             }
         }
 
-        if errors.is_empty() {
-            Ok(())
-        }
-        else {
-            let mut result = Ok(());
 
-            for e in errors.drain(..) {
-                result = if let Ok(()) = result {
-                    Err(e)
-                }
-                else {
-                    result.chain_err(move || ErrorKind::from(e))
-                }
+        let mut result = Ok(());
+
+        for e in errors.drain(..) {
+            result = if let Ok(()) = result {
+                Err(e)
             }
-
-            result
+            else {
+                result.chain_err(move || ErrorKind::from(e))
+            }
         }
+
+        result
     }
 
     fn step_agents_realtime(&mut self) -> Result<()> {
@@ -423,7 +422,10 @@ impl Coordinator {
                 }*/
             }
             else {
-                p.on_game_end();
+                match p.on_game_end() {
+                    Err(e) => errors.push(e),
+                    _ => ()
+                }
 
                 match p.leave_game() {
                     Err(e) => errors.push(e),
@@ -432,23 +434,18 @@ impl Coordinator {
             }
         }
 
-        if errors.is_empty() {
-            Ok(())
-        }
-        else {
-            let mut result = Ok(());
+        let mut result = Ok(());
 
-            for e in errors.drain(..) {
-                result = if let Ok(()) = result {
-                    Err(e)
-                }
-                else {
-                    result.chain_err(move || ErrorKind::from(e))
-                }
+        for e in errors.drain(..) {
+            result = if let Ok(()) = result {
+                Err(e)
             }
-
-            result
+            else {
+                result.chain_err(move || ErrorKind::from(e))
+            }
         }
+
+        result
     }
 
     fn start_replays(&mut self) -> Result<()> {
@@ -500,23 +497,18 @@ impl Coordinator {
             }
         }
 
-        if errors.is_empty() {
-            Ok(())
-        }
-        else {
-            let mut result = Ok(());
+        let mut result = Ok(());
 
-            for e in errors.drain(..) {
-                result = if let Ok(()) = result {
-                    Err(e)
-                }
-                else {
-                    result.chain_err(move || ErrorKind::from(e))
-                }
+        for e in errors.drain(..) {
+            result = if let Ok(()) = result {
+                Err(e)
             }
-
-            result
+            else {
+                result.chain_err(move || ErrorKind::from(e))
+            }
         }
+
+        result
     }
 
     fn step_replay_observers(&mut self) -> Result<()> {
@@ -555,7 +547,10 @@ impl Coordinator {
                 }
 
                 if !r.is_in_game() {
-                    r.on_game_end();
+                    match r.on_game_end() {
+                        Err(e) => errors.push(e),
+                        _ => ()
+                    }
                 }
             }
         }
@@ -633,7 +628,6 @@ impl Coordinator {
         self.players.clear();
         self.participants.clear();
         self.replay_observers.clear();
-
 
         let mut result = Ok(());
 

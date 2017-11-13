@@ -246,7 +246,7 @@ impl Control for Participant {
         self.issue_upgrade_events()?;
         self.issue_alert_events()?;
 
-        self.on_step();
+        self.on_step()?;
 
         Ok(())
     }
@@ -287,7 +287,7 @@ impl InnerControl for Participant {
         }
 
         for ref u in destroyed_units {
-            self.on_unit_destroyed(u);
+            self.on_unit_destroyed(u)?;
         }
 
         Ok(())
@@ -313,11 +313,11 @@ impl InnerControl for Participant {
         }
 
         for ref u in detected_units {
-            self.on_unit_detected(u);
+            self.on_unit_detected(u)?;
         }
 
         for ref u in created_units {
-            self.on_unit_created(u);
+            self.on_unit_created(u)?;
         }
 
         Ok(())
@@ -356,7 +356,7 @@ impl InnerControl for Participant {
         }
 
         for ref u in idle_units {
-            self.on_unit_idle(u);
+            self.on_unit_idle(u)?;
         }
 
         Ok(())
@@ -380,7 +380,7 @@ impl InnerControl for Participant {
         }
 
         for ref u in building_completed_units {
-            self.on_building_complete(u);
+            self.on_building_complete(u)?;
         }
 
         Ok(())
@@ -403,7 +403,7 @@ impl InnerControl for Participant {
         }
 
         for u in new_upgrades {
-            self.on_upgrade_complete(u);
+            self.on_upgrade_complete(u)?;
         }
 
         Ok(())
@@ -420,10 +420,10 @@ impl InnerControl for Participant {
         }
 
         for _ in 0..nukes {
-            self.on_nuke_detected();
+            self.on_nuke_detected()?;
         }
         for _ in 0..nydus_worms {
-            self.on_nydus_detected();
+            self.on_nydus_detected()?;
         }
 
         Ok(())
