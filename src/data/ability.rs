@@ -801,9 +801,9 @@ pub enum Ability {
     /// target: none
     StopBuilding,
     /// target: none
-    StopCheer,
+    StopAndCheer,
     /// target: none
-    StopDance,
+    StopAndDance,
     /// target: none
     StopRedirect,
     /// target: none
