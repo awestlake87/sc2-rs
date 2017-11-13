@@ -1362,8 +1362,8 @@ impl Ability {
 
             3665 => Ability::Stop,
             2057 => Ability::StopBuilding,
-            6 => Ability::StopCheer,
-            7 => Ability::StopDance,
+            6 => Ability::StopAndCheer,
+            7 => Ability::StopAndDance,
             1691 => Ability::StopRedirect,
             4 => Ability::StopStop,
 
@@ -1854,8 +1854,8 @@ impl Ability {
 
             Ability::Stop => 3665,
             Ability::StopBuilding => 2057,
-            Ability::StopCheer => 6,
-            Ability::StopDance => 7,
+            Ability::StopAndCheer => 6,
+            Ability::StopAndDance => 7,
             Ability::StopRedirect => 1691,
             Ability::StopStop => 4,
 

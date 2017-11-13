@@ -28,7 +28,7 @@ StarCraft II Rust API Example.
 
 Usage:
   example (-h | --help)
-  example [options]
+  example (-d <path> | --dir=<path>) [options]
   example --version
 
 Options:
@@ -37,19 +37,17 @@ Options:
   --wine                            Use Wine to run StarCraft II (for Linux).
   -d <path> --dir=<path>            Path to the StarCraft II installation.
   -p <port> --port=<port>           Port to make StarCraft II listen on.
-  -m <name> --map=<name>            Name of the Blizzard StarCraft II map.
+  -m <name> --map=<name>            Path to the StarCraft II map.
   -r --realtime                     Run StarCraft II in real time
   -s <count> --step-size=<count>    How many steps to take per call.
-  --local-map=<path>                Path to a local StarCraft II map.
   --replay-dir=<path>               Path to a replay pack
 ";
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
-    pub flag_dir:                   Option<PathBuf>,
+    pub flag_dir:                   PathBuf,
     pub flag_port:                  Option<u16>,
-    pub flag_map:                   Option<String>,
-    pub flag_local_map:             Option<PathBuf>,
+    pub flag_map:                   Option<PathBuf>,
     pub flag_replay_dir:            Option<PathBuf>,
     pub flag_wine:                  bool,
     pub flag_version:               bool,
@@ -62,7 +60,7 @@ pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
 
     CoordinatorSettings {
         use_wine: args.flag_wine,
-        dir: args.flag_dir.clone(),
+        dir: Some(args.flag_dir.clone()),
         port: match args.flag_port {
             Some(port) => port,
             None => default_settings.port
@@ -82,21 +80,11 @@ pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     let map = match args.flag_map {
-        Some(ref map) => match args.flag_local_map {
-            None => Map::BlizzardMap(map.clone()),
-            _ => bail!("multiple maps specified")
-        },
-        None => match args.flag_local_map {
-            Some(ref map) => Map::LocalMap(map.clone()),
-            None => bail!("no map specified")
-        }
+        Some(ref map) => Map::LocalMap(map.clone()),
+        None => bail!("no map specified")
     };
 
-    Ok(
-        GameSettings {
-            map: map,
-        }
-    )
+    Ok(GameSettings { map: map })
 }
 
 pub fn poll_escape(events: &mut glutin::EventsLoop) -> bool {
