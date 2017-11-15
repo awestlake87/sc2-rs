@@ -2,9 +2,11 @@
 use sc2_proto::sc2api;
 use sc2_proto::common;
 
+use super::super::{ Result, FromProto, IntoProto };
+
 /// race of the player
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Race {
     Terran,
     Zerg,
@@ -12,25 +14,35 @@ pub enum Race {
     Random,
 }
 
-impl Race {
-    /// convert from protobuf data
-    pub fn from_proto(race: common::Race) -> Option<Self> {
-        match race {
-            common::Race::Terran => Some(Race::Terran),
-            common::Race::Zerg => Some(Race::Zerg),
-            common::Race::Protoss => Some(Race::Protoss),
-            common::Race::Random => Some(Race::Random),
-            common::Race::NoRace => None,
-        }
+impl FromProto<common::Race> for Race {
+    fn from_proto(race: common::Race) -> Result<Self> {
+        Ok(
+            match race {
+                common::Race::Terran => Race::Terran,
+                common::Race::Zerg => Race::Zerg,
+                common::Race::Protoss => Race::Protoss,
+                common::Race::Random => Race::Random,
+                common::Race::NoRace => panic!(
+                    concat!(
+                        "NoRace value (Library Bug! please let us know that ",
+                        "this can in fact happen!)"
+                    )
+                ),
+            }
+        )
     }
-    /// convert to protobuf data
-    pub fn to_proto(&self) -> common::Race {
-        match *self {
-            Race::Zerg      => common::Race::Zerg,
-            Race::Terran    => common::Race::Terran,
-            Race::Protoss   => common::Race::Protoss,
-            Race::Random    => common::Race::Random,
-        }
+}
+
+impl IntoProto<common::Race> for Race {
+    fn into_proto(self) -> Result<common::Race> {
+        Ok(
+            match self {
+                Race::Zerg      => common::Race::Zerg,
+                Race::Terran    => common::Race::Terran,
+                Race::Protoss   => common::Race::Protoss,
+                Race::Random    => common::Race::Random,
+            }
+        )
     }
 }
 

@@ -6,7 +6,7 @@ use std::rc::Rc;
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::super::{ Result, GameEvents };
+use super::super::{ Result, GameEvents, IntoProto };
 use super::super::data::{
     GameSettings,
     GamePorts,
@@ -101,12 +101,12 @@ impl Control for Participant {
                     setup.set_field_type(sc2api::PlayerType::Computer);
 
                     setup.set_difficulty(difficulty.to_proto());
-                    setup.set_race(race.to_proto());
+                    setup.set_race(race.into_proto()?);
                 },
                 &PlayerSetup::Player { ref race, .. } => {
                     setup.set_field_type(sc2api::PlayerType::Participant);
 
-                    setup.set_race(race.to_proto());
+                    setup.set_race(race.into_proto()?);
                 },
                 &PlayerSetup::Observer => {
                     setup.set_field_type(sc2api::PlayerType::Observer);
@@ -131,10 +131,10 @@ impl Control for Participant {
 
         match self.player {
             PlayerSetup::Computer { race, .. } => {
-                req.mut_join_game().set_race(race.to_proto());
+                req.mut_join_game().set_race(race.into_proto()?);
             },
             PlayerSetup::Player { race, .. } => {
-                req.mut_join_game().set_race(race.to_proto());
+                req.mut_join_game().set_race(race.into_proto()?);
             },
             _ => req.mut_join_game().set_race(common::Race::NoRace)
         };

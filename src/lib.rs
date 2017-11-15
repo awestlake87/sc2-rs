@@ -86,6 +86,17 @@ error_chain! {
             description("errors in game response")
             display("received errors: {:?}", errors)
         }
+        /// an error occurred in agent callback
+        AgentError {
+            description("error occurred in agent callback")
+            display("error occurred in agent callback")
+        }
+
+        /// invalid protobuf data from game instance
+        InvalidProtobuf(msg: String) {
+            description("unable to convert protobuf data to game data")
+            display("unable to convert protobuf data: {}", msg)
+        }
     }
 }
 
@@ -103,4 +114,24 @@ trait GameEvents {
     fn on_nuke_detected(&mut self) -> Result<()>;
     fn on_unit_detected(&mut self, u: &Rc<Unit>) -> Result<()>;
     fn should_ignore(&mut self) -> bool;
+}
+
+trait FromProto<T> where Self: Sized {
+    /// convert from protobuf data
+    fn from_proto(p: T) -> Result<Self>;
+}
+
+trait IntoSc2<T> {
+    fn into_sc2(self) -> Result<T>;
+}
+
+impl<T, U> IntoSc2<U> for T where U: FromProto<T> {
+    fn into_sc2(self) -> Result<U> {
+        U::from_proto(self)
+    }
+}
+
+trait IntoProto<T> {
+    /// convert into protobuf data
+    fn into_proto(self) -> Result<T>;
 }

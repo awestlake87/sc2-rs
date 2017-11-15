@@ -1,7 +1,7 @@
 
 use sc2_proto::sc2api::{ Request };
 
-use super::super::{ Result, GameEvents };
+use super::super::{ Result, GameEvents, IntoSc2 };
 use super::super::data::{ ReplayInfo };
 use super::{ Participant, Observation };
 
@@ -43,11 +43,9 @@ impl Replay for Participant {
 
         self.send(req)?;
 
-        let rsp = self.recv()?;
+        let mut rsp = self.recv()?;
 
-        self.replay_info = Some(
-            ReplayInfo::from_proto(rsp.get_replay_info())
-        );
+        self.replay_info = Some(rsp.take_replay_info().into_sc2()?);
 
         Ok(())
     }

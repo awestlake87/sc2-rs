@@ -1,7 +1,7 @@
 
 /// a list of known StarCraft II upgrades
 #[allow(missing_docs)]
-#[derive(PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Upgrade {
     Invalid,
     CarrierLaunchSpeedUpgrade,

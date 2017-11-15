@@ -3,11 +3,12 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
+use super::super::{ Result, FromProto };
 use super::{ Point2, Rect2 };
 
 /// result of the game
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum GameResult {
     Win,
     Loss,
@@ -16,7 +17,7 @@ pub enum GameResult {
 }
 
 /// game result tied to a specific player id
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct PlayerResult {
     /// player that the result is associated with
     pub player_id:              u32,
@@ -24,19 +25,21 @@ pub struct PlayerResult {
     pub result:                 GameResult
 }
 
-impl From<sc2api::Result> for GameResult {
-    fn from(r: sc2api::Result) -> GameResult {
-        match r {
-            sc2api::Result::Victory => GameResult::Win,
-            sc2api::Result::Defeat => GameResult::Loss,
-            sc2api::Result::Tie => GameResult::Tie,
-            sc2api::Result::Undecided => GameResult::Undecided,
-        }
+impl FromProto<sc2api::Result> for GameResult {
+    fn from_proto(r: sc2api::Result) -> Result<GameResult> {
+        Ok(
+            match r {
+                sc2api::Result::Victory => GameResult::Win,
+                sc2api::Result::Defeat => GameResult::Loss,
+                sc2api::Result::Tie => GameResult::Tie,
+                sc2api::Result::Undecided => GameResult::Undecided,
+            }
+        )
     }
 }
 
 /// different ways of specifying a map
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Map {
     /// specify a map on the local filesystem
     LocalMap(PathBuf),
@@ -46,7 +49,7 @@ pub enum Map {
 
 /// endpoint port settings
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct PortSet {
     pub game_port:      u16,
     pub base_port:      u16
@@ -54,7 +57,7 @@ pub struct PortSet {
 
 /// all port settings for a game
 #[allow(missing_docs)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GamePorts {
     pub shared_port:    u16,
     pub server_ports:   PortSet,
@@ -62,14 +65,14 @@ pub struct GamePorts {
 }
 
 /// settings for a game
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GameSettings {
     /// which map to play on
     pub map:            Map,
 }
 
 /// current game state
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GameState {
     /// current step
     pub current_game_loop: u32,
@@ -78,7 +81,7 @@ pub struct GameState {
 }
 
 /// terrain info
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TerrainInfo {
     /// width of the terrain
     pub width:                      i32,
@@ -163,7 +166,7 @@ impl From<sc2api::ResponseGameInfo> for TerrainInfo {
 }
 
 /// current player data as used by the observation interface
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct PlayerData {
     /// current mineral count
     pub minerals: u32,

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
-use super::super::{ Result };
+use super::super::{ Result, FromProto, IntoSc2 };
 use data::{
     PowerSource,
     PlayerData,
@@ -246,12 +246,12 @@ impl Observation for Participant {
         req.mut_data().set_unit_type_id(true);
 
         self.send(req)?;
-        let rsp = self.recv()?;
+        let mut rsp = self.recv()?;
 
         self.unit_type_data.clear();
 
-        for data in rsp.get_data().get_units() {
-            let u = UnitTypeData::from_proto(data);
+        for data in rsp.mut_data().take_units().into_iter() {
+            let u = UnitTypeData::from_proto(data)?;
 
             self.unit_type_data.insert(u.unit_type, u);
         }
@@ -310,7 +310,7 @@ impl Observation for Participant {
                 continue;
             }
 
-            self.actions.push(Action::from_proto(&cmd));
+            self.actions.push(cmd.clone().into_sc2()?);
         }
 
         for action in rsp.get_observation().get_actions() {
@@ -322,31 +322,23 @@ impl Observation for Participant {
 
             if fl.has_unit_command() {
                 self.feature_layer_actions.push(
-                    SpatialAction::from_unit_command_proto(
-                        fl.get_unit_command()
-                    )
+                    fl.get_unit_command().clone().into_sc2()?
                 );
             }
             else if fl.has_camera_move() {
                 self.feature_layer_actions.push(
-                    SpatialAction::from_camera_move_proto(
-                        fl.get_camera_move()
-                    )
+                    fl.get_camera_move().clone().into_sc2()?
                 );
             }
             else if fl.has_unit_selection_point() {
                 self.feature_layer_actions.push(
-                    SpatialAction::from_selection_point_proto(
-                        fl.get_unit_selection_point()
-                    )
+                    fl.get_unit_selection_point().clone().into_sc2()?
                 );
             }
             else if fl.has_unit_selection_rect() {
                 self.feature_layer_actions.push(
-                    SpatialAction::from_selection_rect_proto(
-                        fl.get_unit_selection_rect()
-                    )
-                )
+                    fl.get_unit_selection_rect().clone().into_sc2()?
+                );
             }
         }
 
@@ -385,7 +377,7 @@ impl Observation for Participant {
         );
 
         for unit in raw.get_units().iter() {
-            let mut unit = Unit::from(unit.clone());
+            let mut unit = Unit::from_proto(unit.clone())?;
             let tag = unit.tag;
 
             unit.last_seen_game_loop = self.get_game_loop();

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use sc2_proto::sc2api;
 
-use super::{ Result };
+use super::super::{ Result, IntoProto };
 use data::{ Ability, Action, ActionTarget, Unit };
 use participant::{ Participant };
 
@@ -54,7 +54,7 @@ impl Actions for Participant {
                 {
                     let cmd = a.mut_action_raw().mut_unit_command();
 
-                    cmd.set_ability_id(action.ability.as_id() as i32);
+                    cmd.set_ability_id(action.ability.into_proto()? as i32);
 
                     match action.target {
                         Some(ActionTarget::UnitTag(tag)) => {

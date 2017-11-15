@@ -8,6 +8,7 @@ use sc2_proto::spatial::{
     ActionSpatialUnitSelectionPoint_Type as ProtoPointSelectionType
 };
 
+use super::super::{ Result, FromProto, IntoSc2 };
 use super::{ Tag, Ability, Point2, Point2I, Rect2I };
 
 /// action target
@@ -28,37 +29,41 @@ pub struct Action {
     pub target:             Option<ActionTarget>,
 }
 
-impl Action {
+impl FromProto<raw::ActionRawUnitCommand> for Action {
     /// convert from protobuf data
-    pub fn from_proto(action: &raw::ActionRawUnitCommand) -> Self {
-        Self {
-            ability: Ability::from_id(action.get_ability_id() as u32),
-            unit_tags: {
-                let mut unit_tags = vec![ ];
+    fn from_proto(action: raw::ActionRawUnitCommand) -> Result<Self> {
+        Ok(
+            Self {
+                ability: Ability::from_proto(action.get_ability_id()as u32)?,
+                unit_tags: {
+                    let mut unit_tags = vec![ ];
 
-                for tag in action.get_unit_tags() {
-                    unit_tags.push(*tag);
-                }
+                    for tag in action.get_unit_tags() {
+                        unit_tags.push(*tag);
+                    }
 
-                unit_tags
-            },
-            target: {
-                if action.has_target_unit_tag() {
-                    Some(ActionTarget::UnitTag(action.get_target_unit_tag()))
-                }
-                else if action.has_target_world_space_pos() {
-                    let pos = action.get_target_world_space_pos();
-                    Some(
-                        ActionTarget::Location(
-                            Point2::new(pos.get_x(), pos.get_y())
+                    unit_tags
+                },
+                target: {
+                    if action.has_target_unit_tag() {
+                        Some(
+                            ActionTarget::UnitTag(action.get_target_unit_tag())
                         )
-                    )
-                }
-                else {
-                    None
-                }
-            },
-        }
+                    }
+                    else if action.has_target_world_space_pos() {
+                        let pos = action.get_target_world_space_pos();
+                        Some(
+                            ActionTarget::Location(
+                                Point2::new(pos.get_x(), pos.get_y())
+                            )
+                        )
+                    }
+                    else {
+                        None
+                    }
+                },
+            }
+        )
     }
 }
 
@@ -82,14 +87,16 @@ pub enum PointSelectType {
     AddAll
 }
 
-impl From<ProtoPointSelectionType> for PointSelectType {
-    fn from(select_type: ProtoPointSelectionType) -> Self {
-        match select_type {
-            ProtoPointSelectionType::Select => PointSelectType::Select,
-            ProtoPointSelectionType::Toggle => PointSelectType::Toggle,
-            ProtoPointSelectionType::AllType => PointSelectType::All,
-            ProtoPointSelectionType::AddAllType => PointSelectType::AddAll,
-        }
+impl FromProto<ProtoPointSelectionType> for PointSelectType {
+    fn from_proto(select_type: ProtoPointSelectionType) -> Result<Self> {
+        Ok(
+            match select_type {
+                ProtoPointSelectionType::Select => PointSelectType::Select,
+                ProtoPointSelectionType::Toggle => PointSelectType::Toggle,
+                ProtoPointSelectionType::AllType => PointSelectType::All,
+                ProtoPointSelectionType::AddAllType => PointSelectType::AddAll,
+            }
+        )
     }
 }
 
@@ -125,85 +132,91 @@ pub enum SpatialAction {
     }
 }
 
-impl SpatialAction {
-    /// convert from protobuf data
-    pub fn from_unit_command_proto(cmd: &ActionSpatialUnitCommand) -> Self {
-        SpatialAction::UnitCommand {
-            ability: Ability::from_id(cmd.get_ability_id() as u32),
-            queued: cmd.get_queue_command(),
-            target: {
-                if cmd.has_target_screen_coord() {
-                    let pos = cmd.get_target_screen_coord();
-                    Some(
-                        SpatialUnitCommandTarget::Screen(
-                            Point2I::new(pos.get_x(), pos.get_y())
+impl FromProto<ActionSpatialUnitCommand> for SpatialAction {
+    fn from_proto(cmd: ActionSpatialUnitCommand) -> Result<Self> {
+        Ok(
+            SpatialAction::UnitCommand {
+                ability: Ability::from_proto(cmd.get_ability_id() as u32)?,
+                queued: cmd.get_queue_command(),
+                target: {
+                    if cmd.has_target_screen_coord() {
+                        let pos = cmd.get_target_screen_coord();
+                        Some(
+                            SpatialUnitCommandTarget::Screen(
+                                Point2I::new(pos.get_x(), pos.get_y())
+                            )
                         )
-                    )
-                }
-                else if cmd.has_target_minimap_coord() {
-                    let pos = cmd.get_target_minimap_coord();
-                    Some(
-                        SpatialUnitCommandTarget::Minimap(
-                            Point2I::new(pos.get_x(), pos.get_y())
+                    }
+                    else if cmd.has_target_minimap_coord() {
+                        let pos = cmd.get_target_minimap_coord();
+                        Some(
+                            SpatialUnitCommandTarget::Minimap(
+                                Point2I::new(pos.get_x(), pos.get_y())
+                            )
                         )
-                    )
-                }
-                else {
-                    None
+                    }
+                    else {
+                        None
+                    }
                 }
             }
-        }
+        )
     }
+}
 
-    /// convert from protobuf data
-    pub fn from_camera_move_proto(cmd: &ActionSpatialCameraMove) -> Self {
-        SpatialAction::CameraMove {
-            center_minimap: {
-                let pos = cmd.get_center_minimap();
-                Point2I::new(pos.get_x(), pos.get_y())
+impl FromProto<ActionSpatialCameraMove> for SpatialAction {
+    fn from_proto(cmd: ActionSpatialCameraMove) -> Result<Self> {
+        Ok(
+            SpatialAction::CameraMove {
+                center_minimap: {
+                    let pos = cmd.get_center_minimap();
+                    Point2I::new(pos.get_x(), pos.get_y())
+                }
             }
-        }
+        )
     }
+}
 
-    /// convert from protobuf data
-    pub fn from_selection_point_proto(cmd: &ActionSpatialUnitSelectionPoint)
-        -> Self
-    {
-        SpatialAction::SelectPoint {
-            select_screen: {
-                let pos = cmd.get_selection_screen_coord();
-                Point2I::new(pos.get_x(), pos.get_y())
-            },
-            select_type: PointSelectType::from(cmd.get_field_type())
-        }
+impl FromProto<ActionSpatialUnitSelectionPoint> for SpatialAction {
+    fn from_proto(cmd: ActionSpatialUnitSelectionPoint) -> Result<Self> {
+        Ok(
+            SpatialAction::SelectPoint {
+                select_screen: {
+                    let pos = cmd.get_selection_screen_coord();
+                    Point2I::new(pos.get_x(), pos.get_y())
+                },
+                select_type: cmd.get_field_type().into_sc2()?
+            }
+        )
     }
+}
 
-    /// convert from protobuf data
-    pub fn from_selection_rect_proto(cmd: &ActionSpatialUnitSelectionRect)
-        -> Self
-    {
-        SpatialAction::SelectRect {
-            select_screen: {
-                let mut rects = vec![ ];
+impl FromProto<ActionSpatialUnitSelectionRect> for SpatialAction {
+    fn from_proto(cmd: ActionSpatialUnitSelectionRect) -> Result<Self> {
+        Ok(
+            SpatialAction::SelectRect {
+                select_screen: {
+                    let mut rects = vec![ ];
 
-                for r in cmd.get_selection_screen_coord() {
-                    rects.push(
-                        Rect2I {
-                            from: {
-                                let p = r.get_p0();
-                                Point2I::new(p.get_x(), p.get_y())
-                            },
-                            to: {
-                                let p = r.get_p1();
-                                Point2I::new(p.get_x(), p.get_y())
+                    for r in cmd.get_selection_screen_coord() {
+                        rects.push(
+                            Rect2I {
+                                from: {
+                                    let p = r.get_p0();
+                                    Point2I::new(p.get_x(), p.get_y())
+                                },
+                                to: {
+                                    let p = r.get_p1();
+                                    Point2I::new(p.get_x(), p.get_y())
+                                }
                             }
-                        }
-                    )
-                }
+                        )
+                    }
 
-                rects
-            },
-            select_add: cmd.get_selection_add()
-        }
+                    rects
+                },
+                select_add: cmd.get_selection_add()
+            }
+        )
     }
 }
