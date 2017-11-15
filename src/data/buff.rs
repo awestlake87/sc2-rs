@@ -111,53 +111,63 @@ impl FromProto<u32> for Buff {
 
 impl IntoProto<u32> for Buff {
     fn into_proto(self) -> Result<u32> {
-        Ok(
-            match self {
-                Buff::GravitonBeam                              => 5,
-                Buff::GhostCloak                                => 6,
-                Buff::BansheeCloak                              => 7,
-                Buff::PowerUserWarpable                         => 8,
-                Buff::QueenSpawnLarvaTimer                      => 11,
-                Buff::GhostHoldFire                             => 12,
-                Buff::GhostHoldFireB                            => 13,
-                Buff::EmpDeCloak                                => 16,
-                Buff::FungalGrowth                              => 17,
-                Buff::GuardianShield                            => 18,
-                Buff::TimeWarpProduction                        => 20,
-                Buff::NeuralParasite                            => 22,
-                Buff::StimpackMarauder                          => 24,
-                Buff::SupplyDrop                                => 25,
-                Buff::Stimpack                                  => 27,
-                Buff::PsiStorm                                  => 28,
-                Buff::CloakFieldEffect                          => 29,
-                Buff::Charging                                  => 30,
-                Buff::Slow                                      => 33,
-                Buff::Contaminated                              => 36,
-                Buff::BlindingCloudStructure                    => 38,
-                Buff::OracleRevelation                          => 49,
-                Buff::ViperConsumeStructure                     => 59,
-                Buff::BlindingCloud                             => 83,
-                Buff::MedivacSpeedBoost                         => 89,
-                Buff::Purify                                    => 97,
-                Buff::OracleWeapon                              => 99,
-                Buff::ImmortalOverload                          => 102,
-                Buff::Lockon                                    => 116,
-                Buff::SeekerMissile                             => 120,
-                Buff::TemporalField                             => 121,
-                Buff::VoidRaySwarmDamageBoost                   => 122,
-                Buff::OracleStasisTrapTarget                    => 129,
-                Buff::ParasiticBomb                             => 132,
-                Buff::ParasiticBombUnitKu                       => 133,
-                Buff::ParasiticBombSecondaryUnitSearch          => 134,
-                Buff::LurkerHoldFireB                           => 137,
-                Buff::ChannelSnipeCombat                        => 145,
-                Buff::TempestDisruptionBlastStunBehavior        => 146,
-                Buff::CarryMineralFieldMinerals                 => 271,
-                Buff::CarryHighYieldMineralFieldMinerals        => 272,
-                Buff::CarryHarvestableVespeneGeyserGas          => 273,
-                Buff::CarryHarvestableVespeneGeyserGasProtoss   => 274,
-                Buff::CarryHarvestableVespeneGeyserGasZerg      => 275,
-            }
-        )
+        Ok(self as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_commutativity() {
+        let test_element = |element: Buff| assert_eq!(
+            element, Buff::from_proto(element.into_proto().unwrap()).unwrap()
+        );
+
+        test_element(Buff::GravitonBeam);
+        test_element(Buff::GhostCloak);
+        test_element(Buff::BansheeCloak);
+        test_element(Buff::PowerUserWarpable);
+        test_element(Buff::QueenSpawnLarvaTimer);
+        test_element(Buff::GhostHoldFire);
+        test_element(Buff::GhostHoldFireB);
+        test_element(Buff::EmpDeCloak);
+        test_element(Buff::FungalGrowth);
+        test_element(Buff::GuardianShield);
+        test_element(Buff::TimeWarpProduction);
+        test_element(Buff::NeuralParasite);
+        test_element(Buff::StimpackMarauder);
+        test_element(Buff::SupplyDrop);
+        test_element(Buff::Stimpack);
+        test_element(Buff::PsiStorm);
+        test_element(Buff::CloakFieldEffect);
+        test_element(Buff::Charging);
+        test_element(Buff::Slow);
+        test_element(Buff::Contaminated);
+        test_element(Buff::BlindingCloudStructure);
+        test_element(Buff::OracleRevelation);
+        test_element(Buff::ViperConsumeStructure);
+        test_element(Buff::BlindingCloud);
+        test_element(Buff::MedivacSpeedBoost);
+        test_element(Buff::Purify);
+        test_element(Buff::OracleWeapon);
+        test_element(Buff::ImmortalOverload);
+        test_element(Buff::Lockon);
+        test_element(Buff::SeekerMissile);
+        test_element(Buff::TemporalField);
+        test_element(Buff::VoidRaySwarmDamageBoost);
+        test_element(Buff::OracleStasisTrapTarget);
+        test_element(Buff::ParasiticBomb);
+        test_element(Buff::ParasiticBombUnitKu);
+        test_element(Buff::ParasiticBombSecondaryUnitSearch);
+        test_element(Buff::LurkerHoldFireB);
+        test_element(Buff::ChannelSnipeCombat);
+        test_element(Buff::TempestDisruptionBlastStunBehavior);
+        test_element(Buff::CarryMineralFieldMinerals);
+        test_element(Buff::CarryHighYieldMineralFieldMinerals);
+        test_element(Buff::CarryHarvestableVespeneGeyserGas);
+        test_element(Buff::CarryHarvestableVespeneGeyserGasProtoss);
+        test_element(Buff::CarryHarvestableVespeneGeyserGasZerg);
     }
 }

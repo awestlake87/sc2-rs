@@ -408,7 +408,7 @@ impl Observation for Participant {
 
         self.previous_upgrades = mem::replace(&mut self.upgrades, vec![ ]);
         for upgrade_id in player_raw.get_upgrade_ids() {
-            self.upgrades.push(Upgrade::from_id(*upgrade_id));
+            self.upgrades.push(Upgrade::from_proto(*upgrade_id)?);
         }
 
         Ok(())
