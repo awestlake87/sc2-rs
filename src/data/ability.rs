@@ -5,952 +5,489 @@ use super::super::{ Result, ErrorKind, FromProto, IntoProto };
 #[allow(missing_docs)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Ability {
-    Invalid,
-    /// target: unit, point
-    Smart,
+    Smart = 1,
 
-    /// target: unit, point
-    Attack,
-    /// target: unit, point
-    AttackAttack,
-    /// target: unit, point
-    AttackAttackBuilding,
-    /// target: unit, point
-    AttackRedirect,
+    Attack = 3674,
+    AttackAttack = 23,
+    AttackAttackBuilding = 2048,
+    AttackRedirect = 1682,
 
-    /// target: none
-    BehaviorBuildingAttackOff,
-    /// target: none
-    BehaviorBuildingAttackOn,
-    /// target: none
-    BehaviorCloakOff,
-    /// target: none
-    BehaviorCloakOffBanshee,
-    /// target: none
-    BehaviorCloakOffGhost,
-    /// target: none
-    BehaviorCloakOn,
-    /// target: none
-    BehaviorCloakOnBanshee,
-    /// target: none
-    BehaviorCloakOnGhost,
-    /// target: none
-    BehaviorGenerateCreepOff,
-    /// target: none
-    BehaviorGenerateCreepOn,
-    /// target: none
-    BehaviorHoldFireOff,
-    /// target: none
-    BehaviorHoldFireOffLurker,
-    /// target: none
-    BehaviorHoldFireOn,
-    /// target: none
-    BehaviorHoldFireOnGhost,
-    /// target: none
-    BehaviorHoldFireOnLurker,
-    /// target: none
-    BehaviorPulsarBeamOff,
-    /// target: none
-    BehaviorPulsarBeamOn,
+    BehaviorBuildingAttackOff = 2082,
+    BehaviorBuildingAttackOn = 2081,
+    BehaviorCloakOff = 3677,
+    BehaviorCloakOffBanshee = 393,
+    BehaviorCloakOffGhost = 383,
+    BehaviorCloakOn = 3676,
+    BehaviorCloakOnBanshee = 392,
+    BehaviorCloakOnGhost = 382,
+    BehaviorGenerateCreepOff = 1693,
+    BehaviorGenerateCreepOn = 1692,
+    BehaviorHoldFireOff = 3689,
+    BehaviorHoldFireOffLurker = 2552,
+    BehaviorHoldFireOn = 3688,
+    BehaviorHoldFireOnGhost = 36,
+    BehaviorHoldFireOnLurker = 2550,
+    BehaviorPulsarBeamOff = 2376,
+    BehaviorPulsarBeamOn = 2375,
 
-    /// target: point
-    BuildArmory,
-    /// target: unit
-    BuildAssimilator,
-    /// target: point
-    BuildBanelingNest,
-    /// target: point
-    BuildBarracks,
-    /// target: point
-    BuildBunker,
-    /// target: point
-    BuildCommandCenter,
-    /// target: point
-    BuildCreepTumor,
-    /// target: point
-    BuildCreepTumorQueen,
-    /// target: point
-    BuildCreepTumorTumor,
-    /// target: point
-    BuildCyberneticsCore,
-    /// target: point
-    BuildDarkShrine,
-    /// target: point
-    BuildEngineeringBay,
-    /// target: point
-    BuildEvolutionChamber,
-    /// target: unit
-    BuildExtractor,
-    /// target: point
-    BuildFactory,
-    /// target: point
-    BuildFleetBeacon,
-    /// target: point
-    BuildForge,
-    /// target: point
-    BuildFusionCore,
-    /// target: point
-    BuildGateway,
-    /// target: point
-    BuildGhostAcademy,
-    /// target: point
-    BuildHatchery,
-    /// target: point
-    BuildHydraliskDen,
-    /// target: point
-    BuildInfestationPit,
-    /// target: none
-    BuildInterceptors,
-    /// target: point
-    BuildMissileTurret,
-    /// target: point
-    BuildNexus,
-    /// target: none
-    BuildNuke,
-    /// target: point
-    BuildNydusNetwork,
-    /// target: point
-    BuildNydusWorm,
-    /// target: point
-    BuildPhotonCannon,
-    /// target: point
-    BuildPylon,
-    /// target: none
-    BuildReactor,
-    /// target: none
-    BuildReactorBarracks,
-    /// target: none
-    BuildReactorFactory,
-    /// target: none
-    BuildReactorStarport,
-    /// target: unit
-    BuildRefinery,
-    /// target: point
-    BuildRoachWarren,
-    /// target: point
-    BuildRoboticsBay,
-    /// target: point
-    BuildRoboticsFacility,
-    /// target: point
-    BuildSensorTower,
-    /// target: point
-    BuildSpawningPool,
-    /// target: point
-    BuildSpineCrawler,
-    /// target: point
-    BuildSpire,
-    /// target: point
-    BuildSporeCrawler,
-    /// target: point
-    BuildStarGate,
-    /// target: point
-    BuildStarport,
-    /// target: point
-    BuildStasisTrap,
-    /// target: point
-    BuildSupplyDepot,
-    /// target: none
-    BuildTechLab,
-    /// target: none
-    BuildTechLabBarracks,
-    /// target: none
-    BuildTechLabFactory,
-    /// target: none
-    BuildTechLabStarport,
-    /// target: point
-    BuildTemplarArchive,
-    /// target: point
-    BuildTwilightCouncil,
-    /// target: point
-    BuildUltraliskCavern,
+    BuildArmory = 331,
+    BuildAssimilator = 882,
+    BuildBanelingNest = 1162,
+    BuildBarracks = 321,
+    BuildBunker = 324,
+    BuildCommandCenter = 318,
+    BuildCreepTumor = 3691,
+    BuildCreepTumorQueen = 1694,
+    BuildCreepTumorTumor = 1733,
+    BuildCyberneticsCore = 894,
+    BuildDarkShrine = 891,
+    BuildEngineeringBay = 322,
+    BuildEvolutionChamber = 1156,
+    BuildExtractor = 1154,
+    BuildFactory = 328,
+    BuildFleetBeacon = 885,
+    BuildForge = 884,
+    BuildFusionCore = 333,
+    BuildGateway = 883,
+    BuildGhostAcademy = 327,
+    BuildHatchery = 1152,
+    BuildHydraliskDen = 1157,
+    BuildInfestationPit = 1160,
+    BuildInterceptors = 1042,
+    BuildMissileTurret = 323,
+    BuildNexus = 880,
+    BuildNuke = 710,
+    BuildNydusNetwork = 1161,
+    BuildNydusWorm = 1768,
+    BuildPhotonCannon = 887,
+    BuildPylon = 881,
+    BuildReactor = 3683,
+    BuildReactorBarracks = 422,
+    BuildReactorFactory = 455,
+    BuildReactorStarport = 488,
+    BuildRefinery = 320,
+    BuildRoachWarren = 1165,
+    BuildRoboticsBay = 892,
+    BuildRoboticsFacility = 893,
+    BuildSensorTower = 326,
+    BuildSpawningPool = 1155,
+    BuildSpineCrawler = 1166,
+    BuildSpire = 1158,
+    BuildSporeCrawler = 1167,
+    BuildStarGate = 889,
+    BuildStarport = 329,
+    BuildStasisTrap = 2505,
+    BuildSupplyDepot = 319,
+    BuildTechLab = 3682,
+    BuildTechLabBarracks = 421,
+    BuildTechLabFactory = 454,
+    BuildTechLabStarport = 487,
+    BuildTemplarArchive = 890,
+    BuildTwilightCouncil = 886,
+    BuildUltraliskCavern = 1159,
 
-    /// target: none
-    BurrowDown,
-    /// target: none
-    BurrowDownBaneling,
-    /// target: none
-    BurrowDownDrone,
-    /// target: none
-    BurrowDownHydralisk,
-    /// target: none
-    BurrowDownInfestor,
-    /// target: none
-    BurrowDownLurker,
-    /// target: none
-    BurrowDownQueen,
-    /// target: none
-    BurrowDownRavager,
-    /// target: none
-    BurrowDownRoach,
-    /// target: none
-    BurrowDownSwarmHost,
-    /// target: none
-    BurrowDownWidowMine,
-    /// target: none
-    BurrowDownZergling,
+    BurrowDown = 3661,
+    BurrowDownBaneling = 1374,
+    BurrowDownDrone = 1378,
+    BurrowDownHydralisk = 1382,
+    BurrowDownInfestor = 1444,
+    BurrowDownLurker = 2108,
+    BurrowDownQueen = 1433,
+    BurrowDownRavager = 2340,
+    BurrowDownRoach = 1386,
+    BurrowDownSwarmHost = 2014,
+    BurrowDownWidowMine = 2095,
+    BurrowDownZergling = 1390,
 
-    /// target: none
-    BurrowUp,
-    /// target: none
-    BurrowUpBaneling,
-    /// target: none
-    BurrowUpDrone,
-    /// target: none
-    BurrowUpHydralisk,
-    /// target: none
-    BurrowUpInfestor,
-    /// target: none
-    BurrowUpLurker,
-    /// target: none
-    BurrowUpQueen,
-    /// target: none
-    BurrowUpRavager,
-    /// target: none
-    BurrowUpRoach,
-    /// target: none
-    BurrowUpSwarmHost,
-    /// target: none
-    BurrowUpWidowMine,
-    /// target: none
-    BurrowUpZergling,
+    BurrowUp = 3662,
+    BurrowUpBaneling = 1376,
+    BurrowUpDrone = 1380,
+    BurrowUpHydralisk = 1384,
+    BurrowUpInfestor = 1446,
+    BurrowUpLurker = 2110,
+    BurrowUpQueen = 1435,
+    BurrowUpRavager = 2342,
+    BurrowUpRoach = 1388,
+    BurrowUpSwarmHost = 2016,
+    BurrowUpWidowMine = 2097,
+    BurrowUpZergling = 1392,
 
-    /// target: none
-    Cancel,
-    /// target: none
-    CancelSlotAddOn,
-    /// target: none
-    CancelSlotQueue1,
-    /// target: none
-    CancelSlotQueue5,
-    /// target: none
-    CancelSlotQueueCancelToSelection,
-    /// target: none
-    CancelSlotQueuePassive,
-    /// target: none
-    CancelAdeptPhaseShift,
-    /// target: none
-    CancelAdeptShadePhaseShift,
-    /// target: none
-    CancelBarracksAddOn,
-    /// target: none
-    CancelBuildInProgress,
-    /// target: none
-    CancelCreepTumor,
-    /// target: none
-    CancelFactoryAddOn,
-    /// target: none
-    CancelGravitonBeam,
-    /// target: none
-    CancelLast,
-    /// target: none
-    CancelMorphBroodLord,
-    /// target: none
-    CancelMorphLair,
-    /// target: none
-    CancelMorphLurker,
-    /// target: none
-    CancelMorphLurkerDen,
-    /// target: none
-    CancelMorphMothership,
-    /// target: none
-    CancelMorphOrbital,
-    /// target: none
-    CancelMorphOverlordTransport,
-    /// target: none
-    CancelMorphOverseer,
-    /// target: none
-    CancelMorphPlanetaryFortress,
-    /// target: none
-    CancelMorphRavager,
-    /// target: none
-    CancelQueue1,
-    /// target: none
-    CancelQueue5,
-    /// target: none
-    CancelQueueAddOn,
-    /// target: none
-    CancelQueueCancelToSelection,
-    /// target: none
-    CancelQueuePassive,
-    /// target: none
-    CancelQueuePassiveCancelTOSelection,
-    /// target: none
-    CancelSpineCrawlerRoot,
-    /// target: none
-    CancelStarportAddOn,
+    Cancel = 3659,
+    CancelSlotAddOn = 313,
+    CancelSlotQueue1 = 305,
+    CancelSlotQueue5 = 307,
+    CancelSlotQueueCancelToSelection = 309,
+    CancelSlotQueuePassive = 1832,
+    CancelAdeptPhaseShift = 2594,
+    CancelAdeptShadePhaseShift = 2596,
+    CancelBarracksAddOn = 451,
+    CancelBuildInProgress = 314,
+    CancelCreepTumor = 1763,
+    CancelFactoryAddOn = 484,
+    CancelGravitonBeam = 174,
+    CancelLast = 3671,
+    CancelMorphBroodLord = 1373,
+    CancelMorphLair = 1217,
+    CancelMorphLurker = 2333,
+    CancelMorphLurkerDen = 2113,
+    CancelMorphMothership = 1848,
+    CancelMorphOrbital = 1517,
+    CancelMorphOverlordTransport = 2709,
+    CancelMorphOverseer = 1449,
+    CancelMorphPlanetaryFortress = 1451,
+    CancelMorphRavager = 2331,
+    CancelQueue1 = 304,
+    CancelQueue5 = 306,
+    CancelQueueAddOn = 312,
+    CancelQueueCancelToSelection = 308,
+    CancelQueuePassive = 1831,
+    CancelQueuePassiveCancelTOSelection = 1833,
+    CancelSpineCrawlerRoot = 1730,
+    CancelStarportAddOn = 517,
 
-    /// target: unit
-    EffectAbduct,
-    /// target: point
-    EffectAdeptPhaseShift,
-    /// target: point
-    EffectAutoTurret,
-    /// target: point
-    EffectBlindingCloud,
-    /// target: point
-    EffectBlink,
-    /// target: point
-    EffectBlinkStalker,
-    /// target: unit, point
-    EffectCallDownMule,
-    /// target: unit
-    EffectCausticSpray,
-    /// target: unit
-    EffectCharge,
-    /// target: unit
-    EffectChronoBoost,
-    /// target: unit
-    EffectContaminate,
-    /// target: point
-    EffectCorrosiveBile,
-    /// target: point
-    EffectEmp,
-    /// target: none
-    EffectExplode,
-    /// target: unit
-    EffectFeedback,
-    /// target: point
-    EffectForceField,
-    /// target: point
-    EffectFungalGrowth,
-    /// target: unit
-    EffectGhostSnipe,
-    /// target: unit
-    EffectGravitonBeam,
-    /// target: none
-    EffectGuardianShield,
-    /// target: unit
-    EffectHeal,
-    /// target: unit
-    EffectHunterSeekerMissile,
-    /// target: none
-    EffectImmortalBarrier,
-    /// target: point
-    EffectInfestedTerrans,
-    /// target: unit
-    EffectInjectLarva,
-    /// target: unit, point
-    EffectKd8Charge,
-    /// target: unit
-    EffectLockOn,
-    /// target: point
-    EffectLocustSwoop,
-    /// target: unit
-    EffectMassRecall,
-    /// target: unit
-    EffectMassRecallMothership,
-    /// target: unit
-    EffectMassRecallMothershipCore,
-    /// target: none
-    EffectMedivacIgniteAfterBurners,
-    /// target: unit
-    EffectNeuralParasite,
-    /// target: point
-    EffectNukeCallDown,
-    /// target: point
-    EffectOracleRevelation,
-    /// target: unit
-    EffectParasiticBomb,
-    /// target: unit
-    EffectPhotonOvercharge,
-    /// target: point
-    EffectPointDefenseDrone,
-    /// target: point
-    EffectPsiStorm,
-    /// target: point
-    EffectPurificationNova,
-    /// target: unit
-    EffectRepair,
-    /// target: unit
-    EffectRepairMule,
-    /// target: unit
-    EffectRepairScv,
-    /// target: none
-    EffectSalvage,
-    /// target: point
-    EffectScan,
-    /// target: point
-    EffectShadowStride,
-    /// target: none
-    EffectSpawnChangeling,
-    /// target: point
-    EffectSpawnLocusts,
-    /// target: point
-    EffectSpray,
-    /// target: point
-    EffectSprayProtoss,
-    /// target: point
-    EffectSprayTerran,
-    /// target: point
-    EffectSprayZerg,
-    /// target: none
-    EffectStim,
-    /// target: none
-    EffectStimMarauder,
-    /// target: none
-    EffectStimMarine,
-    /// target: none
-    EffectStimMarineRedirect,
-    /// target: unit
-    EffectSupplyDrop,
-    /// target: point
-    EffectTacticalJump,
-    /// target: point
-    EffectTempestDisruptionBlast,
-    /// target: point
-    EffectTimeWarp,
-    /// target: unit
-    EffectTransfusion,
-    /// target: unit
-    EffectViperConsume,
-    /// target: none
-    EffectVoidRayPrismaticAlignment,
-    /// target: unit
-    EffectWidowMineAttack,
-    /// target: unit
-    EffectYamatoGun,
+    EffectAbduct = 2067,
+    EffectAdeptPhaseShift = 2544,
+    EffectAutoTurret = 1764,
+    EffectBlindingCloud = 2063,
+    EffectBlink = 3687,
+    EffectBlinkStalker = 1442,
+    EffectCallDownMule = 171,
+    EffectCausticSpray = 2324,
+    EffectCharge = 1819,
+    EffectChronoBoost = 261,
+    EffectContaminate = 1825,
+    EffectCorrosiveBile = 2338,
+    EffectEmp = 1628,
+    EffectExplode = 42,
+    EffectFeedback = 140,
+    EffectForceField = 1526,
+    EffectFungalGrowth = 74,
+    EffectGhostSnipe = 2714,
+    EffectGravitonBeam = 173,
+    EffectGuardianShield = 76,
+    EffectHeal = 386,
+    EffectHunterSeekerMissile = 169,
+    EffectImmortalBarrier = 2328,
+    EffectInfestedTerrans = 247,
+    EffectInjectLarva = 251,
+    EffectKd8Charge = 2588,
+    EffectLockOn = 2350,
+    EffectLocustSwoop = 2387,
+    EffectMassRecall = 3686,
+    EffectMassRecallMothership = 2368,
+    EffectMassRecallMothershipCore = 1974,
+    EffectMedivacIgniteAfterBurners = 2116,
+    EffectNeuralParasite = 249,
+    EffectNukeCallDown = 1622,
+    EffectOracleRevelation = 2146,
+    EffectParasiticBomb = 2542,
+    EffectPhotonOvercharge = 2162,
+    EffectPointDefenseDrone = 144,
+    EffectPsiStorm = 1036,
+    EffectPurificationNova = 2346,
+    EffectRepair = 3685,
+    EffectRepairMule = 78,
+    EffectRepairScv = 316,
+    EffectSalvage = 32,
+    EffectScan = 399,
+    EffectShadowStride = 2700,
+    EffectSpawnChangeling = 181,
+    EffectSpawnLocusts = 2704,
+    EffectSpray = 3684,
+    EffectSprayProtoss = 30,
+    EffectSprayTerran = 26,
+    EffectSprayZerg = 28,
+    EffectStim = 3675,
+    EffectStimMarauder = 253,
+    EffectStimMarine = 380,
+    EffectStimMarineRedirect = 1683,
+    EffectSupplyDrop = 255,
+    EffectTacticalJump = 2358,
+    EffectTempestDisruptionBlast = 2698,
+    EffectTimeWarp = 2244,
+    EffectTransfusion = 1664,
+    EffectViperConsume = 2073,
+    EffectVoidRayPrismaticAlignment = 2393,
+    EffectWidowMineAttack = 2099,
+    EffectYamatoGun = 401,
 
-    /// target: none
-    HallucinationAdept,
-    /// target: none
-    HallucinationArchon,
-    /// target: none
-    HallucinationColossus,
-    /// target: none
-    HallucinationDisruptor,
-    /// target: none
-    HallucinationHighTemplar,
-    /// target: none
-    HallucinationImmortal,
-    /// target: none
-    HallucinationOracle,
-    /// target: none
-    HallucinationPhoenix,
-    /// target: none
-    HallucinationProbe,
-    /// target: none
-    HallucinationStalker,
-    /// target: none
-    HallucinationVoidRay,
-    /// target: none
-    HallucinationWarpPrism,
-    /// target: none
-    HallucinationZealot,
+    HallucinationAdept = 2391,
+    HallucinationArchon = 146,
+    HallucinationColossus = 148,
+    HallucinationDisruptor = 2389,
+    HallucinationHighTemplar = 150,
+    HallucinationImmortal = 152,
+    HallucinationOracle = 2114,
+    HallucinationPhoenix = 154,
+    HallucinationProbe = 156,
+    HallucinationStalker = 158,
+    HallucinationVoidRay = 160,
+    HallucinationWarpPrism = 162,
+    HallucinationZealot = 164,
 
-    /// target: none
-    Halt,
-    /// target: none
-    HaltBuilding,
-    /// target: none
-    HaltTerranBuild,
+    Halt = 3660,
+    HaltBuilding = 315,
+    HaltTerranBuild = 348,
 
-    /// target: unit
-    HarvestGather,
-    /// target: unit
-    HarvestGatherDrone,
-    /// target: unit
-    HarvestGatherProbe,
-    /// target: unit
-    HarvestGatherScv,
-    /// target: none
-    HarvestReturn,
-    /// target: none
-    HarvestReturnDrone,
-    /// target: none
-    HarvestReturnMule,
-    /// target: none
-    HarvestReturnProbe,
-    /// target: none
-    HarvestReturnScv,
+    HarvestGather = 3666,
+    HarvestGatherDrone = 1183,
+    HarvestGatherProbe = 298,
+    HarvestGatherScv = 295,
+    HarvestReturn = 3667,
+    HarvestReturnDrone = 1184,
+    HarvestReturnMule = 167,
+    HarvestReturnProbe = 299,
+    HarvestReturnScv = 296,
 
-    /// target: none
-    HoldPosition,
+    HoldPosition = 18,
 
-    /// target: point
-    Land,
-    /// target: point
-    LandBarracks,
-    /// target: point
-    LandCommandCenter,
-    /// target: point
-    LandFactory,
-    /// target: point
-    LandOrbitalCommand,
-    /// target: point
-    LandStarport,
+    Land = 3678,
+    LandBarracks = 554,
+    LandCommandCenter = 419,
+    LandFactory = 520,
+    LandOrbitalCommand = 1524,
+    LandStarport = 522,
 
-    /// target: none
-    Lift,
-    /// target: none
-    LiftBarracks,
-    /// target: none
-    LiftCommandCenter,
-    /// target: none
-    LiftFactory,
-    /// target: none
-    LiftOrbitalCommand,
-    /// target: none
-    LiftStarport,
+    Lift = 3679,
+    LiftBarracks = 452,
+    LiftCommandCenter = 417,
+    LiftFactory = 485,
+    LiftOrbitalCommand = 1522,
+    LiftStarport = 518,
 
-    /// target: unit
-    Load,
-    /// target: none
-    LoadAll,
-    /// target: none
-    LoadAllCommandCenter,
-    /// target: unit
-    LoadBunker,
-    /// target: unit
-    LoadMedivac,
+    Load = 3668,
+    LoadAll = 3663,
+    LoadAllCommandCenter = 416,
+    LoadBunker = 407,
+    LoadMedivac = 394,
 
-    /// target: none
-    MorphArchon,
-    /// target: none
-    MorphBroodLord,
-    /// target: none
-    MorphGateway,
-    /// target: none
-    MorphGreaterSpire,
-    /// target: none
-    MorphHellbat,
-    /// target: none
-    MorphHellion,
-    /// target: none
-    MorphHive,
-    /// target: none
-    MorphLair,
-    /// target: none
-    MorphLiberatorAaMode,
-    /// target: point
-    MorphLiberatorAgMode,
-    /// target: none
-    MorphLurker,
-    /// target: none
-    MorphLurkerDen,
-    /// target: none
-    MorphMothership,
-    /// target: none
-    MorphOrbitalCommand,
-    /// target: none
-    MorphOverlordTransport,
-    /// target: none
-    MorphOverseer,
-    /// target: none
-    MorphPlanetaryFortress,
-    /// target: none
-    MorphRavager,
-    /// target: point
-    MorphRoot,
-    /// target: none
-    MorphSiegeMode,
-    /// target: point
-    MorphSpineCrawlerRoot,
-    /// target: none
-    MorphSpineCrawlerUproot,
-    /// target: point
-    MorphSporeCrawlerRoot,
-    /// target: none
-    MorphSporeCrawlerUproot,
-    /// target: none
-    MorphSupplyDepotLower,
-    /// target: none
-    MorphSupplyDepotRaise,
-    /// target: none
-    MorphThorExplosiveMode,
-    /// target: none
-    MorphThorHighImpactMode,
-    /// target: none
-    MorphUnsiege,
-    /// target: none
-    MorphUproot,
-    /// target: none
-    MorphVikingAssaultMode,
-    /// target: none
-    MorphVikingFighterMode,
-    /// target: none
-    MorphWarpGate,
-    /// target: none
-    MorphWarpPrismPhasingMode,
-    /// target: none
-    MorphWarpPrismTransportMode,
+    MorphArchon = 1766,
+    MorphBroodLord = 1372,
+    MorphGateway = 1520,
+    MorphGreaterSpire = 1220,
+    MorphHellbat = 1998,
+    MorphHellion = 1978,
+    MorphHive = 1218,
+    MorphLair = 1216,
+    MorphLiberatorAaMode = 2560,
+    MorphLiberatorAgMode = 2558,
+    MorphLurker = 2332,
+    MorphLurkerDen = 2112,
+    MorphMothership = 1847,
+    MorphOrbitalCommand = 1516,
+    MorphOverlordTransport = 2708,
+    MorphOverseer = 1448,
+    MorphPlanetaryFortress = 1450,
+    MorphRavager = 2330,
+    MorphRoot = 3680,
+    MorphSiegeMode = 388,
+    MorphSpineCrawlerRoot = 1729,
+    MorphSpineCrawlerUproot = 1725,
+    MorphSporeCrawlerRoot = 1731,
+    MorphSporeCrawlerUproot = 1727,
+    MorphSupplyDepotLower = 556,
+    MorphSupplyDepotRaise = 558,
+    MorphThorExplosiveMode = 2364,
+    MorphThorHighImpactMode = 2362,
+    MorphUnsiege = 390,
+    MorphUproot = 3681,
+    MorphVikingAssaultMode = 403,
+    MorphVikingFighterMode = 405,
+    MorphWarpGate = 1518,
+    MorphWarpPrismPhasingMode = 1528,
+    MorphWarpPrismTransportMode = 1530,
 
-    /// target: unit, point
-    Move,
-    /// target: unit, point
-    Patrol,
-    /// target: unit, point
-    RallyBuilding,
-    /// target: unit, point
-    RallyCommandCenter,
-    /// target: unit, point
-    RallyHatcheryUnits,
-    /// target: unit, point
-    RallyHatcheryWorkers,
-    /// target: unit, point
-    RallyMorphingUnit,
-    /// target: unit, point
-    RallyNexus,
-    /// target: unit, point
-    RallyUnits,
-    /// target: unit, point
-    RallyWorkers,
-    /// target: none
-    ResearchAdeptResonatingGlaives,
-    /// target: none
-    ResearchAdvancedBallistics,
-    /// target: none
-    ResearchBansheeCloakingField,
-    /// target: none
-    ResearchBansheeHyperFlightRotors,
-    /// target: none
-    ResearchBattleCruiserWeaponRefit,
-    /// target: none
-    ResearchBlink,
-    /// target: none
-    ResearchBurrow,
-    /// target: none
-    ResearchCentrifugalHooks,
-    /// target: none
-    ResearchCharge,
-    /// target: none
-    ResearchChitinousPlating,
-    /// target: none
-    ResearchCombatShield,
-    /// target: none
-    ResearchConcussiveShells,
-    /// target: none
-    ResearchDrillingClaws,
-    /// target: none
-    ResearchExtendedThermalLance,
-    /// target: none
-    ResearchGlialRegeneration,
-    /// target: none
-    ResearchGraviticBooster,
-    /// target: none
-    ResearchGraviticDrive,
-    /// target: none
-    ResearchGroovedSpines,
-    /// target: none
-    ResearchHighCapacityFuelTanks,
-    /// target: none
-    ResearchHisecAutoTracking,
-    /// target: none
-    ResearchInfernalPreIgniter,
-    /// target: none
-    ResearchInterceptorGravitonCatapult,
-    /// target: none
-    ResearchMagFieldLaunchers,
-    /// target: none
-    ResearchMuscularAugments,
-    /// target: none
-    ResearchNeoSteelFrame,
-    /// target: none
-    ResearchNeuralParasite,
-    /// target: none
-    ResearchPathogenGlands,
-    /// target: none
-    ResearchPersonalCloaking,
-    /// target: none
-    ResearchPhoenixAnionPulseCrystals,
-    /// target: none
-    ResearchPneumatizedCarapace,
-    /// target: none
-    ResearchProtossAirArmor,
-    /// target: none
-    ResearchProtossAirArmorLevel1,
-    /// target: none
-    ResearchProtossAirArmorLevel2,
-    /// target: none
-    ResearchProtossAirArmorLevel3,
-    /// target: none
-    ResearchProtossAirWeapons,
-    /// target: none
-    ResearchProtossAirWeaponsLevel1,
-    /// target: none
-    ResearchProtossAirWeaponsLevel2,
-    /// target: none
-    ResearchProtossAirWeaponsLevel3,
-    /// target: none
-    ResearchProtossGroundArmor,
-    /// target: none
-    ResearchProtossGroundArmorLevel1,
-    /// target: none
-    ResearchProtossGroundArmorLevel2,
-    /// target: none
-    ResearchProtossGroundArmorLevel3,
-    /// target: none
-    ResearchProtossGroundWeapons,
-    /// target: none
-    ResearchProtossGroundWeaponsLevel1,
-    /// target: none
-    ResearchProtossGroundWeaponsLevel2,
-    /// target: none
-    ResearchProtossGroundWeaponsLevel3,
-    /// target: none
-    ResearchProtossShields,
-    /// target: none
-    ResearchProtossShieldsLevel1,
-    /// target: none
-    ResearchProtossShieldsLevel2,
-    /// target: none
-    ResearchProtossShieldsLevel3,
-    /// target: none
-    ResearchPsiStorm,
-    /// target: none
-    ResearchRavenCorvidReactor,
-    /// target: none
-    ResearchRavenRecalibratedExplosives,
-    /// target: none
-    ResearchShadowStrike,
-    /// target: none
-    ResearchStimpack,
-    /// target: none
-    ResearchTerranInfantryArmor,
-    /// target: none
-    ResearchTerranInfantryArmorLevel1,
-    /// target: none
-    ResearchTerranInfantryArmorLevel2,
-    /// target: none
-    ResearchTerranInfantryArmorLevel3,
-    /// target: none
-    ResearchTerranInfantryWeapons,
-    /// target: none
-    ResearchTerranInfantryWeaponsLevel1,
-    /// target: none
-    ResearchTerranInfantryWeaponsLevel2,
-    /// target: none
-    ResearchTerranInfantryWeaponsLevel3,
-    /// target: none
-    ResearchTerranShipWeapons,
-    /// target: none
-    ResearchTerranShipWeaponsLevel1,
-    /// target: none
-    ResearchTerranShipWeaponsLevel2,
-    /// target: none
-    ResearchTerranShipWeaponsLevel3,
-    /// target: none
-    ResearchTerranStructureArmorUpgrade,
-    /// target: none
-    ResearchTerranVehicleAndShipPlating,
-    /// target: none
-    ResearchTerranVehicleAndShipPlatingLevel1,
-    /// target: none
-    ResearchTerranVehicleAndShipPlatingLevel2,
-    /// target: none
-    ResearchTerranVehicleAndShipPlatingLevel3,
-    /// target: none
-    ResearchTerranVehicleWeapons,
-    /// target: none
-    ResearchTerranVehicleWeaponsLevel1,
-    /// target: none
-    ResearchTerranVehicleWeaponsLevel2,
-    /// target: none
-    ResearchTerranVehicleWeaponsLevel3,
-    /// target: none
-    ResearchTunnelingClaws,
-    /// target: none
-    ResearchWarpGate,
-    /// target: none
-    ResearchZergFlyerArmor,
-    /// target: none
-    ResearchZergFlyerArmorLevel1,
-    /// target: none
-    ResearchZergFlyerArmorLevel2,
-    /// target: none
-    ResearchZergFlyerArmorLevel3,
-    /// target: none
-    ResearchZergFlyerAttack,
-    /// target: none
-    ResearchZergFlyerAttackLevel1,
-    /// target: none
-    ResearchZergFlyerAttackLevel2,
-    /// target: none
-    ResearchZergFlyerAttackLevel3,
-    /// target: none
-    ResearchZergGroundArmor,
-    /// target: none
-    ResearchZergGroundArmorLevel1,
-    /// target: none
-    ResearchZergGroundArmorLevel2,
-    /// target: none
-    ResearchZergGroundArmorLevel3,
-    /// target: none
-    ResearchZerglingAdrenalGlands,
-    /// target: none
-    ResearchZerglingMetabolicBoost,
-    /// target: none
-    ResearchZergMeleeWeapons,
-    /// target: none
-    ResearchZergMeleeWeaponsLevel1,
-    /// target: none
-    ResearchZergMeleeWeaponsLevel2,
-    /// target: none
-    ResearchZergMeleeWeaponsLevel3,
-    /// target: none
-    ResearchZergMissileWeapons,
-    /// target: none
-    ResearchZergMissileWeaponsLevel1,
-    /// target: none
-    ResearchZergMissileWeaponsLevel2,
-    /// target: none
-    ResearchZergMissileWeaponsLevel3,
+    Move = 16,
+    Patrol = 17,
+    RallyBuilding = 195,
+    RallyCommandCenter = 203,
+    RallyHatcheryUnits = 212,
+    RallyHatcheryWorkers = 211,
+    RallyMorphingUnit = 199,
+    RallyNexus = 207,
+    RallyUnits = 3673,
+    RallyWorkers = 3690,
+    ResearchAdeptResonatingGlaives = 1594,
+    ResearchAdvancedBallistics = 805,
+    ResearchBansheeCloakingField = 790,
+    ResearchBansheeHyperFlightRotors = 799,
+    ResearchBattleCruiserWeaponRefit = 1532,
+    ResearchBlink = 1593,
+    ResearchBurrow = 1225,
+    ResearchCentrifugalHooks = 1482,
+    ResearchCharge = 1592,
+    ResearchChitinousPlating = 265,
+    ResearchCombatShield = 731,
+    ResearchConcussiveShells = 732,
+    ResearchDrillingClaws = 764,
+    ResearchExtendedThermalLance = 1097,
+    ResearchGlialRegeneration = 216,
+    ResearchGraviticBooster = 1093,
+    ResearchGraviticDrive = 1094,
+    ResearchGroovedSpines = 1282,
+    ResearchHighCapacityFuelTanks = 804,
+    ResearchHisecAutoTracking = 650,
+    ResearchInfernalPreIgniter = 761,
+    ResearchInterceptorGravitonCatapult = 44,
+    ResearchMagFieldLaunchers = 766,
+    ResearchMuscularAugments = 1283,
+    ResearchNeoSteelFrame = 655,
+    ResearchNeuralParasite = 1455,
+    ResearchPathogenGlands = 1454,
+    ResearchPersonalCloaking = 820,
+    ResearchPhoenixAnionPulseCrystals = 46,
+    ResearchPneumatizedCarapace = 1223,
+    ResearchProtossAirArmor = 3692,
+    ResearchProtossAirArmorLevel1 = 1565,
+    ResearchProtossAirArmorLevel2 = 1566,
+    ResearchProtossAirArmorLevel3 = 1567,
+    ResearchProtossAirWeapons = 3693,
+    ResearchProtossAirWeaponsLevel1 = 1562,
+    ResearchProtossAirWeaponsLevel2 = 1563,
+    ResearchProtossAirWeaponsLevel3 = 1564,
+    ResearchProtossGroundArmor = 3694,
+    ResearchProtossGroundArmorLevel1 = 1065,
+    ResearchProtossGroundArmorLevel2 = 1066,
+    ResearchProtossGroundArmorLevel3 = 1067,
+    ResearchProtossGroundWeapons = 3695,
+    ResearchProtossGroundWeaponsLevel1 = 1062,
+    ResearchProtossGroundWeaponsLevel2 = 1063,
+    ResearchProtossGroundWeaponsLevel3 = 1064,
+    ResearchProtossShields = 3696,
+    ResearchProtossShieldsLevel1 = 1068,
+    ResearchProtossShieldsLevel2 = 1069,
+    ResearchProtossShieldsLevel3 = 1070,
+    ResearchPsiStorm = 1126,
+    ResearchRavenCorvidReactor = 793,
+    ResearchRavenRecalibratedExplosives = 803,
+    ResearchShadowStrike = 2720,
+    ResearchStimpack = 730,
+    ResearchTerranInfantryArmor = 3697,
+    ResearchTerranInfantryArmorLevel1 = 656,
+    ResearchTerranInfantryArmorLevel2 = 657,
+    ResearchTerranInfantryArmorLevel3 = 658,
+    ResearchTerranInfantryWeapons = 3698,
+    ResearchTerranInfantryWeaponsLevel1 = 652,
+    ResearchTerranInfantryWeaponsLevel2 = 653,
+    ResearchTerranInfantryWeaponsLevel3 = 654,
+    ResearchTerranShipWeapons = 3699,
+    ResearchTerranShipWeaponsLevel1 = 861,
+    ResearchTerranShipWeaponsLevel2 = 862,
+    ResearchTerranShipWeaponsLevel3 = 863,
+    ResearchTerranStructureArmorUpgrade = 651,
+    ResearchTerranVehicleAndShipPlating = 3700,
+    ResearchTerranVehicleAndShipPlatingLevel1 = 864,
+    ResearchTerranVehicleAndShipPlatingLevel2 = 865,
+    ResearchTerranVehicleAndShipPlatingLevel3 = 866,
+    ResearchTerranVehicleWeapons = 3701,
+    ResearchTerranVehicleWeaponsLevel1 = 855,
+    ResearchTerranVehicleWeaponsLevel2 = 856,
+    ResearchTerranVehicleWeaponsLevel3 = 857,
+    ResearchTunnelingClaws = 217,
+    ResearchWarpGate = 1568,
+    ResearchZergFlyerArmor = 3702,
+    ResearchZergFlyerArmorLevel1 = 1315,
+    ResearchZergFlyerArmorLevel2 = 1316,
+    ResearchZergFlyerArmorLevel3 = 1317,
+    ResearchZergFlyerAttack = 3703,
+    ResearchZergFlyerAttackLevel1 = 1312,
+    ResearchZergFlyerAttackLevel2 = 1313,
+    ResearchZergFlyerAttackLevel3 = 1314,
+    ResearchZergGroundArmor = 3704,
+    ResearchZergGroundArmorLevel1 = 1189,
+    ResearchZergGroundArmorLevel2 = 1190,
+    ResearchZergGroundArmorLevel3 = 1191,
+    ResearchZerglingAdrenalGlands = 1252,
+    ResearchZerglingMetabolicBoost = 1253,
+    ResearchZergMeleeWeapons = 3705,
+    ResearchZergMeleeWeaponsLevel1 = 1186,
+    ResearchZergMeleeWeaponsLevel2 = 1187,
+    ResearchZergMeleeWeaponsLevel3 = 1188,
+    ResearchZergMissileWeapons = 3706,
+    ResearchZergMissileWeaponsLevel1 = 1192,
+    ResearchZergMissileWeaponsLevel2 = 1193,
+    ResearchZergMissileWeaponsLevel3 = 1194,
 
-    /// target: unit, point
-    ScanMove,
+    ScanMove = 19,
 
-    /// target: none
-    Stop,
-    /// target: none
-    StopBuilding,
-    /// target: none
-    StopAndCheer,
-    /// target: none
-    StopAndDance,
-    /// target: none
-    StopRedirect,
-    /// target: none
-    StopStop,
+    Stop = 3665,
+    StopBuilding = 2057,
+    StopAndCheer = 6,
+    StopAndDance = 7,
+    StopRedirect = 1691,
+    StopStop = 4,
 
-    /// target: point
-    TrainWarpAdept,
-    /// target: point
-    TrainWarpDarkTemplar,
-    /// target: point
-    TrainWarpHighTemplar,
-    /// target: point
-    TrainWarpSentry,
-    /// target: point
-    TrainWarpStalker,
-    /// target: point
-    TrainWarpZealot,
+    TrainWarpAdept = 1419,
+    TrainWarpDarkTemplar = 1417,
+    TrainWarpHighTemplar = 1416,
+    TrainWarpSentry = 1418,
+    TrainWarpStalker = 1414,
+    TrainWarpZealot = 1413,
 
-    /// target: none
-    TrainAdept,
-    /// target: none
-    TrainBaneling,
-    /// target: none
-    TrainBanshee,
-    /// target: none
-    TrainBattleCruiser,
-    /// target: none
-    TrainCarrier,
-    /// target: none
-    TrainColossus,
-    /// target: none
-    TrainCorruptor,
-    /// target: none
-    TrainCyclone,
-    /// target: none
-    TrainDarkTemplar,
-    /// target: none
-    TrainDisruptor,
-    /// target: none
-    TrainDrone,
-    /// target: none
-    TrainGhost,
-    /// target: none
-    TrainHellbat,
-    /// target: none
-    TrainHellion,
-    /// target: none
-    TrainHighTemplar,
-    /// target: none
-    TrainHydralisk,
-    /// target: none
-    TrainImmortal,
-    /// target: none
-    TrainInfestor,
-    /// target: none
-    TrainLiberator,
-    /// target: none
-    TrainMarauder,
-    /// target: none
-    TrainMarine,
-    /// target: none
-    TrainMedivac,
-    /// target: none
-    TrainMothershipCore,
-    /// target: none
-    TrainMutalisk,
-    /// target: none
-    TrainObserver,
-    /// target: none
-    TrainOracle,
-    /// target: none
-    TrainOverlord,
-    /// target: none
-    TrainPhoenix,
-    /// target: none
-    TrainProbe,
-    /// target: none
-    TrainQueen,
-    /// target: none
-    TrainRaven,
-    /// target: none
-    TrainReaper,
-    /// target: none
-    TrainRoach,
-    /// target: none
-    TrainScv,
-    /// target: none
-    TrainSentry,
-    /// target: none
-    TrainSiegeTank,
-    /// target: none
-    TrainStalker,
-    /// target: none
-    TrainSwarmHost,
-    /// target: none
-    TrainTempest,
-    /// target: none
-    TrainThor,
-    /// target: none
-    TrainUltralisk,
-    /// target: none
-    TrainVikingFighter,
-    /// target: none
-    TrainViper,
-    /// target: none
-    TrainVoidRay,
-    /// target: none
-    TrainWarpPrism,
-    /// target: none
-    TrainWidowMine,
-    /// target: none
-    TrainZealot,
-    /// target: none
-    TrainZergling,
+    TrainAdept = 922,
+    TrainBaneling = 80,
+    TrainBanshee = 621,
+    TrainBattleCruiser = 623,
+    TrainCarrier = 948,
+    TrainColossus = 978,
+    TrainCorruptor = 1353,
+    TrainCyclone = 597,
+    TrainDarkTemplar = 920,
+    TrainDisruptor = 994,
+    TrainDrone = 1342,
+    TrainGhost = 562,
+    TrainHellbat = 596,
+    TrainHellion = 595,
+    TrainHighTemplar = 919,
+    TrainHydralisk = 1345,
+    TrainImmortal = 979,
+    TrainInfestor = 1352,
+    TrainLiberator = 626,
+    TrainMarauder = 563,
+    TrainMarine = 560,
+    TrainMedivac = 620,
+    TrainMothershipCore = 1853,
+    TrainMutalisk = 1346,
+    TrainObserver = 977,
+    TrainOracle = 954,
+    TrainOverlord = 1344,
+    TrainPhoenix = 946,
+    TrainProbe = 1006,
+    TrainQueen = 1632,
+    TrainRaven = 622,
+    TrainReaper = 561,
+    TrainRoach = 1351,
+    TrainScv = 524,
+    TrainSentry = 921,
+    TrainSiegeTank = 591,
+    TrainStalker = 917,
+    TrainSwarmHost = 1356,
+    TrainTempest = 955,
+    TrainThor = 594,
+    TrainUltralisk = 1348,
+    TrainVikingFighter = 624,
+    TrainViper = 1354,
+    TrainVoidRay = 950,
+    TrainWarpPrism = 976,
+    TrainWidowMine = 614,
+    TrainZealot = 916,
+    TrainZergling = 1343,
 
-    /// target: none
-    UnloadAll,
-    /// target: unit, point
-    UnloadAllAt,
-    /// target: unit, point
-    UnloadAllAtMedivac,
-    /// target: unit, point
-    UnloadAllAtOverlord,
-    /// target: unit, point
-    UnloadAllAtWarpPrism,
-    /// target: none
-    UnloadAllBunker,
-    /// target: none
-    UnloadAllCommandCenter,
-    /// target: none
-    UnloadAllNydusNetwork,
-    /// target: none
-    UnloadAllNydusWorm,
-    /// target: none
-    UnloadUnitBunker,
-    /// target: none
-    UnloadUnitCommandCenter,
-    /// target: none
-    UnloadUnitMedivac,
-    /// target: none
-    UnloadUnitNydusNetwork,
-    /// target: none
-    UnloadUnitOverlord,
-    /// target: none
-    UnloadUnitWarpPrism,
+    UnloadAll = 3664,
+    UnloadAllAt = 3669,
+    UnloadAllAtMedivac = 396,
+    UnloadAllAtOverlord = 1408,
+    UnloadAllAtWarpPrism = 913,
+    UnloadAllBunker = 408,
+    UnloadAllCommandCenter = 413,
+    UnloadAllNydusNetwork = 1438,
+    UnloadAllNydusWorm = 2371,
+    UnloadUnitBunker = 410,
+    UnloadUnitCommandCenter = 415,
+    UnloadUnitMedivac = 397,
+    UnloadUnitNydusNetwork = 1440,
+    UnloadUnitOverlord = 1409,
+    UnloadUnitWarpPrism = 914,
 }
 
 impl FromProto<u32> for Ability {
@@ -1451,493 +988,503 @@ impl FromProto<u32> for Ability {
 
 impl IntoProto<u32> for Ability {
     fn into_proto(self) -> Result<u32> {
-        Ok(
-            match self {
-                Ability::Invalid => 0,
-                Ability::Smart => 1,
+        Ok(self as u32)
+    }
+}
 
-                Ability::Attack => 3674,
-                Ability::AttackAttack => 23,
-                Ability::AttackAttackBuilding => 2048,
-                Ability::AttackRedirect => 1682,
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-                Ability::BehaviorBuildingAttackOff => 2082,
-                Ability::BehaviorBuildingAttackOn => 2081,
-                Ability::BehaviorCloakOff => 3677,
-                Ability::BehaviorCloakOffBanshee => 393,
-                Ability::BehaviorCloakOffGhost => 383,
-                Ability::BehaviorCloakOn => 3676,
-                Ability::BehaviorCloakOnBanshee => 392,
-                Ability::BehaviorCloakOnGhost => 382,
-                Ability::BehaviorGenerateCreepOff => 1693,
-                Ability::BehaviorGenerateCreepOn => 1692,
-                Ability::BehaviorHoldFireOff => 3689,
-                Ability::BehaviorHoldFireOffLurker => 2552,
-                Ability::BehaviorHoldFireOn => 3688,
-                Ability::BehaviorHoldFireOnGhost => 36,
-                Ability::BehaviorHoldFireOnLurker => 2550,
-                Ability::BehaviorPulsarBeamOff => 2376,
-                Ability::BehaviorPulsarBeamOn => 2375,
+    #[test]
+    fn test_commutativity() {
+        let test_element = |element: Ability| assert_eq!(
+            element,
+            Ability::from_proto(element.into_proto().unwrap()).unwrap()
+        );
 
-                Ability::BuildArmory => 331,
-                Ability::BuildAssimilator => 882,
-                Ability::BuildBanelingNest => 1162,
-                Ability::BuildBarracks => 321,
-                Ability::BuildBunker => 324,
-                Ability::BuildCommandCenter => 318,
-                Ability::BuildCreepTumor => 3691,
-                Ability::BuildCreepTumorQueen => 1694,
-                Ability::BuildCreepTumorTumor => 1733,
-                Ability::BuildCyberneticsCore => 894,
-                Ability::BuildDarkShrine => 891,
-                Ability::BuildEngineeringBay => 322,
-                Ability::BuildEvolutionChamber => 1156,
-                Ability::BuildExtractor => 1154,
-                Ability::BuildFactory => 328,
-                Ability::BuildFleetBeacon => 885,
-                Ability::BuildForge => 884,
-                Ability::BuildFusionCore => 333,
-                Ability::BuildGateway => 883,
-                Ability::BuildGhostAcademy => 327,
-                Ability::BuildHatchery => 1152,
-                Ability::BuildHydraliskDen => 1157,
-                Ability::BuildInfestationPit => 1160,
-                Ability::BuildInterceptors => 1042,
-                Ability::BuildMissileTurret => 323,
-                Ability::BuildNexus => 880,
-                Ability::BuildNuke => 710,
-                Ability::BuildNydusNetwork => 1161,
-                Ability::BuildNydusWorm => 1768,
-                Ability::BuildPhotonCannon => 887,
-                Ability::BuildPylon => 881,
-                Ability::BuildReactor => 3683,
-                Ability::BuildReactorBarracks => 422,
-                Ability::BuildReactorFactory => 455,
-                Ability::BuildReactorStarport => 488,
-                Ability::BuildRefinery => 320,
-                Ability::BuildRoachWarren => 1165,
-                Ability::BuildRoboticsBay => 892,
-                Ability::BuildRoboticsFacility => 893,
-                Ability::BuildSensorTower => 326,
-                Ability::BuildSpawningPool => 1155,
-                Ability::BuildSpineCrawler => 1166,
-                Ability::BuildSpire => 1158,
-                Ability::BuildSporeCrawler => 1167,
-                Ability::BuildStarGate => 889,
-                Ability::BuildStarport => 329,
-                Ability::BuildStasisTrap => 2505,
-                Ability::BuildSupplyDepot => 319,
-                Ability::BuildTechLab => 3682,
-                Ability::BuildTechLabBarracks => 421,
-                Ability::BuildTechLabFactory => 454,
-                Ability::BuildTechLabStarport => 487,
-                Ability::BuildTemplarArchive => 890,
-                Ability::BuildTwilightCouncil => 886,
-                Ability::BuildUltraliskCavern => 1159,
+        test_element(Ability::Smart);
 
-                Ability::BurrowDown => 3661,
-                Ability::BurrowDownBaneling => 1374,
-                Ability::BurrowDownDrone => 1378,
-                Ability::BurrowDownHydralisk => 1382,
-                Ability::BurrowDownInfestor => 1444,
-                Ability::BurrowDownLurker => 2108,
-                Ability::BurrowDownQueen => 1433,
-                Ability::BurrowDownRavager => 2340,
-                Ability::BurrowDownRoach => 1386,
-                Ability::BurrowDownSwarmHost => 2014,
-                Ability::BurrowDownWidowMine => 2095,
-                Ability::BurrowDownZergling => 1390,
+        test_element(Ability::Attack);
+        test_element(Ability::AttackAttack);
+        test_element(Ability::AttackAttackBuilding);
+        test_element(Ability::AttackRedirect);
 
-                Ability::BurrowUp => 3662,
-                Ability::BurrowUpBaneling => 1376,
-                Ability::BurrowUpDrone => 1380,
-                Ability::BurrowUpHydralisk => 1384,
-                Ability::BurrowUpInfestor => 1446,
-                Ability::BurrowUpLurker => 2110,
-                Ability::BurrowUpQueen => 1435,
-                Ability::BurrowUpRavager => 2342,
-                Ability::BurrowUpRoach => 1388,
-                Ability::BurrowUpSwarmHost => 2016,
-                Ability::BurrowUpWidowMine => 2097,
-                Ability::BurrowUpZergling => 1392,
+        test_element(Ability::BehaviorBuildingAttackOff);
+        test_element(Ability::BehaviorBuildingAttackOn);
+        test_element(Ability::BehaviorCloakOff);
+        test_element(Ability::BehaviorCloakOffBanshee);
+        test_element(Ability::BehaviorCloakOffGhost);
+        test_element(Ability::BehaviorCloakOn);
+        test_element(Ability::BehaviorCloakOnBanshee);
+        test_element(Ability::BehaviorCloakOnGhost);
+        test_element(Ability::BehaviorGenerateCreepOff);
+        test_element(Ability::BehaviorGenerateCreepOn);
+        test_element(Ability::BehaviorHoldFireOff);
+        test_element(Ability::BehaviorHoldFireOffLurker);
+        test_element(Ability::BehaviorHoldFireOn);
+        test_element(Ability::BehaviorHoldFireOnGhost);
+        test_element(Ability::BehaviorHoldFireOnLurker);
+        test_element(Ability::BehaviorPulsarBeamOff);
+        test_element(Ability::BehaviorPulsarBeamOn);
 
-                Ability::Cancel => 3659,
-                Ability::CancelSlotAddOn => 313,
-                Ability::CancelSlotQueue1 => 305,
-                Ability::CancelSlotQueue5 => 307,
-                Ability::CancelSlotQueueCancelToSelection => 309,
-                Ability::CancelSlotQueuePassive => 1832,
-                Ability::CancelAdeptPhaseShift => 2594,
-                Ability::CancelAdeptShadePhaseShift => 2596,
-                Ability::CancelBarracksAddOn => 451,
-                Ability::CancelBuildInProgress => 314,
-                Ability::CancelCreepTumor => 1763,
-                Ability::CancelFactoryAddOn => 484,
-                Ability::CancelGravitonBeam => 174,
-                Ability::CancelLast => 3671,
-                Ability::CancelMorphBroodLord => 1373,
-                Ability::CancelMorphLair => 1217,
-                Ability::CancelMorphLurker => 2333,
-                Ability::CancelMorphLurkerDen => 2113,
-                Ability::CancelMorphMothership => 1848,
-                Ability::CancelMorphOrbital => 1517,
-                Ability::CancelMorphOverlordTransport => 2709,
-                Ability::CancelMorphOverseer => 1449,
-                Ability::CancelMorphPlanetaryFortress => 1451,
-                Ability::CancelMorphRavager => 2331,
-                Ability::CancelQueue1 => 304,
-                Ability::CancelQueue5 => 306,
-                Ability::CancelQueueAddOn => 312,
-                Ability::CancelQueueCancelToSelection => 308,
-                Ability::CancelQueuePassive => 1831,
-                Ability::CancelQueuePassiveCancelTOSelection => 1833,
-                Ability::CancelSpineCrawlerRoot => 1730,
-                Ability::CancelStarportAddOn => 517,
+        test_element(Ability::BuildArmory);
+        test_element(Ability::BuildAssimilator);
+        test_element(Ability::BuildBanelingNest);
+        test_element(Ability::BuildBarracks);
+        test_element(Ability::BuildBunker);
+        test_element(Ability::BuildCommandCenter);
+        test_element(Ability::BuildCreepTumor);
+        test_element(Ability::BuildCreepTumorQueen);
+        test_element(Ability::BuildCreepTumorTumor);
+        test_element(Ability::BuildCyberneticsCore);
+        test_element(Ability::BuildDarkShrine);
+        test_element(Ability::BuildEngineeringBay);
+        test_element(Ability::BuildEvolutionChamber);
+        test_element(Ability::BuildExtractor);
+        test_element(Ability::BuildFactory);
+        test_element(Ability::BuildFleetBeacon);
+        test_element(Ability::BuildForge);
+        test_element(Ability::BuildFusionCore);
+        test_element(Ability::BuildGateway);
+        test_element(Ability::BuildGhostAcademy);
+        test_element(Ability::BuildHatchery);
+        test_element(Ability::BuildHydraliskDen);
+        test_element(Ability::BuildInfestationPit);
+        test_element(Ability::BuildInterceptors);
+        test_element(Ability::BuildMissileTurret);
+        test_element(Ability::BuildNexus);
+        test_element(Ability::BuildNuke);
+        test_element(Ability::BuildNydusNetwork);
+        test_element(Ability::BuildNydusWorm);
+        test_element(Ability::BuildPhotonCannon);
+        test_element(Ability::BuildPylon);
+        test_element(Ability::BuildReactor);
+        test_element(Ability::BuildReactorBarracks);
+        test_element(Ability::BuildReactorFactory);
+        test_element(Ability::BuildReactorStarport);
+        test_element(Ability::BuildRefinery);
+        test_element(Ability::BuildRoachWarren);
+        test_element(Ability::BuildRoboticsBay);
+        test_element(Ability::BuildRoboticsFacility);
+        test_element(Ability::BuildSensorTower);
+        test_element(Ability::BuildSpawningPool);
+        test_element(Ability::BuildSpineCrawler);
+        test_element(Ability::BuildSpire);
+        test_element(Ability::BuildSporeCrawler);
+        test_element(Ability::BuildStarGate);
+        test_element(Ability::BuildStarport);
+        test_element(Ability::BuildStasisTrap);
+        test_element(Ability::BuildSupplyDepot);
+        test_element(Ability::BuildTechLab);
+        test_element(Ability::BuildTechLabBarracks);
+        test_element(Ability::BuildTechLabFactory);
+        test_element(Ability::BuildTechLabStarport);
+        test_element(Ability::BuildTemplarArchive);
+        test_element(Ability::BuildTwilightCouncil);
+        test_element(Ability::BuildUltraliskCavern);
 
-                Ability::EffectAbduct => 2067,
-                Ability::EffectAdeptPhaseShift => 2544,
-                Ability::EffectAutoTurret => 1764,
-                Ability::EffectBlindingCloud => 2063,
-                Ability::EffectBlink => 3687,
-                Ability::EffectBlinkStalker => 1442,
-                Ability::EffectCallDownMule => 171,
-                Ability::EffectCausticSpray => 2324,
-                Ability::EffectCharge => 1819,
-                Ability::EffectChronoBoost => 261,
-                Ability::EffectContaminate => 1825,
-                Ability::EffectCorrosiveBile => 2338,
-                Ability::EffectEmp => 1628,
-                Ability::EffectExplode => 42,
-                Ability::EffectFeedback => 140,
-                Ability::EffectForceField => 1526,
-                Ability::EffectFungalGrowth => 74,
-                Ability::EffectGhostSnipe => 2714,
-                Ability::EffectGravitonBeam => 173,
-                Ability::EffectGuardianShield => 76,
-                Ability::EffectHeal => 386,
-                Ability::EffectHunterSeekerMissile => 169,
-                Ability::EffectImmortalBarrier => 2328,
-                Ability::EffectInfestedTerrans => 247,
-                Ability::EffectInjectLarva => 251,
-                Ability::EffectKd8Charge => 2588,
-                Ability::EffectLockOn => 2350,
-                Ability::EffectLocustSwoop => 2387,
-                Ability::EffectMassRecall => 3686,
-                Ability::EffectMassRecallMothership => 2368,
-                Ability::EffectMassRecallMothershipCore => 1974,
-                Ability::EffectMedivacIgniteAfterBurners => 2116,
-                Ability::EffectNeuralParasite => 249,
-                Ability::EffectNukeCallDown => 1622,
-                Ability::EffectOracleRevelation => 2146,
-                Ability::EffectParasiticBomb => 2542,
-                Ability::EffectPhotonOvercharge => 2162,
-                Ability::EffectPointDefenseDrone => 144,
-                Ability::EffectPsiStorm => 1036,
-                Ability::EffectPurificationNova => 2346,
-                Ability::EffectRepair => 3685,
-                Ability::EffectRepairMule => 78,
-                Ability::EffectRepairScv => 316,
-                Ability::EffectSalvage => 32,
-                Ability::EffectScan => 399,
-                Ability::EffectShadowStride => 2700,
-                Ability::EffectSpawnChangeling => 181,
-                Ability::EffectSpawnLocusts => 2704,
-                Ability::EffectSpray => 3684,
-                Ability::EffectSprayProtoss => 30,
-                Ability::EffectSprayTerran => 26,
-                Ability::EffectSprayZerg => 28,
-                Ability::EffectStim => 3675,
-                Ability::EffectStimMarauder => 253,
-                Ability::EffectStimMarine => 380,
-                Ability::EffectStimMarineRedirect => 1683,
-                Ability::EffectSupplyDrop => 255,
-                Ability::EffectTacticalJump => 2358,
-                Ability::EffectTempestDisruptionBlast => 2698,
-                Ability::EffectTimeWarp => 2244,
-                Ability::EffectTransfusion => 1664,
-                Ability::EffectViperConsume => 2073,
-                Ability::EffectVoidRayPrismaticAlignment => 2393,
-                Ability::EffectWidowMineAttack => 2099,
-                Ability::EffectYamatoGun => 401,
+        test_element(Ability::BurrowDown);
+        test_element(Ability::BurrowDownBaneling);
+        test_element(Ability::BurrowDownDrone);
+        test_element(Ability::BurrowDownHydralisk);
+        test_element(Ability::BurrowDownInfestor);
+        test_element(Ability::BurrowDownLurker);
+        test_element(Ability::BurrowDownQueen);
+        test_element(Ability::BurrowDownRavager);
+        test_element(Ability::BurrowDownRoach);
+        test_element(Ability::BurrowDownSwarmHost);
+        test_element(Ability::BurrowDownWidowMine);
+        test_element(Ability::BurrowDownZergling);
 
-                Ability::HallucinationAdept => 2391,
-                Ability::HallucinationArchon => 146,
-                Ability::HallucinationColossus => 148,
-                Ability::HallucinationDisruptor => 2389,
-                Ability::HallucinationHighTemplar => 150,
-                Ability::HallucinationImmortal => 152,
-                Ability::HallucinationOracle => 2114,
-                Ability::HallucinationPhoenix => 154,
-                Ability::HallucinationProbe => 156,
-                Ability::HallucinationStalker => 158,
-                Ability::HallucinationVoidRay => 160,
-                Ability::HallucinationWarpPrism => 162,
-                Ability::HallucinationZealot => 164,
+        test_element(Ability::BurrowUp);
+        test_element(Ability::BurrowUpBaneling);
+        test_element(Ability::BurrowUpDrone);
+        test_element(Ability::BurrowUpHydralisk);
+        test_element(Ability::BurrowUpInfestor);
+        test_element(Ability::BurrowUpLurker);
+        test_element(Ability::BurrowUpQueen);
+        test_element(Ability::BurrowUpRavager);
+        test_element(Ability::BurrowUpRoach);
+        test_element(Ability::BurrowUpSwarmHost);
+        test_element(Ability::BurrowUpWidowMine);
+        test_element(Ability::BurrowUpZergling);
 
-                Ability::Halt => 3660,
-                Ability::HaltBuilding => 315,
-                Ability::HaltTerranBuild => 348,
+        test_element(Ability::Cancel);
+        test_element(Ability::CancelSlotAddOn);
+        test_element(Ability::CancelSlotQueue1);
+        test_element(Ability::CancelSlotQueue5);
+        test_element(Ability::CancelSlotQueueCancelToSelection);
+        test_element(Ability::CancelSlotQueuePassive);
+        test_element(Ability::CancelAdeptPhaseShift);
+        test_element(Ability::CancelAdeptShadePhaseShift);
+        test_element(Ability::CancelBarracksAddOn);
+        test_element(Ability::CancelBuildInProgress);
+        test_element(Ability::CancelCreepTumor);
+        test_element(Ability::CancelFactoryAddOn);
+        test_element(Ability::CancelGravitonBeam);
+        test_element(Ability::CancelLast);
+        test_element(Ability::CancelMorphBroodLord);
+        test_element(Ability::CancelMorphLair);
+        test_element(Ability::CancelMorphLurker);
+        test_element(Ability::CancelMorphLurkerDen);
+        test_element(Ability::CancelMorphMothership);
+        test_element(Ability::CancelMorphOrbital);
+        test_element(Ability::CancelMorphOverlordTransport);
+        test_element(Ability::CancelMorphOverseer);
+        test_element(Ability::CancelMorphPlanetaryFortress);
+        test_element(Ability::CancelMorphRavager);
+        test_element(Ability::CancelQueue1);
+        test_element(Ability::CancelQueue5);
+        test_element(Ability::CancelQueueAddOn);
+        test_element(Ability::CancelQueueCancelToSelection);
+        test_element(Ability::CancelQueuePassive);
+        test_element(Ability::CancelQueuePassiveCancelTOSelection);
+        test_element(Ability::CancelSpineCrawlerRoot);
+        test_element(Ability::CancelStarportAddOn);
 
-                Ability::HarvestGather => 3666,
-                Ability::HarvestGatherDrone => 1183,
-                Ability::HarvestGatherProbe => 298,
-                Ability::HarvestGatherScv => 295,
-                Ability::HarvestReturn => 3667,
-                Ability::HarvestReturnDrone => 1184,
-                Ability::HarvestReturnMule => 167,
-                Ability::HarvestReturnProbe => 299,
-                Ability::HarvestReturnScv => 296,
+        test_element(Ability::EffectAbduct);
+        test_element(Ability::EffectAdeptPhaseShift);
+        test_element(Ability::EffectAutoTurret);
+        test_element(Ability::EffectBlindingCloud);
+        test_element(Ability::EffectBlink);
+        test_element(Ability::EffectBlinkStalker);
+        test_element(Ability::EffectCallDownMule);
+        test_element(Ability::EffectCausticSpray);
+        test_element(Ability::EffectCharge);
+        test_element(Ability::EffectChronoBoost);
+        test_element(Ability::EffectContaminate);
+        test_element(Ability::EffectCorrosiveBile);
+        test_element(Ability::EffectEmp);
+        test_element(Ability::EffectExplode);
+        test_element(Ability::EffectFeedback);
+        test_element(Ability::EffectForceField);
+        test_element(Ability::EffectFungalGrowth);
+        test_element(Ability::EffectGhostSnipe);
+        test_element(Ability::EffectGravitonBeam);
+        test_element(Ability::EffectGuardianShield);
+        test_element(Ability::EffectHeal);
+        test_element(Ability::EffectHunterSeekerMissile);
+        test_element(Ability::EffectImmortalBarrier);
+        test_element(Ability::EffectInfestedTerrans);
+        test_element(Ability::EffectInjectLarva);
+        test_element(Ability::EffectKd8Charge);
+        test_element(Ability::EffectLockOn);
+        test_element(Ability::EffectLocustSwoop);
+        test_element(Ability::EffectMassRecall);
+        test_element(Ability::EffectMassRecallMothership);
+        test_element(Ability::EffectMassRecallMothershipCore);
+        test_element(Ability::EffectMedivacIgniteAfterBurners);
+        test_element(Ability::EffectNeuralParasite);
+        test_element(Ability::EffectNukeCallDown);
+        test_element(Ability::EffectOracleRevelation);
+        test_element(Ability::EffectParasiticBomb);
+        test_element(Ability::EffectPhotonOvercharge);
+        test_element(Ability::EffectPointDefenseDrone);
+        test_element(Ability::EffectPsiStorm);
+        test_element(Ability::EffectPurificationNova);
+        test_element(Ability::EffectRepair);
+        test_element(Ability::EffectRepairMule);
+        test_element(Ability::EffectRepairScv);
+        test_element(Ability::EffectSalvage);
+        test_element(Ability::EffectScan);
+        test_element(Ability::EffectShadowStride);
+        test_element(Ability::EffectSpawnChangeling);
+        test_element(Ability::EffectSpawnLocusts);
+        test_element(Ability::EffectSpray);
+        test_element(Ability::EffectSprayProtoss);
+        test_element(Ability::EffectSprayTerran);
+        test_element(Ability::EffectSprayZerg);
+        test_element(Ability::EffectStim);
+        test_element(Ability::EffectStimMarauder);
+        test_element(Ability::EffectStimMarine);
+        test_element(Ability::EffectStimMarineRedirect);
+        test_element(Ability::EffectSupplyDrop);
+        test_element(Ability::EffectTacticalJump);
+        test_element(Ability::EffectTempestDisruptionBlast);
+        test_element(Ability::EffectTimeWarp);
+        test_element(Ability::EffectTransfusion);
+        test_element(Ability::EffectViperConsume);
+        test_element(Ability::EffectVoidRayPrismaticAlignment);
+        test_element(Ability::EffectWidowMineAttack);
+        test_element(Ability::EffectYamatoGun);
 
-                Ability::HoldPosition => 18,
+        test_element(Ability::HallucinationAdept);
+        test_element(Ability::HallucinationArchon);
+        test_element(Ability::HallucinationColossus);
+        test_element(Ability::HallucinationDisruptor);
+        test_element(Ability::HallucinationHighTemplar);
+        test_element(Ability::HallucinationImmortal);
+        test_element(Ability::HallucinationOracle);
+        test_element(Ability::HallucinationPhoenix);
+        test_element(Ability::HallucinationProbe);
+        test_element(Ability::HallucinationStalker);
+        test_element(Ability::HallucinationVoidRay);
+        test_element(Ability::HallucinationWarpPrism);
+        test_element(Ability::HallucinationZealot);
 
-                Ability::Land => 3678,
-                Ability::LandBarracks => 554,
-                Ability::LandCommandCenter => 419,
-                Ability::LandFactory => 520,
-                Ability::LandOrbitalCommand => 1524,
-                Ability::LandStarport => 522,
+        test_element(Ability::Halt);
+        test_element(Ability::HaltBuilding);
+        test_element(Ability::HaltTerranBuild);
 
-                Ability::Lift => 3679,
-                Ability::LiftBarracks => 452,
-                Ability::LiftCommandCenter => 417,
-                Ability::LiftFactory => 485,
-                Ability::LiftOrbitalCommand => 1522,
-                Ability::LiftStarport => 518,
+        test_element(Ability::HarvestGather);
+        test_element(Ability::HarvestGatherDrone);
+        test_element(Ability::HarvestGatherProbe);
+        test_element(Ability::HarvestGatherScv);
+        test_element(Ability::HarvestReturn);
+        test_element(Ability::HarvestReturnDrone);
+        test_element(Ability::HarvestReturnMule);
+        test_element(Ability::HarvestReturnProbe);
+        test_element(Ability::HarvestReturnScv);
 
-                Ability::Load => 3668,
-                Ability::LoadAll => 3663,
-                Ability::LoadAllCommandCenter => 416,
-                Ability::LoadBunker => 407,
-                Ability::LoadMedivac => 394,
+        test_element(Ability::HoldPosition);
 
-                Ability::MorphArchon => 1766,
-                Ability::MorphBroodLord => 1372,
-                Ability::MorphGateway => 1520,
-                Ability::MorphGreaterSpire => 1220,
-                Ability::MorphHellbat => 1998,
-                Ability::MorphHellion => 1978,
-                Ability::MorphHive => 1218,
-                Ability::MorphLair => 1216,
-                Ability::MorphLiberatorAaMode => 2560,
-                Ability::MorphLiberatorAgMode => 2558,
-                Ability::MorphLurker => 2332,
-                Ability::MorphLurkerDen => 2112,
-                Ability::MorphMothership => 1847,
-                Ability::MorphOrbitalCommand => 1516,
-                Ability::MorphOverlordTransport => 2708,
-                Ability::MorphOverseer => 1448,
-                Ability::MorphPlanetaryFortress => 1450,
-                Ability::MorphRavager => 2330,
-                Ability::MorphRoot => 3680,
-                Ability::MorphSiegeMode => 388,
-                Ability::MorphSpineCrawlerRoot => 1729,
-                Ability::MorphSpineCrawlerUproot => 1725,
-                Ability::MorphSporeCrawlerRoot => 1731,
-                Ability::MorphSporeCrawlerUproot => 1727,
-                Ability::MorphSupplyDepotLower => 556,
-                Ability::MorphSupplyDepotRaise => 558,
-                Ability::MorphThorExplosiveMode => 2364,
-                Ability::MorphThorHighImpactMode => 2362,
-                Ability::MorphUnsiege => 390,
-                Ability::MorphUproot => 3681,
-                Ability::MorphVikingAssaultMode => 403,
-                Ability::MorphVikingFighterMode => 405,
-                Ability::MorphWarpGate => 1518,
-                Ability::MorphWarpPrismPhasingMode => 1528,
-                Ability::MorphWarpPrismTransportMode => 1530,
+        test_element(Ability::Land);
+        test_element(Ability::LandBarracks);
+        test_element(Ability::LandCommandCenter);
+        test_element(Ability::LandFactory);
+        test_element(Ability::LandOrbitalCommand);
+        test_element(Ability::LandStarport);
 
-                Ability::Move => 16,
-                Ability::Patrol => 17,
-                Ability::RallyBuilding => 195,
-                Ability::RallyCommandCenter => 203,
-                Ability::RallyHatcheryUnits => 212,
-                Ability::RallyHatcheryWorkers => 211,
-                Ability::RallyMorphingUnit => 199,
-                Ability::RallyNexus => 207,
-                Ability::RallyUnits => 3673,
-                Ability::RallyWorkers => 3690,
-                Ability::ResearchAdeptResonatingGlaives => 1594,
-                Ability::ResearchAdvancedBallistics => 805,
-                Ability::ResearchBansheeCloakingField => 790,
-                Ability::ResearchBansheeHyperFlightRotors => 799,
-                Ability::ResearchBattleCruiserWeaponRefit => 1532,
-                Ability::ResearchBlink => 1593,
-                Ability::ResearchBurrow => 1225,
-                Ability::ResearchCentrifugalHooks => 1482,
-                Ability::ResearchCharge => 1592,
-                Ability::ResearchChitinousPlating => 265,
-                Ability::ResearchCombatShield => 731,
-                Ability::ResearchConcussiveShells => 732,
-                Ability::ResearchDrillingClaws => 764,
-                Ability::ResearchExtendedThermalLance => 1097,
-                Ability::ResearchGlialRegeneration => 216,
-                Ability::ResearchGraviticBooster => 1093,
-                Ability::ResearchGraviticDrive => 1094,
-                Ability::ResearchGroovedSpines => 1282,
-                Ability::ResearchHighCapacityFuelTanks => 804,
-                Ability::ResearchHisecAutoTracking => 650,
-                Ability::ResearchInfernalPreIgniter => 761,
-                Ability::ResearchInterceptorGravitonCatapult => 44,
-                Ability::ResearchMagFieldLaunchers => 766,
-                Ability::ResearchMuscularAugments => 1283,
-                Ability::ResearchNeoSteelFrame => 655,
-                Ability::ResearchNeuralParasite => 1455,
-                Ability::ResearchPathogenGlands => 1454,
-                Ability::ResearchPersonalCloaking => 820,
-                Ability::ResearchPhoenixAnionPulseCrystals => 46,
-                Ability::ResearchPneumatizedCarapace => 1223,
-                Ability::ResearchProtossAirArmor => 3692,
-                Ability::ResearchProtossAirArmorLevel1 => 1565,
-                Ability::ResearchProtossAirArmorLevel2 => 1566,
-                Ability::ResearchProtossAirArmorLevel3 => 1567,
-                Ability::ResearchProtossAirWeapons => 3693,
-                Ability::ResearchProtossAirWeaponsLevel1 => 1562,
-                Ability::ResearchProtossAirWeaponsLevel2 => 1563,
-                Ability::ResearchProtossAirWeaponsLevel3 => 1564,
-                Ability::ResearchProtossGroundArmor => 3694,
-                Ability::ResearchProtossGroundArmorLevel1 => 1065,
-                Ability::ResearchProtossGroundArmorLevel2 => 1066,
-                Ability::ResearchProtossGroundArmorLevel3 => 1067,
-                Ability::ResearchProtossGroundWeapons => 3695,
-                Ability::ResearchProtossGroundWeaponsLevel1 => 1062,
-                Ability::ResearchProtossGroundWeaponsLevel2 => 1063,
-                Ability::ResearchProtossGroundWeaponsLevel3 => 1064,
-                Ability::ResearchProtossShields => 3696,
-                Ability::ResearchProtossShieldsLevel1 => 1068,
-                Ability::ResearchProtossShieldsLevel2 => 1069,
-                Ability::ResearchProtossShieldsLevel3 => 1070,
-                Ability::ResearchPsiStorm => 1126,
-                Ability::ResearchRavenCorvidReactor => 793,
-                Ability::ResearchRavenRecalibratedExplosives => 803,
-                Ability::ResearchShadowStrike => 2720,
-                Ability::ResearchStimpack => 730,
-                Ability::ResearchTerranInfantryArmor => 3697,
-                Ability::ResearchTerranInfantryArmorLevel1 => 656,
-                Ability::ResearchTerranInfantryArmorLevel2 => 657,
-                Ability::ResearchTerranInfantryArmorLevel3 => 658,
-                Ability::ResearchTerranInfantryWeapons => 3698,
-                Ability::ResearchTerranInfantryWeaponsLevel1 => 652,
-                Ability::ResearchTerranInfantryWeaponsLevel2 => 653,
-                Ability::ResearchTerranInfantryWeaponsLevel3 => 654,
-                Ability::ResearchTerranShipWeapons => 3699,
-                Ability::ResearchTerranShipWeaponsLevel1 => 861,
-                Ability::ResearchTerranShipWeaponsLevel2 => 862,
-                Ability::ResearchTerranShipWeaponsLevel3 => 863,
-                Ability::ResearchTerranStructureArmorUpgrade => 651,
-                Ability::ResearchTerranVehicleAndShipPlating => 3700,
-                Ability::ResearchTerranVehicleAndShipPlatingLevel1 => 864,
-                Ability::ResearchTerranVehicleAndShipPlatingLevel2 => 865,
-                Ability::ResearchTerranVehicleAndShipPlatingLevel3 => 866,
-                Ability::ResearchTerranVehicleWeapons => 3701,
-                Ability::ResearchTerranVehicleWeaponsLevel1 => 855,
-                Ability::ResearchTerranVehicleWeaponsLevel2 => 856,
-                Ability::ResearchTerranVehicleWeaponsLevel3 => 857,
-                Ability::ResearchTunnelingClaws => 217,
-                Ability::ResearchWarpGate => 1568,
-                Ability::ResearchZergFlyerArmor => 3702,
-                Ability::ResearchZergFlyerArmorLevel1 => 1315,
-                Ability::ResearchZergFlyerArmorLevel2 => 1316,
-                Ability::ResearchZergFlyerArmorLevel3 => 1317,
-                Ability::ResearchZergFlyerAttack => 3703,
-                Ability::ResearchZergFlyerAttackLevel1 => 1312,
-                Ability::ResearchZergFlyerAttackLevel2 => 1313,
-                Ability::ResearchZergFlyerAttackLevel3 => 1314,
-                Ability::ResearchZergGroundArmor => 3704,
-                Ability::ResearchZergGroundArmorLevel1 => 1189,
-                Ability::ResearchZergGroundArmorLevel2 => 1190,
-                Ability::ResearchZergGroundArmorLevel3 => 1191,
-                Ability::ResearchZerglingAdrenalGlands => 1252,
-                Ability::ResearchZerglingMetabolicBoost => 1253,
-                Ability::ResearchZergMeleeWeapons => 3705,
-                Ability::ResearchZergMeleeWeaponsLevel1 => 1186,
-                Ability::ResearchZergMeleeWeaponsLevel2 => 1187,
-                Ability::ResearchZergMeleeWeaponsLevel3 => 1188,
-                Ability::ResearchZergMissileWeapons => 3706,
-                Ability::ResearchZergMissileWeaponsLevel1 => 1192,
-                Ability::ResearchZergMissileWeaponsLevel2 => 1193,
-                Ability::ResearchZergMissileWeaponsLevel3 => 1194,
+        test_element(Ability::Lift);
+        test_element(Ability::LiftBarracks);
+        test_element(Ability::LiftCommandCenter);
+        test_element(Ability::LiftFactory);
+        test_element(Ability::LiftOrbitalCommand);
+        test_element(Ability::LiftStarport);
 
-                Ability::ScanMove => 19,
+        test_element(Ability::Load);
+        test_element(Ability::LoadAll);
+        test_element(Ability::LoadAllCommandCenter);
+        test_element(Ability::LoadBunker);
+        test_element(Ability::LoadMedivac);
 
-                Ability::Stop => 3665,
-                Ability::StopBuilding => 2057,
-                Ability::StopAndCheer => 6,
-                Ability::StopAndDance => 7,
-                Ability::StopRedirect => 1691,
-                Ability::StopStop => 4,
+        test_element(Ability::MorphArchon);
+        test_element(Ability::MorphBroodLord);
+        test_element(Ability::MorphGateway);
+        test_element(Ability::MorphGreaterSpire);
+        test_element(Ability::MorphHellbat);
+        test_element(Ability::MorphHellion);
+        test_element(Ability::MorphHive);
+        test_element(Ability::MorphLair);
+        test_element(Ability::MorphLiberatorAaMode);
+        test_element(Ability::MorphLiberatorAgMode);
+        test_element(Ability::MorphLurker);
+        test_element(Ability::MorphLurkerDen);
+        test_element(Ability::MorphMothership);
+        test_element(Ability::MorphOrbitalCommand);
+        test_element(Ability::MorphOverlordTransport);
+        test_element(Ability::MorphOverseer);
+        test_element(Ability::MorphPlanetaryFortress);
+        test_element(Ability::MorphRavager);
+        test_element(Ability::MorphRoot);
+        test_element(Ability::MorphSiegeMode);
+        test_element(Ability::MorphSpineCrawlerRoot);
+        test_element(Ability::MorphSpineCrawlerUproot);
+        test_element(Ability::MorphSporeCrawlerRoot);
+        test_element(Ability::MorphSporeCrawlerUproot);
+        test_element(Ability::MorphSupplyDepotLower);
+        test_element(Ability::MorphSupplyDepotRaise);
+        test_element(Ability::MorphThorExplosiveMode);
+        test_element(Ability::MorphThorHighImpactMode);
+        test_element(Ability::MorphUnsiege);
+        test_element(Ability::MorphUproot);
+        test_element(Ability::MorphVikingAssaultMode);
+        test_element(Ability::MorphVikingFighterMode);
+        test_element(Ability::MorphWarpGate);
+        test_element(Ability::MorphWarpPrismPhasingMode);
+        test_element(Ability::MorphWarpPrismTransportMode);
 
-                Ability::TrainWarpAdept => 1419,
-                Ability::TrainWarpDarkTemplar => 1417,
-                Ability::TrainWarpHighTemplar => 1416,
-                Ability::TrainWarpSentry => 1418,
-                Ability::TrainWarpStalker => 1414,
-                Ability::TrainWarpZealot => 1413,
+        test_element(Ability::Move);
+        test_element(Ability::Patrol);
+        test_element(Ability::RallyBuilding);
+        test_element(Ability::RallyCommandCenter);
+        test_element(Ability::RallyHatcheryUnits);
+        test_element(Ability::RallyHatcheryWorkers);
+        test_element(Ability::RallyMorphingUnit);
+        test_element(Ability::RallyNexus);
+        test_element(Ability::RallyUnits);
+        test_element(Ability::RallyWorkers);
+        test_element(Ability::ResearchAdeptResonatingGlaives);
+        test_element(Ability::ResearchAdvancedBallistics);
+        test_element(Ability::ResearchBansheeCloakingField);
+        test_element(Ability::ResearchBansheeHyperFlightRotors);
+        test_element(Ability::ResearchBattleCruiserWeaponRefit);
+        test_element(Ability::ResearchBlink);
+        test_element(Ability::ResearchBurrow);
+        test_element(Ability::ResearchCentrifugalHooks);
+        test_element(Ability::ResearchCharge);
+        test_element(Ability::ResearchChitinousPlating);
+        test_element(Ability::ResearchCombatShield);
+        test_element(Ability::ResearchConcussiveShells);
+        test_element(Ability::ResearchDrillingClaws);
+        test_element(Ability::ResearchExtendedThermalLance);
+        test_element(Ability::ResearchGlialRegeneration);
+        test_element(Ability::ResearchGraviticBooster);
+        test_element(Ability::ResearchGraviticDrive);
+        test_element(Ability::ResearchGroovedSpines);
+        test_element(Ability::ResearchHighCapacityFuelTanks);
+        test_element(Ability::ResearchHisecAutoTracking);
+        test_element(Ability::ResearchInfernalPreIgniter);
+        test_element(Ability::ResearchInterceptorGravitonCatapult);
+        test_element(Ability::ResearchMagFieldLaunchers);
+        test_element(Ability::ResearchMuscularAugments);
+        test_element(Ability::ResearchNeoSteelFrame);
+        test_element(Ability::ResearchNeuralParasite);
+        test_element(Ability::ResearchPathogenGlands);
+        test_element(Ability::ResearchPersonalCloaking);
+        test_element(Ability::ResearchPhoenixAnionPulseCrystals);
+        test_element(Ability::ResearchPneumatizedCarapace);
+        test_element(Ability::ResearchProtossAirArmor);
+        test_element(Ability::ResearchProtossAirArmorLevel1);
+        test_element(Ability::ResearchProtossAirArmorLevel2);
+        test_element(Ability::ResearchProtossAirArmorLevel3);
+        test_element(Ability::ResearchProtossAirWeapons);
+        test_element(Ability::ResearchProtossAirWeaponsLevel1);
+        test_element(Ability::ResearchProtossAirWeaponsLevel2);
+        test_element(Ability::ResearchProtossAirWeaponsLevel3);
+        test_element(Ability::ResearchProtossGroundArmor);
+        test_element(Ability::ResearchProtossGroundArmorLevel1);
+        test_element(Ability::ResearchProtossGroundArmorLevel2);
+        test_element(Ability::ResearchProtossGroundArmorLevel3);
+        test_element(Ability::ResearchProtossGroundWeapons);
+        test_element(Ability::ResearchProtossGroundWeaponsLevel1);
+        test_element(Ability::ResearchProtossGroundWeaponsLevel2);
+        test_element(Ability::ResearchProtossGroundWeaponsLevel3);
+        test_element(Ability::ResearchProtossShields);
+        test_element(Ability::ResearchProtossShieldsLevel1);
+        test_element(Ability::ResearchProtossShieldsLevel2);
+        test_element(Ability::ResearchProtossShieldsLevel3);
+        test_element(Ability::ResearchPsiStorm);
+        test_element(Ability::ResearchRavenCorvidReactor);
+        test_element(Ability::ResearchRavenRecalibratedExplosives);
+        test_element(Ability::ResearchShadowStrike);
+        test_element(Ability::ResearchStimpack);
+        test_element(Ability::ResearchTerranInfantryArmor);
+        test_element(Ability::ResearchTerranInfantryArmorLevel1);
+        test_element(Ability::ResearchTerranInfantryArmorLevel2);
+        test_element(Ability::ResearchTerranInfantryArmorLevel3);
+        test_element(Ability::ResearchTerranInfantryWeapons);
+        test_element(Ability::ResearchTerranInfantryWeaponsLevel1);
+        test_element(Ability::ResearchTerranInfantryWeaponsLevel2);
+        test_element(Ability::ResearchTerranInfantryWeaponsLevel3);
+        test_element(Ability::ResearchTerranShipWeapons);
+        test_element(Ability::ResearchTerranShipWeaponsLevel1);
+        test_element(Ability::ResearchTerranShipWeaponsLevel2);
+        test_element(Ability::ResearchTerranShipWeaponsLevel3);
+        test_element(Ability::ResearchTerranStructureArmorUpgrade);
+        test_element(Ability::ResearchTerranVehicleAndShipPlating);
+        test_element(Ability::ResearchTerranVehicleAndShipPlatingLevel1);
+        test_element(Ability::ResearchTerranVehicleAndShipPlatingLevel2);
+        test_element(Ability::ResearchTerranVehicleAndShipPlatingLevel3);
+        test_element(Ability::ResearchTerranVehicleWeapons);
+        test_element(Ability::ResearchTerranVehicleWeaponsLevel1);
+        test_element(Ability::ResearchTerranVehicleWeaponsLevel2);
+        test_element(Ability::ResearchTerranVehicleWeaponsLevel3);
+        test_element(Ability::ResearchTunnelingClaws);
+        test_element(Ability::ResearchWarpGate);
+        test_element(Ability::ResearchZergFlyerArmor);
+        test_element(Ability::ResearchZergFlyerArmorLevel1);
+        test_element(Ability::ResearchZergFlyerArmorLevel2);
+        test_element(Ability::ResearchZergFlyerArmorLevel3);
+        test_element(Ability::ResearchZergFlyerAttack);
+        test_element(Ability::ResearchZergFlyerAttackLevel1);
+        test_element(Ability::ResearchZergFlyerAttackLevel2);
+        test_element(Ability::ResearchZergFlyerAttackLevel3);
+        test_element(Ability::ResearchZergGroundArmor);
+        test_element(Ability::ResearchZergGroundArmorLevel1);
+        test_element(Ability::ResearchZergGroundArmorLevel2);
+        test_element(Ability::ResearchZergGroundArmorLevel3);
+        test_element(Ability::ResearchZerglingAdrenalGlands);
+        test_element(Ability::ResearchZerglingMetabolicBoost);
+        test_element(Ability::ResearchZergMeleeWeapons);
+        test_element(Ability::ResearchZergMeleeWeaponsLevel1);
+        test_element(Ability::ResearchZergMeleeWeaponsLevel2);
+        test_element(Ability::ResearchZergMeleeWeaponsLevel3);
+        test_element(Ability::ResearchZergMissileWeapons);
+        test_element(Ability::ResearchZergMissileWeaponsLevel1);
+        test_element(Ability::ResearchZergMissileWeaponsLevel2);
+        test_element(Ability::ResearchZergMissileWeaponsLevel3);
 
-                Ability::TrainAdept => 922,
-                Ability::TrainBaneling => 80,
-                Ability::TrainBanshee => 621,
-                Ability::TrainBattleCruiser => 623,
-                Ability::TrainCarrier => 948,
-                Ability::TrainColossus => 978,
-                Ability::TrainCorruptor => 1353,
-                Ability::TrainCyclone => 597,
-                Ability::TrainDarkTemplar => 920,
-                Ability::TrainDisruptor => 994,
-                Ability::TrainDrone => 1342,
-                Ability::TrainGhost => 562,
-                Ability::TrainHellbat => 596,
-                Ability::TrainHellion => 595,
-                Ability::TrainHighTemplar => 919,
-                Ability::TrainHydralisk => 1345,
-                Ability::TrainImmortal => 979,
-                Ability::TrainInfestor => 1352,
-                Ability::TrainLiberator => 626,
-                Ability::TrainMarauder => 563,
-                Ability::TrainMarine => 560,
-                Ability::TrainMedivac => 620,
-                Ability::TrainMothershipCore => 1853,
-                Ability::TrainMutalisk => 1346,
-                Ability::TrainObserver => 977,
-                Ability::TrainOracle => 954,
-                Ability::TrainOverlord => 1344,
-                Ability::TrainPhoenix => 946,
-                Ability::TrainProbe => 1006,
-                Ability::TrainQueen => 1632,
-                Ability::TrainRaven => 622,
-                Ability::TrainReaper => 561,
-                Ability::TrainRoach => 1351,
-                Ability::TrainScv => 524,
-                Ability::TrainSentry => 921,
-                Ability::TrainSiegeTank => 591,
-                Ability::TrainStalker => 917,
-                Ability::TrainSwarmHost => 1356,
-                Ability::TrainTempest => 955,
-                Ability::TrainThor => 594,
-                Ability::TrainUltralisk => 1348,
-                Ability::TrainVikingFighter => 624,
-                Ability::TrainViper => 1354,
-                Ability::TrainVoidRay => 950,
-                Ability::TrainWarpPrism => 976,
-                Ability::TrainWidowMine => 614,
-                Ability::TrainZealot => 916,
-                Ability::TrainZergling => 1343,
+        test_element(Ability::ScanMove);
 
-                Ability::UnloadAll => 3664,
-                Ability::UnloadAllAt => 3669,
-                Ability::UnloadAllAtMedivac => 396,
-                Ability::UnloadAllAtOverlord => 1408,
-                Ability::UnloadAllAtWarpPrism => 913,
-                Ability::UnloadAllBunker => 408,
-                Ability::UnloadAllCommandCenter => 413,
-                Ability::UnloadAllNydusNetwork => 1438,
-                Ability::UnloadAllNydusWorm => 2371,
-                Ability::UnloadUnitBunker => 410,
-                Ability::UnloadUnitCommandCenter => 415,
-                Ability::UnloadUnitMedivac => 397,
-                Ability::UnloadUnitNydusNetwork => 1440,
-                Ability::UnloadUnitOverlord => 1409,
-                Ability::UnloadUnitWarpPrism => 914,
-            }
-        )
+        test_element(Ability::Stop);
+        test_element(Ability::StopBuilding);
+        test_element(Ability::StopAndCheer);
+        test_element(Ability::StopAndDance);
+        test_element(Ability::StopRedirect);
+        test_element(Ability::StopStop);
+
+        test_element(Ability::TrainWarpAdept);
+        test_element(Ability::TrainWarpDarkTemplar);
+        test_element(Ability::TrainWarpHighTemplar);
+        test_element(Ability::TrainWarpSentry);
+        test_element(Ability::TrainWarpStalker);
+        test_element(Ability::TrainWarpZealot);
+
+        test_element(Ability::TrainAdept);
+        test_element(Ability::TrainBaneling);
+        test_element(Ability::TrainBanshee);
+        test_element(Ability::TrainBattleCruiser);
+        test_element(Ability::TrainCarrier);
+        test_element(Ability::TrainColossus);
+        test_element(Ability::TrainCorruptor);
+        test_element(Ability::TrainCyclone);
+        test_element(Ability::TrainDarkTemplar);
+        test_element(Ability::TrainDisruptor);
+        test_element(Ability::TrainDrone);
+        test_element(Ability::TrainGhost);
+        test_element(Ability::TrainHellbat);
+        test_element(Ability::TrainHellion);
+        test_element(Ability::TrainHighTemplar);
+        test_element(Ability::TrainHydralisk);
+        test_element(Ability::TrainImmortal);
+        test_element(Ability::TrainInfestor);
+        test_element(Ability::TrainLiberator);
+        test_element(Ability::TrainMarauder);
+        test_element(Ability::TrainMarine);
+        test_element(Ability::TrainMedivac);
+        test_element(Ability::TrainMothershipCore);
+        test_element(Ability::TrainMutalisk);
+        test_element(Ability::TrainObserver);
+        test_element(Ability::TrainOracle);
+        test_element(Ability::TrainOverlord);
+        test_element(Ability::TrainPhoenix);
+        test_element(Ability::TrainProbe);
+        test_element(Ability::TrainQueen);
+        test_element(Ability::TrainRaven);
+        test_element(Ability::TrainReaper);
+        test_element(Ability::TrainRoach);
+        test_element(Ability::TrainScv);
+        test_element(Ability::TrainSentry);
+        test_element(Ability::TrainSiegeTank);
+        test_element(Ability::TrainStalker);
+        test_element(Ability::TrainSwarmHost);
+        test_element(Ability::TrainTempest);
+        test_element(Ability::TrainThor);
+        test_element(Ability::TrainUltralisk);
+        test_element(Ability::TrainVikingFighter);
+        test_element(Ability::TrainViper);
+        test_element(Ability::TrainVoidRay);
+        test_element(Ability::TrainWarpPrism);
+        test_element(Ability::TrainWidowMine);
+        test_element(Ability::TrainZealot);
+        test_element(Ability::TrainZergling);
+
+        test_element(Ability::UnloadAll);
+        test_element(Ability::UnloadAllAt);
+        test_element(Ability::UnloadAllAtMedivac);
+        test_element(Ability::UnloadAllAtOverlord);
+        test_element(Ability::UnloadAllAtWarpPrism);
+        test_element(Ability::UnloadAllBunker);
+        test_element(Ability::UnloadAllCommandCenter);
+        test_element(Ability::UnloadAllNydusNetwork);
+        test_element(Ability::UnloadAllNydusWorm);
+        test_element(Ability::UnloadUnitBunker);
+        test_element(Ability::UnloadUnitCommandCenter);
+        test_element(Ability::UnloadUnitMedivac);
+        test_element(Ability::UnloadUnitNydusNetwork);
+        test_element(Ability::UnloadUnitOverlord);
+        test_element(Ability::UnloadUnitWarpPrism);
     }
 }
