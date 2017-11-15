@@ -12,6 +12,7 @@ use super::super::{ Result, FromProto, IntoSc2 };
 use super::{ Tag, Ability, Point2, Point2I, Rect2I };
 
 /// action target
+#[derive(Debug, Copy, Clone)]
 pub enum ActionTarget {
     /// target a unit with this action
     UnitTag(Tag),
@@ -20,6 +21,7 @@ pub enum ActionTarget {
 }
 
 /// an action (command or ability) applied to a unit or set of units
+#[derive(Debug, Clone)]
 pub struct Action {
     /// the ability to invoke
     pub ability:            Ability,
@@ -68,6 +70,7 @@ impl FromProto<raw::ActionRawUnitCommand> for Action {
 }
 
 /// target of a feature layer command
+#[derive(Debug, Copy, Clone)]
 pub enum SpatialUnitCommandTarget {
     /// screen coordinate target
     Screen(Point2I),
@@ -76,6 +79,7 @@ pub enum SpatialUnitCommandTarget {
 }
 
 /// type of point selection
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum PointSelectType {
     /// changes selection to unit (equal to normal click)
     Select,
@@ -101,6 +105,7 @@ impl FromProto<ProtoPointSelectionType> for PointSelectType {
 }
 
 /// feature layer action
+#[derive(Debug, Clone)]
 pub enum SpatialAction {
     /// issue a feature layer unit command
     UnitCommand {

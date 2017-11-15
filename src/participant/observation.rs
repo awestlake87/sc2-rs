@@ -273,7 +273,7 @@ impl Observation for Participant {
         self.observation = rsp.take_observation();
         let observation = self.observation.get_observation();
 
-        self.score = Some(Score::from_proto(observation.get_score()));
+        self.score = Some(observation.get_score().clone().into_sc2()?);
 
         let next_game_loop = observation.get_game_loop();
         let is_new_frame = next_game_loop != self.get_game_loop();
