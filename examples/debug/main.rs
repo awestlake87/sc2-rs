@@ -1,5 +1,6 @@
 
 extern crate docopt;
+#[macro_use] extern crate error_chain;
 extern crate glutin;
 
 extern crate sc2;
@@ -114,56 +115,52 @@ impl Agent for DebugBot {
     }
 }
 
-fn main() {
-    let mut events = glutin::EventsLoop::new();
+quick_main!(
+    || -> Result<()> {
+        let mut events = glutin::EventsLoop::new();
 
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit())
-    ;
+        let args: Args = Docopt::new(USAGE)
+            .and_then(|d| d.deserialize())
+            .unwrap_or_else(|e| e.exit())
+        ;
 
-    if args.flag_version {
-        println!("debug version {}", VERSION);
-        return;
+        if args.flag_version {
+            println!("debug version {}", VERSION);
+            return Ok(())
+        }
+
+        let coordinator_settings = get_coordinator_settings(&args)?;
+        let game_settings = get_game_settings(&args)?;
+
+        let mut coordinator = Coordinator::from_settings(
+            coordinator_settings
+        )?;
+
+        let p1 = PlayerSetup::Player {
+            race: Race::Zerg,
+        };
+        let p2 = PlayerSetup::Computer {
+            race: Race::Terran,
+            difficulty: Difficulty::VeryEasy
+        };
+
+        coordinator.launch_starcraft(
+            vec![
+                (p1, Some(User::Agent(Box::from(DebugBot::new())))),
+                (p2, None)
+            ]
+        )?;
+
+        println!("launched!");
+
+        coordinator.start_game(game_settings)?;
+
+        println!("game started!");
+
+        while !poll_escape(&mut events) {
+             coordinator.update()?;
+        }
+
+        Ok(())
     }
-
-    let coordinator_settings = get_coordinator_settings(&args);
-    let game_settings = get_game_settings(&args).unwrap();
-
-    let mut coordinator = Coordinator::from_settings(
-        coordinator_settings
-    ).unwrap();
-
-    let p1 = PlayerSetup::Player {
-        race: Race::Zerg,
-    };
-    let p2 = PlayerSetup::Computer {
-        race: Race::Terran,
-        difficulty: Difficulty::VeryEasy
-    };
-
-    match coordinator.launch_starcraft(
-        vec![
-            (p1, Some(User::Agent(Box::from(DebugBot::new())))),
-            (p2, None)
-        ]
-    ) {
-        Ok(_) => println!("launched!"),
-        Err(e) => println!("unable to launch game: {}", e)
-    }
-
-    match coordinator.start_game(game_settings) {
-        Ok(_) => println!("game started!"),
-        Err(e) => eprintln!("unable to start game: {}", e)
-    }
-
-    while !poll_escape(&mut events) {
-         match coordinator.update() {
-             Ok(_) => (),
-             Err(e) => {
-                 eprintln!("update failed: {}", e);
-                 break
-             }
-         };
-    }
-}
+);

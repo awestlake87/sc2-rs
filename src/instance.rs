@@ -7,7 +7,7 @@ use std::process;
 use url::Url;
 
 use super::{ Result, ErrorKind };
-use data::{ Rect };
+use data::{ Rect, PortSet };
 use client::{ Client };
 
 #[derive(Copy, Clone)]
@@ -22,16 +22,18 @@ pub struct InstanceSettings {
     pub exe:                Option<PathBuf>,
     pub pwd:                Option<PathBuf>,
     pub address:            (String, u16),
-    pub window_rect:        Rect<u32>
+    pub window_rect:        Rect<u32>,
+    pub ports:              PortSet,
 }
 
 pub struct Instance {
-    kind:           InstanceKind,
-    exe:            PathBuf,
-    pwd:            Option<PathBuf>,
-    address:        (String, u16),
-    window_rect:    Rect<u32>,
-    child:          Option<process::Child>,
+    kind:                   InstanceKind,
+    exe:                    PathBuf,
+    pwd:                    Option<PathBuf>,
+    address:                (String, u16),
+    window_rect:            Rect<u32>,
+    child:                  Option<process::Child>,
+    pub ports:                  PortSet,
 }
 
 impl Instance {
@@ -50,12 +52,13 @@ impl Instance {
 
         Ok(
             Self {
-                kind:           settings.kind,
-                exe:            exe,
-                pwd:            settings.pwd,
-                address:        settings.address,
-                window_rect:    settings.window_rect,
-                child:          None,
+                kind: settings.kind,
+                exe: exe,
+                pwd: settings.pwd,
+                address: settings.address,
+                window_rect: settings.window_rect,
+                child: None,
+                ports: settings.ports
             }
         )
     }
@@ -76,12 +79,9 @@ impl Instance {
             }
         };
 
-        match pwd {
-            Some(pwd) => {
-                cmd.current_dir(pwd);
-            },
-            None => ()
-        };
+        if let Some(pwd) = pwd {
+            cmd.current_dir(pwd);
+        }
 
         cmd.arg("-listen").arg("127.0.0.1")
             .arg("-port").arg(port.to_string())
@@ -93,7 +93,7 @@ impl Instance {
             .arg("-windowHeight").arg(window.h.to_string())
         ;
 
-        self.child = Some(cmd.spawn().unwrap());
+        self.child = Some(cmd.spawn()?);
 
         Ok(())
     }
@@ -120,12 +120,20 @@ impl Instance {
     }
 
     pub fn kill(&mut self) -> Result<()> {
-        match self.child {
-            Some(ref mut child) => match child.kill() {
-                Ok(_) => Ok(()),
-                Err(_) => Err("unable to kill process".into())
-            },
-            None => Ok(())
+        if let Some(ref mut child) = self.child {
+            child.kill()?;
+        }
+
+        self.child = None;
+
+        Ok(())
+    }
+}
+
+impl Drop for Instance {
+    fn drop(&mut self) {
+        if let Err(e) = self.kill() {
+            eprintln!("unable to drop instance {:?}", e);
         }
     }
 }

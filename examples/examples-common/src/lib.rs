@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use rand::random;
 
-use sc2::{ CoordinatorSettings, Result };
+use sc2::{ CoordinatorSettings, Result, Launcher, LauncherSettings };
 use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
 
 pub use marine_micro_bot::{ MarineMicroBot };
@@ -28,7 +28,7 @@ StarCraft II Rust API Example.
 
 Usage:
   example (-h | --help)
-  example (-d <path> | --dir=<path>) [options]
+  example [options]
   example --version
 
 Options:
@@ -45,7 +45,7 @@ Options:
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
-    pub flag_dir:                   PathBuf,
+    pub flag_dir:                   Option<PathBuf>,
     pub flag_port:                  Option<u16>,
     pub flag_map:                   Option<PathBuf>,
     pub flag_replay_dir:            Option<PathBuf>,
@@ -55,27 +55,35 @@ pub struct Args {
     pub flag_step_size:             Option<usize>,
 }
 
-pub fn get_coordinator_settings(args: &Args) -> CoordinatorSettings {
-    let default_settings = CoordinatorSettings::default();
+pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+    let default_settings = LauncherSettings::default();
+    let launcher = Launcher::from(
+        LauncherSettings {
+            use_wine: args.flag_wine,
+            dir: args.flag_dir.clone(),
+            base_port: {
+                if let Some(port) = args.flag_port {
+                    port
+                }
+                else {
+                    default_settings.base_port
+                }
+            }
+        }
+    )?;
 
-    CoordinatorSettings {
-        use_wine: args.flag_wine,
-        dir: Some(args.flag_dir.clone()),
-        port: match args.flag_port {
-            Some(port) => port,
-            None => default_settings.port
-        },
+    Ok(
+        CoordinatorSettings {
+            launcher: launcher,
+            replay_files: vec![ ],
 
-        replay_files: vec![ ],
-
-        is_realtime: args.flag_realtime,
-        step_size: match args.flag_step_size {
-            Some(step_size) => step_size,
-            None => default_settings.step_size
-        },
-
-        ..default_settings
-    }
+            is_realtime: args.flag_realtime,
+            step_size: match args.flag_step_size {
+                Some(step_size) => step_size,
+                None => 1
+            },
+        }
+    )
 }
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {

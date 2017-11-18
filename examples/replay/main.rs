@@ -1,5 +1,6 @@
 
 extern crate docopt;
+#[macro_use] extern crate error_chain;
 extern crate glob;
 extern crate glutin;
 
@@ -14,7 +15,15 @@ use docopt::Docopt;
 use glob::glob;
 
 use sc2::{
-    Agent, Coordinator, Participant, User, Observation, ReplayObserver, Result
+    Agent,
+    Coordinator,
+    Participant,
+    User,
+    Observation,
+    ReplayObserver,
+    Result,
+    ResultExt,
+    ErrorKind
 };
 use sc2::data::{ PlayerSetup, Unit, UnitType };
 
@@ -70,78 +79,77 @@ impl Agent for Replay {
 }
 
 impl ReplayObserver for Replay {
-    
+
 }
 
-fn main() {
-    let mut events = glutin::EventsLoop::new();
+quick_main!(
+    || -> Result<()> {
+        let mut events = glutin::EventsLoop::new();
 
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit())
-    ;
+        let args: Args = Docopt::new(USAGE)
+            .and_then(|d| d.deserialize())
+            .unwrap_or_else(|e| e.exit())
+        ;
 
-    if args.flag_version {
-        println!("replay version {}", VERSION);
-        return;
-    }
-
-    let mut coordinator_settings = get_coordinator_settings(&args);
-
-    let replay_glob = glob(
-        &format!(
-            "{}{}*.SC2Replay",
-            args.flag_replay_dir.unwrap().to_string_lossy(),
-            if args.flag_wine {
-                '\\'
-            }
-            else {
-                MAIN_SEPARATOR
-            }
-        )
-    ).expect("failed to read glob pattern");
-
-    let mut i = 0;
-    for entry in replay_glob {
-        coordinator_settings.replay_files.push(entry.unwrap());
-
-        i += 1;
-
-        if i >= 100 {
-            break
+        if args.flag_version {
+            println!("replay version {}", VERSION);
+            return Ok(())
         }
-    }
 
-    let mut coordinator = Coordinator::from_settings(
-        coordinator_settings
-    ).unwrap();
+        let mut coordinator_settings = get_coordinator_settings(&args)?;
 
-    let replay = PlayerSetup::Observer;
+        if args.flag_replay_dir.is_none() {
+            bail!("replay directory not specified")
+        }
 
-    match coordinator.launch_starcraft(
-        vec![ (replay, Some(User::Observer(Box::from(Replay::new())))) ]
-    ) {
-        Ok(_) => println!("launched!"),
-        Err(e) => println!("unable to launch game: {}", e)
-    };
+        let replay_glob = glob(
+            &format!(
+                "{}{}*.SC2Replay",
+                args.flag_replay_dir.unwrap().to_string_lossy(),
+                if args.flag_wine {
+                    '\\'
+                }
+                else {
+                    MAIN_SEPARATOR
+                }
+            )
+        ).chain_err(|| ErrorKind::Msg("glob error".into()))?;
 
-    let mut done = false;
+        let mut i = 0;
+        for entry in replay_glob {
+            coordinator_settings.replay_files.push(entry.unwrap());
 
-    while !done {
-         match coordinator.update() {
-             Ok(true) => (),
-             Ok(false) => {
-                 println!("stop updating");
-                 break
-             },
-             Err(e) => {
-                 eprintln!("update failed: {}", e);
+            i += 1;
+
+            if i >= 100 {
+                break
+            }
+        }
+
+        let mut coordinator = Coordinator::from_settings(
+            coordinator_settings
+        )?;
+
+        let replay = PlayerSetup::Observer;
+
+        coordinator.launch_starcraft(
+            vec![ (replay, Some(User::Observer(Box::from(Replay::new())))) ]
+        )?;
+
+        println!("launched!");
+
+        let mut done = false;
+
+        while !done {
+             if !coordinator.update()? {
                  break
              }
-         };
 
-         if poll_escape(&mut events) {
-             done = true;
-         }
+             if poll_escape(&mut events) {
+                 done = true;
+             }
+        }
+
+        Ok(())
     }
-}
+);

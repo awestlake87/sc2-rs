@@ -25,6 +25,7 @@ mod agent;
 mod client;
 mod coordinator;
 mod instance;
+mod launcher;
 mod participant;
 mod replay_observer;
 
@@ -36,6 +37,7 @@ use std::rc::Rc;
 
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
+pub use launcher::{ Launcher, LauncherSettings };
 pub use participant::{
     Participant,
     Actions,
@@ -53,6 +55,9 @@ pub use replay_observer::{ ReplayObserver };
 use data::{ Unit, Upgrade };
 
 error_chain! {
+    foreign_links {
+        Io(std::io::Error) #[doc="link io errors"];
+    }
     errors {
         /// exe was not supplied to the coordinator
         ExeNotSpecified {
