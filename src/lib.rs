@@ -41,14 +41,14 @@ pub use launcher::{ Launcher, LauncherSettings };
 pub use participant::{
     Participant,
     Actions,
-    Control,
     Observation,
     Query,
     Replay,
     User,
     Debugging,
     DebugTextTarget,
-    DebugCommand
+    DebugCommand,
+    GameState
 };
 pub use replay_observer::{ ReplayObserver };
 

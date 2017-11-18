@@ -71,15 +71,6 @@ pub struct GameSettings {
     pub map:            Map,
 }
 
-/// current game state
-#[derive(Debug, Clone)]
-pub struct GameState {
-    /// current step
-    pub current_game_loop: u32,
-    /// previous step
-    pub previous_game_loop: u32,
-}
-
 /// terrain info
 #[derive(Debug, Clone)]
 pub struct TerrainInfo {

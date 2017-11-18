@@ -10,7 +10,6 @@ use participant::{
     AppState,
     User,
     Actions,
-    Control,
     Observation,
     Replay,
     Debugging

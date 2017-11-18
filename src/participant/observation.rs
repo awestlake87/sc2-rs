@@ -1,5 +1,5 @@
 
-use std::collections::HashMap;
+use std::collections::{ HashSet, HashMap };
 use std::mem;
 use std::rc::Rc;
 
@@ -9,7 +9,6 @@ use super::super::{ Result, FromProto, IntoSc2 };
 use data::{
     PowerSource,
     PlayerData,
-    GameState,
     TerrainInfo,
     Unit,
     Upgrade,
@@ -28,90 +27,123 @@ use data::{
     BuffData,
     PlayerResult,
     Visibility,
+    Tag,
+    Alliance,
+    DisplayType
 };
 use participant::{ Participant, AppState };
 
-/// UNSTABLE observation trait
-pub trait Observation {
-    /// get the player id associated with the participant
-    fn get_player_id(&self) -> Option<u32>;
-    /// get the current game loop (or game step)
-    fn get_game_loop(&self) -> u32;
-    /// get a list of all known units at the moment
-    fn get_units(&self) -> Vec<Rc<Unit>>;
+pub enum GameEvent {
+    UnitDestroyed(Rc<Unit>),
+    UnitCreated(Rc<Unit>),
+    UnitIdle(Rc<Unit>),
+    UnitDetected(Rc<Unit>),
 
-    /// get a list of all known units that match the filter condition
-    fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
-        where F: Fn(&Unit) -> bool
-    ;
+    UpgradeCompleted(Upgrade),
+    BuildingCompleted(Rc<Unit>),
 
-    /// get the actions performed as abilities applied to units
-    ///
-    /// (for use with the raw option)
-    fn get_actions(&self) -> &Vec<Action>;
-    /// get the actions performed as abilities applied to the current selection
-    ///
-    /// (for use with the feature layer or rendered options)
-    fn get_feature_layer_actions(&self) -> &Vec<SpatialAction>;
-    /// get all power sources associated with the current player
-    fn get_power_sources(&self) -> &Vec<PowerSource>;
-    /// get all active effects in vision of the current player
-    fn get_effects(&self) -> &Vec<Effect>;
-    /// get all upgrades
-    fn get_upgrades(&self) -> &Vec<Upgrade>;
-    /// get detailed current set of scores
-    fn get_score(&self) -> &Score;
+    NydusWormsDetected(u32),
+    NukesDetected(u32),
+}
+
+pub struct GameData {
+    ability_data:               HashMap<Ability, AbilityData>,
+    unit_type_data:             HashMap<UnitType, UnitTypeData>,
+    upgrade_data:               HashMap<Upgrade, UpgradeData>,
+    buff_data:                  HashMap<Buff, BuffData>,
+}
+
+impl GameData {
     /// get ability data
-    fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
+    pub fn get_ability_data(&self) -> &HashMap<Ability, AbilityData> {
+        &self.ability_data
+    }
     /// get unit type data
-    fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData>;
+    pub fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData> {
+        &self.unit_type_data
+    }
     /// get upgrade data
-    fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData>;
+    pub fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData> {
+        &self.upgrade_data
+    }
     /// get buff data
-    fn get_buff_data(&self) -> &HashMap<Buff, BuffData>;
-    /// get terrain info
-    fn get_terrain_info(&mut self) -> Result<&TerrainInfo>;
+    pub fn get_buff_data(&self) -> &HashMap<Buff, BuffData> {
+        &self.buff_data
+    }
+}
 
-    /// get current mineral count
-    fn get_minerals(&self) -> u32;
-    /// get current vespene count
-    fn get_vespene(&self) -> u32;
-    /// get the total supply cap given the players max supply
-    fn get_food_cap(&self) -> u32;
-    /// the total supply used by the player
-    fn get_food_used(&self) -> u32;
-    /// the total supply consumed by army units alone
-    fn get_food_army(&self) -> u32;
-    /// the total supply consumed by workers alone
-    fn get_food_workers(&self) -> u32;
-    /// the number of workers that currently have no orders
-    fn get_idle_worker_count(&self) -> u32;
-    /// the number of army units
-    fn get_army_count(&self) -> u32;
-    /// the number of warp gates owned by the player
-    fn get_warp_gate_count(&self) -> u32;
-    /// position of the center of the camera
-    fn get_camera_pos(&self) -> Point2;
-    /// gets the initial start location of the player
-    fn get_start_location(&self) -> Point3;
-    /// gets the results of the game
-    fn get_results(&self) -> Option<&Vec<PlayerResult>>;
+pub struct GameState {
+    pub player_id:                  u32,
+    pub previous_step:              u32,
+    pub current_step:               u32,
+    pub camera_pos:                 Point2,
+
+    pub units:                      HashMap<Tag, Rc<Unit>>,
+
+    pub power_sources:              Vec<PowerSource>,
+    pub effects:                    Vec<Effect>,
+    pub upgrades:                   HashSet<Upgrade>,
+
+    pub minerals:                   u32,
+    pub vespene:                    u32,
+    pub food_cap:                   u32,
+    pub food_used:                  u32,
+    pub food_army:                  u32,
+    pub food_workers:               u32,
+    pub idle_worker_count:          u32,
+    pub army_count:                 u32,
+    pub warp_gate_count:            u32,
+    pub larva_count:                u32,
+
+    pub score:                      Score
+}
+
+impl GameState {
+    pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
+        where F: Fn(&Unit) -> bool
+    {
+        let mut units = vec![ ];
+
+        for unit in self.units.values() {
+            if filter(&unit) {
+                units.push(Rc::clone(&unit));
+            }
+        }
+
+        units
+    }
     /// check if the given point contains creep
-    fn has_creep(&self, point: Point2) -> bool;
+    pub fn has_creep(&self, point: Point2) -> bool {
+        unimplemented!("has creep")
+    }
     /// get the visibility of the given point for the current player
-    fn get_visibility(&self, point: Point2) -> Visibility;
+    pub fn get_visibility(&self, point: Point2) -> Visibility {
+        unimplemented!("get visibility")
+    }
     /// whether the given point on the terrain is pathable
     ///
     /// this does not include pathing blockers like structures, for more
     /// accurate pathing results, use query interface
-    fn is_pathable(&self, point: Point2) -> bool;
+    pub fn is_pathable(&self, point: Point2) -> bool {
+        unimplemented!("is pathable")
+    }
     /// whether the given point on the terrain is buildable
     ///
     /// this does not include blockers like other structures. for more
     /// accurate building placement results, use query interface
-    fn is_placable(&self, point: Point2) -> bool;
+    pub fn is_placable(&self, point: Point2) -> bool {
+        unimplemented!("is placable")
+    }
     /// returns the terrain height of the given point
-    fn get_terrain_height(&self, point: Point2) -> f32;
+    pub fn get_terrain_height(&self, point: Point2) -> f32 {
+        unimplemented!("get terrain height")
+    }
+}
+
+/// UNSTABLE observation trait
+pub trait Observation {
+
+    fn get_terrain_info(&mut self) -> Result<&TerrainInfo>;
 
     /// request a data update
     fn update_data(&mut self) -> Result<()>;
@@ -120,62 +152,6 @@ pub trait Observation {
 }
 
 impl Observation for Participant {
-    fn get_player_id(&self) -> Option<u32> {
-        self.player_id
-    }
-    fn get_game_loop(&self) -> u32 {
-        self.game_state.current_game_loop
-    }
-    fn get_units(&self) -> Vec<Rc<Unit>> {
-        unimplemented!("get units");
-    }
-    fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
-        where F: Fn(&Unit) -> bool
-    {
-        let mut units = vec![ ];
-
-        for unit in self.units.values() {
-            if filter(unit.as_ref()) {
-                units.push(unit.clone());
-            }
-        }
-
-        units
-    }
-    fn get_actions(&self) -> &Vec<Action> {
-        &self.actions
-    }
-    fn get_feature_layer_actions(&self) -> &Vec<SpatialAction> {
-        &self.feature_layer_actions
-    }
-    fn get_power_sources(&self) -> &Vec<PowerSource> {
-        &self.power_sources
-    }
-    fn get_effects(&self) -> &Vec<Effect> {
-        unimplemented!("get effects");
-    }
-    fn get_upgrades(&self) -> &Vec<Upgrade> {
-        &self.upgrades
-    }
-    fn get_score(&self) -> &Score {
-        unimplemented!("get score");
-    }
-    fn get_ability_data(&self) -> &HashMap<Ability, AbilityData> {
-        unimplemented!("get ability data");
-    }
-    fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData> {
-        unimplemented!("get upgrade data");
-    }
-    fn get_buff_data(&self) -> &HashMap<Buff, BuffData> {
-        unimplemented!("get buff data");
-    }
-    //fn get_ability_data(&self) -> &HashMap<Ability, AbilityData>;
-    fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData> {
-        &self.unit_type_data
-    }
-    //fn get_upgrade_data(&self)
-    //fn get_buff_data(&self)
-
     fn get_terrain_info(&mut self) -> Result<&TerrainInfo> {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
@@ -189,57 +165,6 @@ impl Observation for Participant {
 
         Ok(&self.terrain_info)
     }
-    fn get_minerals(&self) -> u32 {
-        self.player_data.minerals
-    }
-    fn get_vespene(&self) -> u32 {
-        self.player_data.vespene
-    }
-    fn get_food_cap(&self) -> u32 {
-        self.player_data.food_cap
-    }
-    fn get_food_used(&self) -> u32 {
-        self.player_data.food_used
-    }
-    fn get_food_army(&self) -> u32 {
-        self.player_data.food_army
-    }
-    fn get_food_workers(&self) -> u32 {
-        self.player_data.food_workers
-    }
-    fn get_idle_worker_count(&self) -> u32 {
-        self.player_data.idle_worker_count
-    }
-    fn get_army_count(&self) -> u32 {
-        self.player_data.army_count
-    }
-    fn get_warp_gate_count(&self) -> u32 {
-        self.player_data.warp_gate_count
-    }
-    fn get_camera_pos(&self) -> Point2 {
-        unimplemented!("get camera pos");
-    }
-    fn get_start_location(&self) -> Point3 {
-        unimplemented!("get start location");
-    }
-    fn get_results(&self) -> Option<&Vec<PlayerResult>> {
-        unimplemented!("get results");
-    }
-    fn has_creep(&self, _: Point2) -> bool {
-        unimplemented!("has creep");
-    }
-    fn get_visibility(&self, _: Point2) -> Visibility {
-        unimplemented!("get visibility");
-    }
-    fn is_pathable(&self, _: Point2) -> bool {
-        unimplemented!("is pathable");
-    }
-    fn is_placable(&self, _: Point2) -> bool {
-        unimplemented!("is placable");
-    }
-    fn get_terrain_height(&self, _: Point2) -> f32 {
-        unimplemented!("get terrain height");
-    }
 
     fn update_data(&mut self) -> Result<()> {
         let mut req = sc2api::Request::new();
@@ -251,9 +176,12 @@ impl Observation for Participant {
         self.unit_type_data.clear();
 
         for data in rsp.mut_data().take_units().into_iter() {
-            let u = UnitTypeData::from_proto(data)?;
-
-            self.unit_type_data.insert(u.unit_type, u);
+            match UnitTypeData::from_proto(data) {
+                Ok(u) => {
+                    self.unit_type_data.insert(u.unit_type, u);
+                },
+                Err(e) => ()
+            }
         }
 
         Ok(())
@@ -270,25 +198,93 @@ impl Observation for Participant {
         self.send(req)?;
         let mut rsp = self.recv()?;
 
-        self.observation = rsp.take_observation();
-        let observation = self.observation.get_observation();
+        let mut observation = rsp.take_observation().take_observation();
 
-        self.score = Some(observation.get_score().clone().into_sc2()?);
+        let mut state = mem::replace(&mut self.game_state, None);
 
-        let next_game_loop = observation.get_game_loop();
-        let is_new_frame = next_game_loop != self.get_game_loop();
+        let previous_step = match state {
+            Some(ref mut state) => {
+                self.previous_units = mem::replace(
+                    &mut state.units, HashMap::new()
+                );
+                self.previous_upgrades = mem::replace(
+                    &mut state.upgrades, HashSet::new()
+                );
 
-        self.game_state = GameState {
-            previous_game_loop: self.get_game_loop(),
-            current_game_loop: next_game_loop
+                state.current_step
+            },
+            None => 0
+        };
+        let next_step = observation.get_game_loop();
+        let is_new_frame = next_step != previous_step;
+
+        let player_common = observation.take_player_common();
+        let mut raw = observation.take_raw_data();
+        let mut player_raw = raw.take_player();
+
+        let new_state = GameState {
+            player_id: player_common.get_player_id(),
+            previous_step: previous_step,
+            current_step: next_step,
+            camera_pos: {
+                let camera = player_raw.get_camera();
+
+                Point2::new(camera.get_x(), camera.get_y())
+            },
+
+            units: {
+                let mut units = HashMap::new();
+
+                for unit in raw.take_units().into_iter() {
+                    match Unit::from_proto(unit) {
+                        Ok(mut unit) => {
+                            let tag = unit.tag;
+
+                            unit.last_seen_game_loop = next_step;
+
+                            units.insert(tag, Rc::from(unit));
+                        },
+                        _ => ()
+                    }
+                }
+
+                units
+            },
+            power_sources: {
+                let mut power_sources = vec![ ];
+
+                for p in player_raw.take_power_sources().into_iter() {
+                    power_sources.push(p.into());
+                }
+
+                power_sources
+            },
+            upgrades: {
+                let mut upgrades = HashSet::new();
+
+                for u in player_raw.take_upgrade_ids().into_iter() {
+                    upgrades.insert(Upgrade::from_proto(u)?);
+                }
+
+                upgrades
+            },
+            effects: vec![ ],
+
+            minerals: player_common.get_minerals(),
+            vespene: player_common.get_vespene(),
+            food_used: player_common.get_food_used(),
+            food_cap: player_common.get_food_cap(),
+            food_army: player_common.get_food_army(),
+            food_workers: player_common.get_food_workers(),
+            idle_worker_count: player_common.get_idle_worker_count(),
+            army_count: player_common.get_army_count(),
+            warp_gate_count: player_common.get_warp_gate_count(),
+            larva_count: player_common.get_larva_count(),
+
+            score: observation.take_score().into_sc2()?,
         };
 
-        let player_common = observation.get_player_common();
-        if player_common.has_player_id() {
-            self.player_id = Some(player_common.get_player_id());
-        }
-
-        self.player_data = PlayerData::from(player_common.clone());
+        self.game_state = Some(new_state);
 
         if is_new_frame {
             self.actions.clear();
@@ -371,44 +367,88 @@ impl Observation for Participant {
             }
         }
 
-        let raw = observation.get_raw_data();
-        self.previous_units = mem::replace(
-            &mut self.units, HashMap::new()
+        if raw.has_event() {
+            let event = raw.get_event();
+
+            for tag in event.get_dead_units() {
+                match self.previous_units.get_mut(tag) {
+                    Some(ref mut unit) => {
+                        Rc::get_mut(unit).unwrap().mark_dead();
+                        self.events.push(
+                            GameEvent::UnitDestroyed(Rc::clone(unit))
+                        );
+                    },
+                    None => ()
+                }
+            }
+        }
+
+        for ref unit in self.units.values() {
+            match self.previous_units.get(&unit.tag) {
+                Some(ref prev_unit) => {
+                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
+                        self.events.push(
+                            GameEvent::UnitIdle(Rc::clone(unit))
+                        );
+                    }
+                    else if unit.build_progress >= 1.0
+                        && prev_unit.build_progress < 1.0
+                    {
+                        self.events.push(
+                            GameEvent::BuildingCompleted(Rc::clone(unit))
+                        );
+                    }
+                },
+                None => {
+                    if unit.alliance == Alliance::Enemy &&
+                        unit.display_type == DisplayType::Visible
+                    {
+                        self.events.push(
+                            GameEvent::UnitDetected(Rc::clone(unit))
+                        );
+                    }
+                    else {
+                        self.events.push(
+                            GameEvent::UnitCreated(Rc::clone(unit))
+                        );
+                    }
+
+                    self.events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                }
+            }
+        }
+
+        let prev_upgrades = mem::replace(
+            &mut self.previous_upgrades, HashSet::new()
         );
 
-        for unit in raw.get_units().iter() {
-            let mut unit = Unit::from_proto(unit.clone())?;
-            let tag = unit.tag;
-
-            unit.last_seen_game_loop = self.get_game_loop();
-
-            self.units.insert(tag, Rc::from(unit));
+        for upgrade in &self.upgrades {
+            match prev_upgrades.get(upgrade) {
+                Some(_) => (),
+                None => {
+                    self.events.push(GameEvent::UpgradeCompleted(*upgrade));
+                }
+            }
         }
 
-        if !raw.has_player() {
-            bail!("no player data")
+        self.previous_upgrades = prev_upgrades;
+
+        let mut nukes = 0;
+        let mut nydus_worms = 0;
+
+        for alert in observation.get_alerts() {
+            match *alert {
+                sc2api::Alert::NuclearLaunchDetected => nukes += 1,
+                sc2api::Alert::NydusWormDetected => nydus_worms += 1
+            }
         }
 
-        let player_raw = raw.get_player();
-        if !player_raw.has_camera() {
-            bail!("no camera data")
+        if nukes > 0 {
+            self.events.push(GameEvent::NukesDetected(nukes));
         }
 
-        self.camera_pos = {
-            let camera = player_raw.get_camera();
-            Some(Point2::new(camera.get_x(), camera.get_y()))
-        };
-
-        self.power_sources.clear();
-        for power_source in player_raw.get_power_sources() {
-            self.power_sources.push(
-                PowerSource::from(power_source.clone())
-            );
-        }
-
-        self.previous_upgrades = mem::replace(&mut self.upgrades, vec![ ]);
-        for upgrade_id in player_raw.get_upgrade_ids() {
-            self.upgrades.push(Upgrade::from_proto(*upgrade_id)?);
+        if nydus_worms > 0 {
+            self.events.push(GameEvent::NydusWormsDetected(nydus_worms));
         }
 
         Ok(())

@@ -21,8 +21,8 @@ impl TerranBot {
         }
     }
 
-    fn find_enemy_structure(&self, p: &mut Participant) -> Option<Tag> {
-        let units = p.filter_units(
+    fn find_enemy_structure(&self, p: &mut Participant) -> Result<Option<Tag>> {
+        let units = p.get_game_state()?.filter_units(
             |u| u.alliance == Alliance::Enemy && (
                 u.unit_type == UnitType::TerranCommandCenter ||
                 u.unit_type == UnitType::TerranSupplyDepot ||
@@ -31,10 +31,10 @@ impl TerranBot {
         );
 
         if !units.is_empty() {
-            Some(units[0].tag)
+            Ok(Some(units[0].tag))
         }
         else {
-            None
+            Ok(None)
         }
     }
 
@@ -53,15 +53,15 @@ impl TerranBot {
         }
     }
 
-    fn scout_with_marines(&mut self, p: &mut Participant) {
-        let units = p.filter_units(
+    fn scout_with_marines(&mut self, p: &mut Participant) -> Result<()> {
+        let units = p.get_game_state()?.filter_units(
             |u| u.alliance == Alliance::Domestic &&
                 u.unit_type == UnitType::TerranMarine &&
                 u.orders.is_empty()
         );
 
         for ref u in units {
-            match self.find_enemy_structure(p) {
+            match self.find_enemy_structure(p)? {
                 Some(enemy_tag) => {
                     p.command_units(
                         &vec![ Rc::clone(u) ],
@@ -69,7 +69,7 @@ impl TerranBot {
                         Some(ActionTarget::UnitTag(enemy_tag))
                     );
 
-                    return
+                    return Ok(())
                 },
                 None => ()
             }
@@ -82,25 +82,27 @@ impl TerranBot {
                         Some(ActionTarget::Location(target_pos))
                     );
 
-                    return
+                    return Ok(())
                 },
                 None => ()
             }
         }
+
+        Ok(())
     }
 
-    fn try_build_supply_depot(&mut self, p: &mut Participant) -> bool {
+    fn try_build_supply_depot(&mut self, p: &mut Participant) -> Result<bool> {
         // if we are not supply capped, don't build a supply depot
-        if p.get_food_used() + 2 <= p.get_food_cap() {
-            return false
+        if p.get_game_state()?.food_used + 2 <= p.get_game_state()?.food_cap {
+            return Ok(false)
         }
 
         // find a random SVC to build a depot
         self.try_build_structure(p, Ability::BuildSupplyDepot)
     }
 
-    fn try_build_scv(&mut self, p: &mut Participant) -> bool {
-        let scv_count = p.filter_units(
+    fn try_build_scv(&mut self, p: &mut Participant) -> Result<bool> {
+        let scv_count = p.get_game_state()?.filter_units(
             |u| u.unit_type == UnitType::TerranScv
         ).len();
 
@@ -110,31 +112,31 @@ impl TerranBot {
             )
         }
         else {
-            false
+            Ok(false)
         }
     }
 
-    fn try_build_barracks(&mut self, p: &mut Participant) -> bool {
-        let scv_count = p.filter_units(
+    fn try_build_barracks(&mut self, p: &mut Participant) -> Result<bool> {
+        let scv_count = p.get_game_state()?.filter_units(
             |u| u.unit_type == UnitType::TerranScv
         ).len();
         // wait until we have our quota of SCVs
         if scv_count < TARGET_SCV_COUNT {
-            return false
+            return Ok(false)
         }
 
-        let barracks_count = p.filter_units(
+        let barracks_count = p.get_game_state()?.filter_units(
             |u| u.unit_type == UnitType::TerranBarracks
         ).len();
 
         if barracks_count > 0 {
-            return false
+            return Ok(false)
         }
 
         self.try_build_structure(p, Ability::BuildBarracks)
     }
 
-    fn try_build_marine(&mut self, p: &mut Participant) -> bool {
+    fn try_build_marine(&mut self, p: &mut Participant) -> Result<bool> {
         self.try_build_unit(
             p, Ability::TrainMarine, UnitType::TerranBarracks
         )
@@ -143,31 +145,31 @@ impl TerranBot {
     fn try_build_unit(
         &mut self, p: &mut Participant, ability: Ability, unit_type: UnitType
     )
-        -> bool
+        -> Result<bool>
     {
-        let units = p.filter_units(
+        let units = p.get_game_state()?.filter_units(
             |u| u.unit_type == unit_type && u.orders.is_empty()
         );
 
         if units.is_empty() {
-            false
+            Ok(false)
         }
         else {
             p.command_units(&vec![ Rc::clone(&units[0]) ], ability, None);
-            true
+            Ok(true)
         }
     }
 
     fn try_build_structure(&mut self, p: &mut Participant, ability: Ability)
-        -> bool
+        -> Result<bool>
     {
-        let units = p.filter_units(|u| u.alliance == Alliance::Domestic);
+        let units = p.get_game_state()?.filter_units(|u| u.alliance == Alliance::Domestic);
 
         // if a unit is already building this structure, do nothing
         for u in &units {
             for o in &u.orders {
                 if o.ability == ability {
-                    return false
+                    return Ok(false)
                 }
             }
         }
@@ -187,10 +189,10 @@ impl TerranBot {
                 )
             );
 
-            true
+            Ok(true)
         }
         else {
-            false
+            Ok(false)
         }
     }
 }
@@ -213,25 +215,25 @@ impl Agent for TerranBot {
     fn on_step(&mut self, p: &mut Participant) -> Result<()> {
         // if there are marines and the command center is not found, send them
         // scouting.
-        self.scout_with_marines(p);
+        self.scout_with_marines(p)?;
 
         // build supply depots if they are needed
-        if self.try_build_supply_depot(p) {
+        if self.try_build_supply_depot(p)? {
             return Ok(())
         }
 
         // build terran SCV's if they are needed
-        if self.try_build_scv(p) {
+        if self.try_build_scv(p)? {
             return Ok(())
         }
 
         // build barracks if they are ready to be built
-        if self.try_build_barracks(p) {
+        if self.try_build_barracks(p)? {
             return Ok(())
         }
 
         // just keep building marines if possible
-        if self.try_build_marine(p) {
+        if self.try_build_marine(p)? {
             return Ok(())
         }
 

@@ -1,6 +1,5 @@
 
 mod actions;
-mod control;
 mod debugging;
 mod events;
 mod observation;
@@ -8,19 +7,22 @@ mod query;
 mod replay;
 mod spatial_actions;
 
-use std::collections::HashMap;
+use std::collections::{ HashSet, HashMap };
+use std::mem;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+use sc2_proto::common;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
-use super::{ Result, ErrorKind };
+use super::{ Result, ErrorKind, GameEvents, IntoProto, FromProto };
 use super::agent::Agent;
 use super::client::Client;
 use super::data::{
+    Alliance,
     PowerSource,
-    GameState,
     TerrainInfo,
     PlayerData,
     PlayerSetup,
@@ -35,15 +37,18 @@ use super::data::{
     Score,
     ReplayInfo,
     UnitType,
-    UnitTypeData
+    UnitTypeData,
+    Map,
+    GamePorts,
+    GameSettings,
+    DisplayType,
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
 
 pub use self::actions::Actions;
-pub use self::control::Control;
 pub use self::debugging::{ Debugging, DebugCommand, DebugTextTarget };
-pub use self::observation::Observation;
+pub use self::observation::{ GameState, GameEvent, Observation };
 pub use self::query::Query;
 pub use self::replay::Replay;
 pub use self::spatial_actions::FeatureLayerActions;
@@ -86,8 +91,8 @@ pub struct Participant {
     previous_units:             HashMap<Tag, Rc<Unit>>,
     units:                      HashMap<Tag, Rc<Unit>>,
     power_sources:              Vec<PowerSource>,
-    previous_upgrades:          Vec<Upgrade>,
-    upgrades:                   Vec<Upgrade>,
+    previous_upgrades:          HashSet<Upgrade>,
+    upgrades:                   HashSet<Upgrade>,
 
     actions:                    Vec<Action>,
     requested_actions:          Vec<Action>,
@@ -96,10 +101,11 @@ pub struct Participant {
     feature_layer_actions:      Vec<SpatialAction>,
     ability_data:               HashMap<Ability, AbilityData>,
 
-    player_id:                  Option<u32>,
-    camera_pos:                 Option<Point2>,
-    game_state:                 GameState,
-    terrain_info:                  TerrainInfo,
+    previous_step:              u32,
+    game_state:                 Option<GameState>,
+    events:                     Vec<GameEvent>,
+
+    terrain_info:               TerrainInfo,
     player_data:                PlayerData,
     score:                      Option<Score>,
 
@@ -139,8 +145,8 @@ impl Participant {
             previous_units: HashMap::new(),
             units: HashMap::new(),
             power_sources: vec![ ],
-            previous_upgrades: vec![ ],
-            upgrades: vec![ ],
+            previous_upgrades: HashSet::new(),
+            upgrades: HashSet::new(),
 
             actions: vec![ ],
             requested_actions: vec![ ],
@@ -150,12 +156,10 @@ impl Participant {
 
             ability_data: HashMap::new(),
 
-            player_id: None,
-            camera_pos: None,
-            game_state: GameState {
-                current_game_loop: 0,
-                previous_game_loop: 0,
-            },
+            previous_step: 0,
+            game_state: None,
+            events: vec![ ],
+
             terrain_info: TerrainInfo::default(),
             player_data: PlayerData {
                 minerals: 0,
@@ -174,6 +178,20 @@ impl Participant {
             replay_info: None,
 
             use_generalized_ability: true
+        }
+    }
+
+    pub fn get_game_state(&self) -> Result<&GameState> {
+        match self.game_state {
+            Some(ref state) => Ok(state),
+            None => bail!("game state is not set")
+        }
+    }
+
+    fn mut_game_state(&mut self) -> Result<&mut GameState> {
+        match self.game_state {
+            Some(ref mut state) => Ok(state),
+            None => bail!("game state is not set")
         }
     }
 
@@ -331,6 +349,218 @@ impl Participant {
     /// close the connection to the game instance
     pub fn close(&mut self) -> Result<()> {
         self.client.close()
+    }
+
+
+
+    fn save_map(&mut self, _: Vec<u8>, _: PathBuf) -> Result<()> {
+        unimplemented!("save map");
+    }
+
+    pub fn create_game(
+        &mut self,
+        settings: &GameSettings,
+        players: &Vec<PlayerSetup>,
+        is_realtime: bool
+    )
+        -> Result<()>
+    {
+        let mut req = sc2api::Request::new();
+
+        match settings.map {
+            Map::LocalMap(ref path) => {
+                req.mut_create_game().mut_local_map().set_map_path(
+                    match path.clone().into_os_string().into_string() {
+                        Ok(s) => s,
+                        Err(_) => bail!("invalid path string")
+                    }
+                );
+            },
+            Map::BlizzardMap(ref map) => {
+                req.mut_create_game().set_battlenet_map_name(map.clone());
+            }
+        };
+
+        for player in players {
+            let mut setup = sc2api::PlayerSetup::new();
+
+            match player {
+                &PlayerSetup::Computer { ref difficulty, ref race, .. } => {
+                    setup.set_field_type(sc2api::PlayerType::Computer);
+
+                    setup.set_difficulty(difficulty.to_proto());
+                    setup.set_race(race.into_proto()?);
+                },
+                &PlayerSetup::Player { ref race, .. } => {
+                    setup.set_field_type(sc2api::PlayerType::Participant);
+
+                    setup.set_race(race.into_proto()?);
+                },
+                &PlayerSetup::Observer => {
+                    setup.set_field_type(sc2api::PlayerType::Observer);
+                }
+            }
+
+            req.mut_create_game().mut_player_setup().push(setup);
+        }
+
+        req.mut_create_game().set_realtime(is_realtime);
+
+        self.send(req)?;
+        let rsp = self.recv()?;
+
+        println!("create game rsp: {:#?}", rsp);
+
+        Ok(())
+    }
+
+    pub fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()> {
+        let mut req = sc2api::Request::new();
+
+        match self.player {
+            PlayerSetup::Computer { race, .. } => {
+                req.mut_join_game().set_race(race.into_proto()?);
+            },
+            PlayerSetup::Player { race, .. } => {
+                req.mut_join_game().set_race(race.into_proto()?);
+            },
+            _ => req.mut_join_game().set_race(common::Race::NoRace)
+        };
+
+        match ports {
+            &Some(ref ports) => {
+                req.mut_join_game().set_shared_port(ports.shared_port as i32);
+
+                {
+                    let s = req.mut_join_game().mut_server_ports();
+
+                    s.set_game_port(ports.server_ports.game_port as i32);
+                    s.set_base_port(ports.server_ports.base_port as i32);
+                }
+
+                {
+                    let client_ports = req.mut_join_game().mut_client_ports();
+
+                    for c in &ports.client_ports {
+                        let mut p = sc2api::PortSet::new();
+
+                        p.set_game_port(c.game_port as i32);
+                        p.set_base_port(c.base_port as i32);
+
+                        client_ports.push(p);
+                    }
+                }
+            },
+            &None => (),
+        }
+
+        {
+            let options = req.mut_join_game().mut_options();
+
+            options.set_raw(true);
+            options.set_score(true);
+        }
+
+        self.send(req)?;
+
+        Ok(())
+    }
+
+    pub fn await_join_game(&mut self) -> Result<()> {
+        let rsp = self.recv()?;
+
+        println!("recv: {:#?}", rsp);
+
+        Ok(())
+    }
+
+    pub fn leave_game(&mut self) -> Result<()> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_leave_game();
+
+        self.send(req)?;
+
+        let rsp = self.recv()?;
+
+        println!("recv: {:#?}", rsp);
+
+        Ok(())
+    }
+
+    pub fn req_step(&mut self, count: usize) -> Result<()> {
+        if self.get_app_state() != AppState::Normal {
+            bail!("app is in bad state")
+        }
+
+        let mut req = sc2api::Request::new();
+
+        req.mut_step().set_count(count as u32);
+
+        self.send(req)?;
+
+        Ok(())
+    }
+
+    pub fn await_step(&mut self) -> Result<()> {
+        let rsp = self.recv()?;
+
+        if !rsp.has_step() || rsp.get_error().len() > 0 {
+            bail!("step error")
+        }
+
+        self.update_observation()?;
+
+        Ok(())
+    }
+
+    pub fn save_replay(&mut self, _: PathBuf) -> Result<()> {
+        unimplemented!("save replay");
+    }
+
+    pub fn issue_events(&mut self) -> Result<()> {
+        if self.get_game_state()?.current_step
+            == self.get_game_state()?.previous_step
+        {
+            return Ok(())
+        }
+
+        for e in mem::replace(&mut self.events, vec![ ]) {
+            match e {
+                GameEvent::UnitDestroyed(u) => self.on_unit_destroyed(&u)?,
+                GameEvent::UnitCreated(u) => self.on_unit_created(&u)?,
+                GameEvent::UnitIdle(u) => self.on_unit_idle(&u)?,
+                GameEvent::UnitDetected(u) => self.on_unit_detected(&u)?,
+
+                GameEvent::UpgradeCompleted(u) => self.on_upgrade_complete(u)?,
+                GameEvent::BuildingCompleted(u) => {
+                    self.on_building_complete(&u)?
+                },
+
+                GameEvent::NydusWormsDetected(n) => {
+                    for _ in 0..n {
+                        self.on_nydus_detected()?
+                    }
+                },
+                GameEvent::NukesDetected(n) => {
+                    for _ in 0..n {
+                        self.on_nuke_detected()?
+                    }
+                }
+            }
+        }
+
+        self.on_step()?;
+
+        Ok(())
+    }
+
+    pub fn quit(&mut self) -> Result<()> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_quit();
+
+        self.send(req)
     }
 }
 
