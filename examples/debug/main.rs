@@ -12,13 +12,11 @@ use docopt::Docopt;
 use sc2::{
     Agent,
     Coordinator,
-    Participant,
-    Debugging,
-    Observation,
-    DebugCommand,
     DebugTextTarget,
     User,
-    Result
+    Result,
+    Command,
+    FrameData
 };
 use sc2::colors;
 use sc2::data::{
@@ -46,42 +44,35 @@ impl DebugBot {
 }
 
 impl Agent for DebugBot {
-    fn on_game_start(&mut self, p: &mut Participant) -> Result<()> {
-        p.command_debug(
-            DebugCommand::DrawText {
+    fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        let mut commands = vec![
+            Command::DebugText {
                 text: "in the corner".to_string(),
                 target: None,
                 color: colors::RED
-            }
-        );
-
-        p.command_debug(
-            DebugCommand::DrawText {
+            },
+            Command::DebugText {
                 text: "screen pos".to_string(),
                 target: Some(
                     DebugTextTarget::Screen(Point2::new(1.0, 1.0))
                 ),
                 color: colors::GREEN
             }
-        );
+        ];
 
-        Ok(())
-    }
-
-    fn on_unit_created(&mut self, p: &mut Participant, u: &Rc<Unit>)
-        -> Result<()>
-    {
-        let name = p.get_unit_type_data()[&u.unit_type].name.clone();
-
-        p.command_debug(
-            DebugCommand::DrawText {
-                text: name,
-                target: Some(DebugTextTarget::World(u.pos)),
-                color: colors::WHITE
+        for u in frame.state.units.values() {
+            if let Some(data) = frame.data.unit_type_data.get(&u.unit_type) {
+                commands.push(
+                    Command::DebugText {
+                        text: data.name.clone(),
+                        target: Some(DebugTextTarget::World(u.pos)),
+                        color: colors::WHITE
+                    }
+                );
             }
-        );
+        }
 
-        let hatcheries = p.filter_units(
+        let hatcheries = frame.state.filter_units(
             |u| match u.unit_type {
                 UnitType::ZergHatchery => true,
                 _ => false
@@ -89,8 +80,8 @@ impl Agent for DebugBot {
         );
 
         for hatchery in hatcheries {
-            p.command_debug(
-                DebugCommand::DrawSphere {
+            commands.push(
+                Command::DebugSphere {
                     center: hatchery.pos, radius: 5.0, color: colors::BLUE
                 }
             );
@@ -98,20 +89,20 @@ impl Agent for DebugBot {
             let min = hatchery.pos + Vector3::new(-5.0, -5.0, 2.0);
             let max = hatchery.pos + Vector3::new(5.0, 5.0, 0.0);
 
-            p.command_debug(
-                DebugCommand::DrawBox {
+            commands.push(
+                Command::DebugBox {
                     min: min, max: max, color: colors::RED
                 }
             );
 
-            p.command_debug(
-                DebugCommand::DrawLine {
+            commands.push(
+                Command::DebugLine {
                     p1: min, p2: max, color: colors::BLACK
                 }
             );
         }
 
-        Ok(())
+        Ok(commands)
     }
 }
 

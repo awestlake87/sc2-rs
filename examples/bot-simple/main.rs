@@ -9,7 +9,7 @@ extern crate examples_common;
 use docopt::Docopt;
 
 use sc2::{
-    Agent, Coordinator, Participant, Observation, Actions, User, Result
+    Agent, Coordinator, User, Result, Command, FrameData 
 };
 use sc2::data::{ PlayerSetup, Race, Alliance, Ability, ActionTarget };
 
@@ -35,38 +35,37 @@ impl Bot {
 }
 
 impl Agent for Bot {
-    fn on_game_full_start(&mut self, _: &mut Participant) -> Result<()> {
-        println!("FULL FUCK YEYA!");
+    fn start(&mut self, _: FrameData) -> Result<Vec<Command>> {
+        println!("game started!");
 
-        Ok(())
-    }
-    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
-        println!("FUCK YEYA!");
-
-        Ok(())
+        Ok(vec![ ])
     }
 
-    fn on_step(&mut self, game: &mut Participant) -> Result<()> {
-        if game.get_game_loop() > self.last_update + 100 {
-            self.last_update = game.get_game_loop();
+    fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        let mut commands = vec![ ];
 
-            let units = game.filter_units(
+        if frame.state.current_step > self.last_update + 100 {
+            self.last_update = frame.state.current_step;
+
+            let units = frame.state.filter_units(
                 |unit| unit.alliance == Alliance::Domestic
             );
 
             for unit in units {
-                let target = find_random_location(game.get_terrain_info()?);
+                let target = find_random_location(&frame.data.terrain_info);
 
-                game.command_units(
-                    &vec![ unit ],
-                    Ability::Smart,
-                    Some(ActionTarget::Location(target))
+                commands.push(
+                    Command::Action {
+                        units: vec![ unit ],
+                        ability: Ability::Smart,
+                        target: Some(ActionTarget::Location(target))
+                    }
                 );
             }
-            println!("player {} 100 steps...", game.get_player_id().unwrap());
+            println!("player {} 100 steps...", frame.state.player_id);
         }
 
-        Ok(())
+        Ok(commands)
     }
 }
 

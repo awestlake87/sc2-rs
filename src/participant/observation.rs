@@ -8,13 +8,10 @@ use sc2_proto::sc2api;
 use super::super::{ Result, FromProto, IntoSc2 };
 use data::{
     PowerSource,
-    PlayerData,
     TerrainInfo,
     Unit,
     Upgrade,
     Point2,
-    Point3,
-    Action,
     SpatialAction,
     Score,
     UnitType,
@@ -25,7 +22,6 @@ use data::{
     UpgradeData,
     Buff,
     BuffData,
-    PlayerResult,
     Visibility,
     Tag,
     Alliance,
@@ -47,29 +43,12 @@ pub enum GameEvent {
 }
 
 pub struct GameData {
-    ability_data:               HashMap<Ability, AbilityData>,
-    unit_type_data:             HashMap<UnitType, UnitTypeData>,
-    upgrade_data:               HashMap<Upgrade, UpgradeData>,
-    buff_data:                  HashMap<Buff, BuffData>,
-}
+    pub ability_data:               HashMap<Ability, AbilityData>,
+    pub unit_type_data:             HashMap<UnitType, UnitTypeData>,
+    pub upgrade_data:               HashMap<Upgrade, UpgradeData>,
+    pub buff_data:                  HashMap<Buff, BuffData>,
 
-impl GameData {
-    /// get ability data
-    pub fn get_ability_data(&self) -> &HashMap<Ability, AbilityData> {
-        &self.ability_data
-    }
-    /// get unit type data
-    pub fn get_unit_type_data(&self) -> &HashMap<UnitType, UnitTypeData> {
-        &self.unit_type_data
-    }
-    /// get upgrade data
-    pub fn get_upgrade_data(&self) -> &HashMap<Upgrade, UpgradeData> {
-        &self.upgrade_data
-    }
-    /// get buff data
-    pub fn get_buff_data(&self) -> &HashMap<Buff, BuffData> {
-        &self.buff_data
-    }
+    pub terrain_info:               TerrainInfo,
 }
 
 pub struct GameState {
@@ -140,54 +119,55 @@ impl GameState {
     }
 }
 
+pub struct FrameData {
+    pub state: GameState,
+    pub data: Rc<GameData>,
+    pub events: Vec<GameEvent>
+}
+
 /// UNSTABLE observation trait
 pub trait Observation {
-
-    fn get_terrain_info(&mut self) -> Result<&TerrainInfo>;
-
     /// request a data update
     fn update_data(&mut self) -> Result<()>;
     /// request an observation update
-    fn update_observation(&mut self) -> Result<()>;
+    fn update_observation(&mut self) -> Result<FrameData>;
 }
 
 impl Observation for Participant {
-    fn get_terrain_info(&mut self) -> Result<&TerrainInfo> {
-        let mut req = sc2api::Request::new();
-        req.mut_game_info();
-
-        self.send(req)?;
-        let mut rsp = self.recv()?;
-
-        if rsp.has_game_info() {
-            self.terrain_info = rsp.take_game_info().into();
-        }
-
-        Ok(&self.terrain_info)
-    }
-
     fn update_data(&mut self) -> Result<()> {
-        let mut req = sc2api::Request::new();
-        req.mut_data().set_unit_type_id(true);
+        let mut req_data = sc2api::Request::new();
+        req_data.mut_data().set_unit_type_id(true);
 
-        self.send(req)?;
-        let mut rsp = self.recv()?;
+        self.send(req_data)?;
+        let mut rsp_data = self.recv()?;
 
-        self.unit_type_data.clear();
+        let mut req_terrain_info = sc2api::Request::new();
+        req_terrain_info.mut_game_info();
 
-        for data in rsp.mut_data().take_units().into_iter() {
-            match UnitTypeData::from_proto(data) {
-                Ok(u) => {
-                    self.unit_type_data.insert(u.unit_type, u);
-                },
-                Err(e) => ()
-            }
+        self.send(req_terrain_info)?;
+        let mut rsp_terrain_info = self.recv()?;
+
+        let mut game_data = GameData {
+            ability_data: HashMap::new(),
+            unit_type_data: HashMap::new(),
+            upgrade_data: HashMap::new(),
+            buff_data: HashMap::new(),
+
+            terrain_info: rsp_terrain_info.take_game_info().into()
+        };
+
+        for data in rsp_data.mut_data().take_units().into_iter() {
+            let u = UnitTypeData::from_proto(data)?;
+
+            game_data.unit_type_data.insert(u.unit_type, u);
         }
+
+        self.game_data = Some(Rc::from(game_data));
 
         Ok(())
     }
 
-    fn update_observation(&mut self) -> Result<()> {
+    fn update_observation(&mut self) -> Result<FrameData> {
         if self.get_app_state() != AppState::Normal {
             unimplemented!("Err - app in bad state");
         }
@@ -200,23 +180,14 @@ impl Observation for Participant {
 
         let mut observation = rsp.take_observation().take_observation();
 
-        let mut state = mem::replace(&mut self.game_state, None);
+        self.previous_units = mem::replace(&mut self.units, HashMap::new());
+        self.previous_upgrades = mem::replace(
+            &mut self.upgrades, HashSet::new()
+        );
 
-        let previous_step = match state {
-            Some(ref mut state) => {
-                self.previous_units = mem::replace(
-                    &mut state.units, HashMap::new()
-                );
-                self.previous_upgrades = mem::replace(
-                    &mut state.upgrades, HashSet::new()
-                );
-
-                state.current_step
-            },
-            None => 0
-        };
-        let next_step = observation.get_game_loop();
-        let is_new_frame = next_step != previous_step;
+        self.previous_step = self.current_step;
+        self.current_step = observation.get_game_loop();
+        let is_new_frame = self.current_step != self.previous_step;
 
         let player_common = observation.take_player_common();
         let mut raw = observation.take_raw_data();
@@ -224,8 +195,8 @@ impl Observation for Participant {
 
         let new_state = GameState {
             player_id: player_common.get_player_id(),
-            previous_step: previous_step,
-            current_step: next_step,
+            previous_step: self.previous_step,
+            current_step: self.current_step,
             camera_pos: {
                 let camera = player_raw.get_camera();
 
@@ -240,13 +211,15 @@ impl Observation for Participant {
                         Ok(mut unit) => {
                             let tag = unit.tag;
 
-                            unit.last_seen_game_loop = next_step;
+                            unit.last_seen_game_loop = self.current_step;
 
                             units.insert(tag, Rc::from(unit));
                         },
                         _ => ()
                     }
                 }
+
+                self.units = units.clone();
 
                 units
             },
@@ -283,8 +256,6 @@ impl Observation for Participant {
 
             score: observation.take_score().into_sc2()?,
         };
-
-        self.game_state = Some(new_state);
 
         if is_new_frame {
             self.actions.clear();
@@ -338,45 +309,15 @@ impl Observation for Participant {
             }
         }
 
-        // remap ability ids
-        if self.use_generalized_ability {
-            for action in &mut self.actions {
-                action.ability = match self.ability_data.get(
-                    &action.ability
-                ) {
-                    Some(ref ability_data) => {
-                        ability_data.get_generalized_ability()
-                    },
-                    None => action.ability
-                };
-            }
-            for action in &mut self.feature_layer_actions {
-                match action {
-                    &mut SpatialAction::UnitCommand {
-                        ref mut ability, ..
-                    } => {
-                        *ability = match self.ability_data.get(ability) {
-                            Some(ref ability_data) => {
-                                ability_data.get_generalized_ability()
-                            },
-                            None => *ability
-                        };
-                    },
-                    _ => ()
-                };
-            }
-        }
+        let mut events = vec![ ];
 
         if raw.has_event() {
             let event = raw.get_event();
 
             for tag in event.get_dead_units() {
-                match self.previous_units.get_mut(tag) {
+                match self.previous_units.get(tag) {
                     Some(ref mut unit) => {
-                        Rc::get_mut(unit).unwrap().mark_dead();
-                        self.events.push(
-                            GameEvent::UnitDestroyed(Rc::clone(unit))
-                        );
+                        events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
                     },
                     None => ()
                 }
@@ -387,14 +328,12 @@ impl Observation for Participant {
             match self.previous_units.get(&unit.tag) {
                 Some(ref prev_unit) => {
                     if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
-                        self.events.push(
-                            GameEvent::UnitIdle(Rc::clone(unit))
-                        );
+                        events.push(GameEvent::UnitIdle(Rc::clone(unit)));
                     }
                     else if unit.build_progress >= 1.0
                         && prev_unit.build_progress < 1.0
                     {
-                        self.events.push(
+                        events.push(
                             GameEvent::BuildingCompleted(Rc::clone(unit))
                         );
                     }
@@ -403,17 +342,13 @@ impl Observation for Participant {
                     if unit.alliance == Alliance::Enemy &&
                         unit.display_type == DisplayType::Visible
                     {
-                        self.events.push(
-                            GameEvent::UnitDetected(Rc::clone(unit))
-                        );
+                        events.push(GameEvent::UnitDetected(Rc::clone(unit)));
                     }
                     else {
-                        self.events.push(
-                            GameEvent::UnitCreated(Rc::clone(unit))
-                        );
+                        events.push(GameEvent::UnitCreated(Rc::clone(unit)));
                     }
 
-                    self.events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                    events.push(GameEvent::UnitIdle(Rc::clone(unit)));
                 }
             }
         }
@@ -426,7 +361,7 @@ impl Observation for Participant {
             match prev_upgrades.get(upgrade) {
                 Some(_) => (),
                 None => {
-                    self.events.push(GameEvent::UpgradeCompleted(*upgrade));
+                    events.push(GameEvent::UpgradeCompleted(*upgrade));
                 }
             }
         }
@@ -444,13 +379,19 @@ impl Observation for Participant {
         }
 
         if nukes > 0 {
-            self.events.push(GameEvent::NukesDetected(nukes));
+            events.push(GameEvent::NukesDetected(nukes));
         }
 
         if nydus_worms > 0 {
-            self.events.push(GameEvent::NydusWormsDetected(nydus_worms));
+            events.push(GameEvent::NydusWormsDetected(nydus_worms));
         }
 
-        Ok(())
+        Ok(
+            FrameData {
+                state: new_state,
+                data: self.get_game_data()?,
+                events: events
+            }
+        )
     }
 }

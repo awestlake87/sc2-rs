@@ -81,10 +81,6 @@ impl Replay for Participant {
 
         assert!(self.is_in_game());
 
-        self.update_observation()?;
-
-        self.on_game_start()?;
-
         Ok(())
     }
 }

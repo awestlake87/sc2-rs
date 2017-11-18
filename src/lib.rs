@@ -35,20 +35,18 @@ pub mod data;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-pub use agent::{ Agent };
+pub use agent::{ Agent, Command, DebugTextTarget };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use launcher::{ Launcher, LauncherSettings };
 pub use participant::{
     Participant,
-    Actions,
     Observation,
     Query,
     Replay,
     User,
-    Debugging,
-    DebugTextTarget,
-    DebugCommand,
-    GameState
+    GameState,
+    FrameData,
+    GameEvent
 };
 pub use replay_observer::{ ReplayObserver };
 

@@ -191,6 +191,7 @@ impl FromProto<raw::Unit> for Unit {
 #[allow(missing_docs)]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UnitType {
+    Invalid,
     // Terran
     TerranArmory,                 // CANCEL, HALT, CANCEL_LAST, RESEARCH_TERRANSHIPWEAPONS, RESEARCH_TERRANVEHICLEANDSHIPPLATING, RESEARCH_TERRANVEHICLEWEAPONS
     TerranAutoTurret,             // SMART, STOP, ATTACK
@@ -610,9 +611,7 @@ impl FromProto<u32> for UnitType {
                 342 => UnitType::NeutralVespeneGeyser,
                 149 => UnitType::NeutralXelNagaTower,
 
-                _ => bail!(
-                    ErrorKind::InvalidProtobuf(format!("UnitType id({})", id))
-                )
+                _ => UnitType::Invalid
             }
         )
     }

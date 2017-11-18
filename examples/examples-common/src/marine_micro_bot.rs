@@ -6,7 +6,7 @@ use num::Float;
 use sc2::data::{
     Tag, Point2, UnitType, Alliance, Ability, Unit, ActionTarget
 };
-use sc2::{ Agent, Participant, Actions, Result };
+use sc2::{ Agent, Participant, Result, FrameData, Command, GameEvent };
 
 pub struct MarineMicroBot {
     targeted_zergling:      Option<Tag>,
@@ -27,24 +27,52 @@ impl MarineMicroBot {
 }
 
 impl Agent for MarineMicroBot {
-    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
+    fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
         self.move_back = false;
         self.targeted_zergling = None;
 
-        Ok(())
+        Ok(vec![ ])
     }
 
-    fn on_step(&mut self, p: &mut Participant) -> Result<()> {
+    fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        for e in &frame.events {
+            if let (&GameEvent::UnitDestroyed(ref unit), Some(tag)) = (
+                e, self.targeted_zergling
+            ) {
+                if unit.tag == tag {
+                    let mp = match get_position(
+                        &frame, UnitType::TerranMarine, Alliance::Domestic
+                    ) {
+                        Some(pos) => pos,
+                        None => return Ok(vec![ ])
+                    };
+                    let zp = match get_position(
+                        &frame, UnitType::ZergZergling, Alliance::Enemy
+                    ) {
+                        Some(pos) => pos,
+                        None => return Ok(vec![ ])
+                    };
+
+                    let direction = normalize(&(mp - zp));
+
+                    self.targeted_zergling = None;
+                    self.move_back = true;
+                    self.backup_start = Some(mp);
+                    self.backup_target = Some(mp + direction * 3.0);
+                }
+            }
+        }
+
         let mp = match get_position(
-            p, UnitType::TerranMarine, Alliance::Domestic
-        )? {
+            &frame, UnitType::TerranMarine, Alliance::Domestic
+        ) {
             Some(pos) => pos,
-            None => return Ok(())
+            None => return Ok(vec![ ])
         };
 
-        self.targeted_zergling = get_nearest_zergling(p, mp)?;
+        self.targeted_zergling = get_nearest_zergling(&frame, mp);
 
-        let units = p.get_game_state()?.filter_units(
+        let units = frame.state.filter_units(
             |unit| match unit.alliance {
                 Alliance::Domestic => match unit.unit_type {
                     UnitType::TerranMarine => true,
@@ -56,70 +84,45 @@ impl Agent for MarineMicroBot {
 
         if !self.move_back {
             match self.targeted_zergling {
-                Some(tag) => p.command_units(
-                    &units, Ability::Attack, Some(ActionTarget::UnitTag(tag))
+                Some(tag) => Ok(
+                    vec![
+                        Command::Action {
+                            units: units,
+                            ability: Ability::Attack,
+                            target: Some(ActionTarget::UnitTag(tag))
+                        }
+                    ]
                 ),
-                None => ()
+                None => Ok(vec![ ])
             }
         }
         else {
             let target = match self.backup_target {
                 Some(target) => target,
-                None => return Ok(())
+                None => return Ok(vec![ ])
             };
 
             if distance(&mp, &target) < 1.5 {
                 self.move_back = false;
             }
 
-            p.command_units(
-                &units, Ability::Smart, Some(ActionTarget::Location(target))
-            );
+            Ok(
+                vec![
+                    Command::Action {
+                        units: units,
+                        ability: Ability::Smart,
+                        target: Some(ActionTarget::Location(target))
+                    }
+                ]
+            )
         }
-
-        Ok(())
-    }
-
-    fn on_unit_destroyed(&mut self, game: &mut Participant, unit: &Rc<Unit>)
-        -> Result<()>
-    {
-        match self.targeted_zergling {
-            Some(tag) => {
-                if unit.tag == tag {
-                    let mp = match get_position(
-                        game, UnitType::TerranMarine, Alliance::Domestic
-                    )? {
-                        Some(pos) => pos,
-                        None => return Ok(())
-                    };
-                    let zp = match get_position(
-                        game, UnitType::ZergZergling, Alliance::Enemy
-                    )? {
-                        Some(pos) => pos,
-                        None => return Ok(())
-                    };
-
-                    let direction = normalize(&(mp - zp));
-
-                    self.targeted_zergling = None;
-                    self.move_back = true;
-                    self.backup_start = Some(mp);
-                    self.backup_target = Some(mp + direction * 3.0);
-                }
-            },
-            None => ()
-        }
-
-        Ok(())
     }
 }
 
-fn get_position(
-    p: &mut Participant, unit_type: UnitType, alliance: Alliance
-)
-    -> Result<Option<Point2>>
+fn get_position(frame: &FrameData, unit_type: UnitType, alliance: Alliance)
+    -> Option<Point2>
 {
-    let units = p.get_game_state()?.filter_units(
+    let units = frame.state.filter_units(
         |u| u.alliance == alliance && u.unit_type == unit_type
     );
 
@@ -130,17 +133,15 @@ fn get_position(
     }
 
     if units.len() > 0 {
-        Ok(Some(pos / (units.len() as f32)))
+        Some(pos / (units.len() as f32))
     }
     else {
-        Ok(None)
+        None
     }
 }
 
-fn get_nearest_zergling(p: &mut Participant, from: Point2)
-    -> Result<Option<Tag>>
-{
-    let units = p.get_game_state()?.filter_units(
+fn get_nearest_zergling(frame: &FrameData, from: Point2) -> Option<Tag> {
+    let units = frame.state.filter_units(
         |u| u.alliance == Alliance::Enemy &&
             u.unit_type == UnitType::ZergZergling
     );
@@ -155,5 +156,5 @@ fn get_nearest_zergling(p: &mut Participant, from: Point2)
         }
     }
 
-    Ok(tag)
+    tag
 }

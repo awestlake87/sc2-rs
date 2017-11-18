@@ -9,10 +9,8 @@ use participant::{
     Participant,
     AppState,
     User,
-    Actions,
     Observation,
-    Replay,
-    Debugging
+    Replay
 };
 
 /// settings for the coordinator
@@ -155,14 +153,10 @@ impl Coordinator {
         for p in &mut self.participants {
             p.await_join_game()?;
             p.update_data()?;
-        }
 
-        for p in &mut self.participants {
-            p.on_game_full_start()?;
-        }
-
-        for p in &mut self.participants {
-            p.on_game_start()?;
+            let frame = p.update_observation()?;
+            let commands = p.start(frame)?;
+            p.send_commands(commands)?;
         }
 
         Ok(())
@@ -228,34 +222,30 @@ impl Coordinator {
             }
 
             // TODO: should it be awaiting steps if it's possible to skip reqs?
-            match p.await_step() {
-                Err(e) => errors.push(e),
-                _ => (),
-            }
+            let frame = match p.await_step() {
+                Ok(frame) => frame,
+                Err(e) => {
+                    errors.push(e);
+                    continue
+                },
+            };
 
             if p.is_in_game() {
-                match p.issue_events() {
+                let commands = match p.update(frame) {
+                    Ok(commands) => commands,
+                    Err(e) => {
+                        errors.push(e);
+                        continue
+                    },
+                };
+
+                match p.send_commands(commands) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
-
-                match p.send_actions() {
-                    Err(e) => errors.push(e),
-                    _ => ()
-                }
-
-                match p.send_debug_commands() {
-                    Err(e) => errors.push(e),
-                    _ => ()
-                }
-
-                /*TODO: match p.send_spatial_actions() {
-                    Err(e) => result = Err(e),
-                    _ => ()
-                }*/
             }
             else {
-                match p.on_game_end() {
+                match p.end(frame) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
@@ -297,41 +287,30 @@ impl Coordinator {
                 Err(e) => errors.push(e)
             }
 
-            if p.is_finished_game() {
-                continue
-            }
-
-            match p.update_observation() {
-                Err(e) => errors.push(e),
-                _ => ()
-            }
-        }
-
-        for p in &mut self.participants {
-            if p.get_app_state() != AppState::Normal {
-                continue
-            }
+            let frame = match p.update_observation() {
+                Ok(frame) => frame,
+                Err(e) => {
+                    errors.push(e);
+                    continue
+                }
+            };
 
             if p.is_in_game() {
-                match p.issue_events() {
+                let commands = match p.update(frame) {
+                    Ok(commands) => commands,
+                    Err(e) => {
+                        errors.push(e);
+                        continue
+                    }
+                };
+
+                match p.send_commands(commands) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
-                match p.send_actions() {
-                    Err(e) => errors.push(e),
-                    _ => ()
-                }
-                match p.send_debug_commands() {
-                    Err(e) => errors.push(e),
-                    _ => ()
-                }
-                /*TODO: match p.send_spatial_actions() {
-                    Err(e) => result = Err(e),
-                    _ => ()
-                }*/
             }
             else {
-                match p.on_game_end() {
+                match p.end(frame) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
@@ -442,6 +421,14 @@ impl Coordinator {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
+
+                match r.update_observation() {
+                    Ok(frame) => match r.start(frame) {
+                        _ => (),
+                        Err(e) => errors.push(e)
+                    },
+                    Err(e) => errors.push(e)
+                }
             }
 
             if r.is_in_game() {
@@ -451,32 +438,22 @@ impl Coordinator {
                 }
 
                 match r.await_step() {
-                    Err(e) => errors.push(e),
-                    _ => ()
+                    Ok(frame) => {
+                        if r.is_in_game() {
+                            match r.update(frame) {
+                                Err(e) => errors.push(e),
+                                _ => ()
+                            }
+                        }
+                        else {
+                            match r.end(frame) {
+                                Err(e) => errors.push(e),
+                                _ => ()
+                            }
+                        }
+                    },
+                    Err(e) => errors.push(e)
                 }
-
-                if !r.is_in_game() {
-                    match r.on_game_end() {
-                        Err(e) => errors.push(e),
-                        _ => ()
-                    }
-                }
-            }
-        }
-
-        for r in &mut self.replay_observers {
-            if r.get_app_state() != AppState::Normal {
-                continue
-            }
-
-            match r.issue_events() {
-                Err(e) => errors.push(e),
-                _ => ()
-            }
-
-            match r.send_debug_commands() {
-                Err(e) => errors.push(e),
-                _ => ()
             }
         }
 

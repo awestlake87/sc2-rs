@@ -1,6 +1,4 @@
 
-mod actions;
-mod debugging;
 mod events;
 mod observation;
 mod query;
@@ -14,41 +12,36 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use sc2_proto::common;
+use sc2_proto::debug;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
-use super::{ Result, ErrorKind, GameEvents, IntoProto, FromProto };
-use super::agent::Agent;
+use super::{ Result, ErrorKind, GameEvents, IntoProto };
+use super::agent::{ Agent, DebugTextTarget, Command };
 use super::client::Client;
 use super::data::{
-    Alliance,
     PowerSource,
     TerrainInfo,
-    PlayerData,
     PlayerSetup,
     Unit,
     Tag,
     Upgrade,
-    Point2,
     Action,
     SpatialAction,
     Ability,
     AbilityData,
-    Score,
     ReplayInfo,
     UnitType,
     UnitTypeData,
     Map,
     GamePorts,
     GameSettings,
-    DisplayType,
+    ActionTarget
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
 
-pub use self::actions::Actions;
-pub use self::debugging::{ Debugging, DebugCommand, DebugTextTarget };
-pub use self::observation::{ GameState, GameEvent, Observation };
+pub use self::observation::{ FrameData, GameState, GameEvent, Observation, GameData };
 pub use self::query::Query;
 pub use self::replay::Replay;
 pub use self::spatial_actions::FeatureLayerActions;
@@ -82,32 +75,20 @@ pub struct Participant {
     base_build:                 Option<u32>,
     data_version:               Option<String>,
 
-    observation:                sc2api::ResponseObservation,
-
-    commands:                   Vec<Tag>,
-
-    unit_type_data:             HashMap<UnitType, UnitTypeData>,
-
+    previous_step:              u32,
+    current_step:               u32,
     previous_units:             HashMap<Tag, Rc<Unit>>,
     units:                      HashMap<Tag, Rc<Unit>>,
-    power_sources:              Vec<PowerSource>,
+
     previous_upgrades:          HashSet<Upgrade>,
     upgrades:                   HashSet<Upgrade>,
 
     actions:                    Vec<Action>,
-    requested_actions:          Vec<Action>,
-    debug_commands:             Vec<DebugCommand>,
-
     feature_layer_actions:      Vec<SpatialAction>,
-    ability_data:               HashMap<Ability, AbilityData>,
 
-    previous_step:              u32,
-    game_state:                 Option<GameState>,
-    events:                     Vec<GameEvent>,
+    game_data:                  Option<Rc<GameData>>,
 
     terrain_info:               TerrainInfo,
-    player_data:                PlayerData,
-    score:                      Option<Score>,
 
     replay_info:                Option<ReplayInfo>,
 
@@ -136,44 +117,21 @@ impl Participant {
             base_build: None,
             data_version: None,
 
-            observation: sc2api::ResponseObservation::new(),
-
-            commands: vec![ ],
-
-            unit_type_data: HashMap::new(),
-
             previous_units: HashMap::new(),
             units: HashMap::new(),
-            power_sources: vec![ ],
+
             previous_upgrades: HashSet::new(),
             upgrades: HashSet::new(),
 
             actions: vec![ ],
-            requested_actions: vec![ ],
-            debug_commands: vec![ ],
-
             feature_layer_actions: vec![ ],
 
-            ability_data: HashMap::new(),
-
             previous_step: 0,
-            game_state: None,
-            events: vec![ ],
+            current_step: 0,
+
+            game_data: None,
 
             terrain_info: TerrainInfo::default(),
-            player_data: PlayerData {
-                minerals: 0,
-                vespene: 0,
-                food_cap: 0,
-                food_used: 0,
-                food_army: 0,
-                food_workers: 0,
-                idle_worker_count: 0,
-                army_count: 0,
-                warp_gate_count: 0,
-                larva_count: 0,
-            },
-            score: None,
 
             replay_info: None,
 
@@ -181,17 +139,12 @@ impl Participant {
         }
     }
 
-    pub fn get_game_state(&self) -> Result<&GameState> {
-        match self.game_state {
-            Some(ref state) => Ok(state),
-            None => bail!("game state is not set")
+    pub fn get_game_data(&self) -> Result<Rc<GameData>> {
+        if let Some(ref data) = self.game_data {
+            Ok(Rc::clone(data))
         }
-    }
-
-    fn mut_game_state(&mut self) -> Result<&mut GameState> {
-        match self.game_state {
-            Some(ref mut state) => Ok(state),
-            None => bail!("game state is not set")
+        else {
+            bail!("no game data")
         }
     }
 
@@ -502,57 +455,18 @@ impl Participant {
         Ok(())
     }
 
-    pub fn await_step(&mut self) -> Result<()> {
+    pub fn await_step(&mut self) -> Result<FrameData> {
         let rsp = self.recv()?;
 
         if !rsp.has_step() || rsp.get_error().len() > 0 {
             bail!("step error")
         }
 
-        self.update_observation()?;
-
-        Ok(())
+        self.update_observation()
     }
 
     pub fn save_replay(&mut self, _: PathBuf) -> Result<()> {
         unimplemented!("save replay");
-    }
-
-    pub fn issue_events(&mut self) -> Result<()> {
-        if self.get_game_state()?.current_step
-            == self.get_game_state()?.previous_step
-        {
-            return Ok(())
-        }
-
-        for e in mem::replace(&mut self.events, vec![ ]) {
-            match e {
-                GameEvent::UnitDestroyed(u) => self.on_unit_destroyed(&u)?,
-                GameEvent::UnitCreated(u) => self.on_unit_created(&u)?,
-                GameEvent::UnitIdle(u) => self.on_unit_idle(&u)?,
-                GameEvent::UnitDetected(u) => self.on_unit_detected(&u)?,
-
-                GameEvent::UpgradeCompleted(u) => self.on_upgrade_complete(u)?,
-                GameEvent::BuildingCompleted(u) => {
-                    self.on_building_complete(&u)?
-                },
-
-                GameEvent::NydusWormsDetected(n) => {
-                    for _ in 0..n {
-                        self.on_nydus_detected()?
-                    }
-                },
-                GameEvent::NukesDetected(n) => {
-                    for _ in 0..n {
-                        self.on_nuke_detected()?
-                    }
-                }
-            }
-        }
-
-        self.on_step()?;
-
-        Ok(())
     }
 
     pub fn quit(&mut self) -> Result<()> {
@@ -561,6 +475,184 @@ impl Participant {
         req.mut_quit();
 
         self.send(req)
+    }
+
+    pub fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        match self.user {
+            Some(User::Agent(ref mut a)) => a.start(frame),
+            Some(User::Observer(ref mut o)) => o.start(frame),
+            None => Ok(vec![ ])
+        }
+    }
+
+    pub fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        match self.user {
+            Some(User::Agent(ref mut a)) => a.update(frame),
+            Some(User::Observer(ref mut o)) => o.update(frame),
+            None => Ok(vec![ ])
+        }
+    }
+
+    pub fn end(&mut self, frame: FrameData) -> Result<()> {
+        match self.user {
+            Some(User::Agent(ref mut a)) => a.end(frame),
+            Some(User::Observer(ref mut o)) => o.end(frame),
+            None => Ok(())
+        }
+    }
+
+    pub fn send_commands(&mut self, commands: Vec<Command>) -> Result<()> {
+        let mut req_actions = sc2api::Request::new();
+        let mut req_debug = sc2api::Request::new();
+
+        for cmd in commands {
+            match cmd {
+                Command::Action { units, ability, target } => {
+                    let mut a = sc2api::Action::new();
+                    {
+                        let mut cmd = a.mut_action_raw().mut_unit_command();
+
+                        cmd.set_ability_id(ability.into_proto()? as i32);
+
+                        match target {
+                            Some(ActionTarget::UnitTag(tag)) => {
+                                cmd.set_target_unit_tag(tag);
+                            }
+                            Some(ActionTarget::Location(pos)) => {
+                                let target = cmd.mut_target_world_space_pos();
+                                target.set_x(pos.x);
+                                target.set_y(pos.y);
+                            },
+                            None => ()
+                        }
+
+                        for u in units {
+                            cmd.mut_unit_tags().push(u.tag);
+                        }
+                    }
+                    req_actions.mut_action().mut_actions().push(a);
+                },
+
+                Command::DebugText { text, target, color } => {
+                    let mut cmd = debug::DebugCommand::new();
+                    let mut debug_text = debug::DebugText::new();
+
+                    debug_text.set_text(text);
+
+                    match target {
+                        Some(DebugTextTarget::Screen(p)) => {
+                            debug_text.mut_virtual_pos().set_x(p.x);
+                            debug_text.mut_virtual_pos().set_y(p.y);
+                        },
+                        Some(DebugTextTarget::World(p)) => {
+                            debug_text.mut_world_pos().set_x(p.x);
+                            debug_text.mut_world_pos().set_y(p.y);
+                            debug_text.mut_world_pos().set_z(p.z);
+                        },
+                        None => ()
+                    }
+
+                    debug_text.mut_color().set_r(color.0 as u32);
+                    debug_text.mut_color().set_g(color.1 as u32);
+                    debug_text.mut_color().set_b(color.2 as u32);
+
+                    cmd.mut_draw().mut_text().push(debug_text);
+                    req_debug.mut_debug().mut_debug().push(cmd);
+                },
+                Command::DebugLine { p1, p2, color } => {
+                    let mut cmd = debug::DebugCommand::new();
+                    let mut debug_line = debug::DebugLine::new();
+
+                    debug_line.mut_line().mut_p0().set_x(p1.x);
+                    debug_line.mut_line().mut_p0().set_y(p1.y);
+                    debug_line.mut_line().mut_p0().set_z(p1.z);
+
+                    debug_line.mut_line().mut_p1().set_x(p2.x);
+                    debug_line.mut_line().mut_p1().set_y(p2.y);
+                    debug_line.mut_line().mut_p1().set_z(p2.z);
+
+                    debug_line.mut_color().set_r(color.0 as u32);
+                    debug_line.mut_color().set_g(color.1 as u32);
+                    debug_line.mut_color().set_b(color.2 as u32);
+
+                    cmd.mut_draw().mut_lines().push(debug_line);
+                    req_debug.mut_debug().mut_debug().push(cmd);
+                },
+                Command::DebugBox { min, max, color } => {
+                    let mut cmd = debug::DebugCommand::new();
+                    let mut debug_box = debug::DebugBox::new();
+
+                    debug_box.mut_min().set_x(min.x);
+                    debug_box.mut_min().set_y(min.y);
+                    debug_box.mut_min().set_z(min.z);
+
+                    debug_box.mut_max().set_x(max.x);
+                    debug_box.mut_max().set_y(max.y);
+                    debug_box.mut_max().set_z(max.z);
+
+                    debug_box.mut_color().set_r(color.0 as u32);
+                    debug_box.mut_color().set_g(color.1 as u32);
+                    debug_box.mut_color().set_b(color.2 as u32);
+
+                    cmd.mut_draw().mut_boxes().push(debug_box);
+                    req_debug.mut_debug().mut_debug().push(cmd);
+                }
+                Command::DebugSphere { center, radius, color } => {
+                    let mut cmd = debug::DebugCommand::new();
+                    let mut debug_sphere = debug::DebugSphere::new();
+
+                    debug_sphere.mut_p().set_x(center.x);
+                    debug_sphere.mut_p().set_y(center.y);
+                    debug_sphere.mut_p().set_z(center.z);
+
+                    debug_sphere.set_r(radius);
+
+                    debug_sphere.mut_color().set_r(color.0 as u32);
+                    debug_sphere.mut_color().set_g(color.1 as u32);
+                    debug_sphere.mut_color().set_b(color.2 as u32);
+
+                    cmd.mut_draw().mut_spheres().push(debug_sphere);
+                    req_debug.mut_debug().mut_debug().push(cmd);
+                }
+            }
+        }
+
+        if !req_actions.get_action().get_actions().is_empty() {
+            self.send(req_actions)?;
+            self.recv()?;
+        }
+
+        if !req_debug.get_debug().get_debug().is_empty() {
+            self.send(req_debug)?;
+            self.recv()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn should_ignore(&mut self) -> bool {
+        //TODO: figure out how to use this value
+        let player_id = 0;
+
+        match mem::replace(&mut self.user, None) {
+            Some(User::Observer(o)) => {
+                let should_ignore = o.should_ignore(
+                    match self.get_replay_info() {
+                        Some(ref info) => info,
+                        None => unimplemented!(
+                            "should this be an error or a panic?"
+                        )
+                    },
+                    player_id
+                );
+
+                self.user = Some(User::Observer(o));
+
+                should_ignore
+            },
+            Some(_) => panic!("user is not an observer"),
+            None => false
+        }
     }
 }
 

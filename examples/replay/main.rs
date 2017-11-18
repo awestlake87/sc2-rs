@@ -19,11 +19,13 @@ use sc2::{
     Coordinator,
     Participant,
     User,
-    Observation,
     ReplayObserver,
     Result,
     ResultExt,
-    ErrorKind
+    ErrorKind,
+    FrameData,
+    Command,
+    GameEvent
 };
 use sc2::data::{ PlayerSetup, Unit, UnitType };
 
@@ -48,27 +50,28 @@ impl Replay {
 }
 
 impl Agent for Replay {
-    fn on_game_start(&mut self, _: &mut Participant) -> Result<()> {
+    fn start(&mut self, _: FrameData) -> Result<Vec<Command>> {
         self.game += 1;
         self.units_built.clear();
 
-        Ok(())
-    }
-    fn on_unit_created(&mut self, _: &mut Participant, u: &Rc<Unit>)
-        -> Result<()>
-    {
-        *self.units_built.entry(u.unit_type).or_insert(0) += 1;
-
-        Ok(())
+        Ok(vec![ ])
     }
 
-    fn on_game_end(&mut self, p: &mut Participant) -> Result<()> {
-        let unit_data = p.get_unit_type_data();
+    fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+        for e in frame.events {
+            if let GameEvent::UnitCreated(u) = e {
+                *self.units_built.entry(u.unit_type).or_insert(0) += 1;
+            }
+        }
 
+        Ok(vec![ ])
+    }
+
+    fn end(&mut self, frame: FrameData) -> Result<()> {
         println!("\ngame {} units created: ", self.game);
 
         for (unit_type, built) in &self.units_built {
-            match unit_data.get(unit_type) {
+            match frame.data.unit_type_data.get(unit_type) {
                 Some(data) => println!("{}: {}", data.name, built),
                 _ => ()
             }

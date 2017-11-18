@@ -5,6 +5,7 @@ use super::super::{ Result, ErrorKind, FromProto, IntoProto };
 #[allow(missing_docs)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Ability {
+    Invalid = 0,
     Smart = 1,
 
     Attack = 3674,
@@ -978,9 +979,7 @@ impl FromProto<u32> for Ability {
                 1409 => Ability::UnloadUnitOverlord,
                 914 => Ability::UnloadUnitWarpPrism,
 
-                _ => bail!(
-                    ErrorKind::InvalidProtobuf(format!("Ability id({})", id))
-                )
+                _ => Ability::Invalid
             }
         )
     }
