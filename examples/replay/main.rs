@@ -65,7 +65,7 @@ impl Agent for Replay {
         Ok(vec![ ])
     }
 
-    fn end(&mut self, frame: FrameData) -> Result<()> {
+    fn stop(&mut self, frame: FrameData) -> Result<()> {
         println!("\ngame {} units created: ", self.game);
 
         for (unit_type, built) in &self.units_built {

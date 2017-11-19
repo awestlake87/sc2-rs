@@ -243,7 +243,7 @@ impl Coordinator {
                 }
             }
             else {
-                match p.end(frame) {
+                match p.stop(frame) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
@@ -308,7 +308,7 @@ impl Coordinator {
                 }
             }
             else {
-                match p.end(frame) {
+                match p.stop(frame) {
                     Err(e) => errors.push(e),
                     _ => ()
                 }
@@ -444,7 +444,7 @@ impl Coordinator {
                             }
                         }
                         else {
-                            match r.end(frame) {
+                            match r.stop(frame) {
                                 Err(e) => errors.push(e),
                                 _ => ()
                             }

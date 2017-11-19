@@ -475,11 +475,11 @@ impl Participant {
         }
     }
 
-    /// call the user's end function with the final frame data
-    pub fn end(&mut self, frame: FrameData) -> Result<()> {
+    /// call the user's stop function with the final frame data
+    pub fn stop(&mut self, frame: FrameData) -> Result<()> {
         match self.user {
-            Some(User::Agent(ref mut a)) => a.end(frame),
-            Some(User::Observer(ref mut o)) => o.end(frame),
+            Some(User::Agent(ref mut a)) => a.stop(frame),
+            Some(User::Observer(ref mut o)) => o.stop(frame),
             None => Ok(())
         }
     }

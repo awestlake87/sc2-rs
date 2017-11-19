@@ -240,7 +240,7 @@ impl Agent for TerranBot {
         Ok(commands)
     }
 
-    fn end(&mut self, _: FrameData) -> Result<()> {
+    fn stop(&mut self, _: FrameData) -> Result<()> {
         println!("game ended");
 
         Ok(())

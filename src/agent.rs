@@ -13,7 +13,7 @@ pub trait Agent {
         Ok(vec![ ])
     }
     /// called at the end of a match with the final frame data
-    fn end(&mut self, _: FrameData) -> Result<()> {
+    fn stop(&mut self, _: FrameData) -> Result<()> {
         Ok(())
     }
 }
