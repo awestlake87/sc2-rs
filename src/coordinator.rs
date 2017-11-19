@@ -8,9 +8,7 @@ use launcher::{ Launcher };
 use participant::{
     Participant,
     AppState,
-    User,
-    Observation,
-    Replay
+    User
 };
 
 /// settings for the coordinator

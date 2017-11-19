@@ -25,6 +25,7 @@ mod agent;
 mod client;
 mod coordinator;
 mod instance;
+mod frame;
 mod launcher;
 mod participant;
 mod replay_observer;
@@ -34,10 +35,11 @@ pub mod data;
 
 use std::path::PathBuf;
 
-pub use agent::{ Agent, Command, DebugTextTarget };
+pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
+pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
 pub use launcher::{ Launcher, LauncherSettings };
-pub use participant::{ FrameData, GameEvent, User };
+pub use participant::{ User };
 pub use replay_observer::{ ReplayObserver };
 
 error_chain! {
