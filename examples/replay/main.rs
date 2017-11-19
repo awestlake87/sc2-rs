@@ -9,7 +9,6 @@ extern crate examples_common;
 
 use std::collections::{ HashMap };
 use std::path::{ MAIN_SEPARATOR };
-use std::rc::Rc;
 
 use docopt::Docopt;
 use glob::glob;
@@ -17,7 +16,6 @@ use glob::glob;
 use sc2::{
     Agent,
     Coordinator,
-    Participant,
     User,
     ReplayObserver,
     Result,
@@ -27,7 +25,7 @@ use sc2::{
     Command,
     GameEvent
 };
-use sc2::data::{ PlayerSetup, Unit, UnitType };
+use sc2::data::{ PlayerSetup, UnitType };
 
 use examples_common::{
     USAGE, Args, get_coordinator_settings, poll_escape

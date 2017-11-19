@@ -15,6 +15,7 @@ enum ExeArch {
     X32
 }
 
+/// settings used to create a launcher
 pub struct LauncherSettings {
     /// installation directory
     ///
@@ -36,6 +37,7 @@ impl Default for LauncherSettings {
     }
 }
 
+/// object in charge of launching game instances and assigning ports
 pub struct Launcher {
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
@@ -44,6 +46,7 @@ pub struct Launcher {
 }
 
 impl Launcher {
+    /// create a launcher from settings
     pub fn from(settings: LauncherSettings) -> Result<Self> {
         let dir = {
             if let Some(dir) = settings.dir {
@@ -66,6 +69,7 @@ impl Launcher {
         )
     }
 
+    /// launch an instance
     pub fn launch(&mut self) -> Result<Instance> {
         let mut instance = Instance::from_settings(
             InstanceSettings {
@@ -95,6 +99,7 @@ impl Launcher {
         Ok(instance)
     }
 
+    /// create a set of ports for multiplayer games
     pub fn create_game_ports(&mut self) -> GamePorts {
         let ports = GamePorts {
             shared_port: self.current_port,

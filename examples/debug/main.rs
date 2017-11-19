@@ -6,8 +6,6 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
-use std::rc::Rc;
-
 use docopt::Docopt;
 use sc2::{
     Agent,
@@ -20,7 +18,7 @@ use sc2::{
 };
 use sc2::colors;
 use sc2::data::{
-    PlayerSetup, Race, Difficulty, Point2, Unit, UnitType, Vector3
+    PlayerSetup, Race, Difficulty, Point2, UnitType, Vector3
 };
 
 use examples_common::{
@@ -60,7 +58,7 @@ impl Agent for DebugBot {
             }
         ];
 
-        for u in frame.state.units.values() {
+        for u in &frame.state.units {
             if let Some(data) = frame.data.unit_type_data.get(&u.unit_type) {
                 commands.push(
                     Command::DebugText {

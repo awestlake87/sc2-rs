@@ -2,7 +2,7 @@
 use std::mem;
 use std::path::{ PathBuf };
 
-use super::{ Result, ResultExt, ErrorKind, GameEvents };
+use super::{ Result, ResultExt, ErrorKind };
 use data::{ PlayerSetup, GameSettings, GamePorts };
 use launcher::{ Launcher };
 use participant::{
@@ -424,8 +424,8 @@ impl Coordinator {
 
                 match r.update_observation() {
                     Ok(frame) => match r.start(frame) {
-                        _ => (),
-                        Err(e) => errors.push(e)
+                        Err(e) => errors.push(e),
+                        _ => ()
                     },
                     Err(e) => errors.push(e)
                 }

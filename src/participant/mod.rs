@@ -1,13 +1,9 @@
 
-mod events;
 mod observation;
-mod query;
 mod replay;
-mod spatial_actions;
 
 use std::collections::{ HashSet, HashMap };
 use std::mem;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -16,35 +12,29 @@ use sc2_proto::debug;
 use sc2_proto::sc2api;
 use sc2_proto::sc2api::{ Request, Response };
 
-use super::{ Result, ErrorKind, GameEvents, IntoProto };
+use super::{ Result, ErrorKind, IntoProto };
 use super::agent::{ Agent, DebugTextTarget, Command };
 use super::client::Client;
 use super::data::{
-    PowerSource,
-    TerrainInfo,
     PlayerSetup,
     Unit,
     Tag,
     Upgrade,
     Action,
     SpatialAction,
-    Ability,
-    AbilityData,
-    ReplayInfo,
-    UnitType,
-    UnitTypeData,
     Map,
     GamePorts,
     GameSettings,
-    ActionTarget
+    ActionTarget,
+    ReplayInfo
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
 
-pub use self::observation::{ FrameData, GameState, GameEvent, Observation, GameData };
-pub use self::query::Query;
+pub use self::observation::{
+    FrameData, GameState, GameEvent, Observation, GameData
+};
 pub use self::replay::Replay;
-pub use self::spatial_actions::FeatureLayerActions;
 
 /// type that allows differentiating between agents and observers
 #[allow(missing_docs)]
@@ -72,8 +62,6 @@ pub struct Participant {
     app_state:                  AppState,
     last_status:                AppStatus,
     response_pending:           MessageType,
-    base_build:                 Option<u32>,
-    data_version:               Option<String>,
 
     previous_step:              u32,
     current_step:               u32,
@@ -88,11 +76,9 @@ pub struct Participant {
 
     game_data:                  Option<Rc<GameData>>,
 
-    terrain_info:               TerrainInfo,
-
     replay_info:                Option<ReplayInfo>,
 
-    use_generalized_ability:    bool
+    //use_generalized_ability:    bool
 }
 
 impl Participant {
@@ -114,8 +100,6 @@ impl Participant {
             app_state: AppState::Normal,
             last_status: AppStatus::Launched,
             response_pending: MessageType::Unknown,
-            base_build: None,
-            data_version: None,
 
             previous_units: HashMap::new(),
             units: HashMap::new(),
@@ -131,11 +115,9 @@ impl Participant {
 
             game_data: None,
 
-            terrain_info: TerrainInfo::default(),
-
             replay_info: None,
 
-            use_generalized_ability: true
+            //use_generalized_ability: true
         }
     }
 
@@ -278,21 +260,21 @@ impl Participant {
     }
 
     /// ping the game instance
-    pub fn ping(&mut self) -> Result<()> {
-        let mut req = Request::new();
-
-        req.mut_ping();
-
-        self.send(req)?;
-        let rsp = self.recv()?;
-
-        self.base_build = Some(rsp.get_ping().get_base_build());
-        self.data_version = Some(
-            String::from(rsp.get_ping().get_data_version())
-        );
-
-        Ok(())
-    }
+    // pub fn ping(&mut self) -> Result<()> {
+    //     let mut req = Request::new();
+    //
+    //     req.mut_ping();
+    //
+    //     self.send(req)?;
+    //     let rsp = self.recv()?;
+    //
+    //     self.base_build = Some(rsp.get_ping().get_base_build());
+    //     self.data_version = Some(
+    //         String::from(rsp.get_ping().get_data_version())
+    //     );
+    //
+    //     Ok(())
+    // }
 
     /// poll for an incoming message from the game instance
     pub fn poll(&self) -> bool {
@@ -304,12 +286,7 @@ impl Participant {
         self.client.close()
     }
 
-
-
-    fn save_map(&mut self, _: Vec<u8>, _: PathBuf) -> Result<()> {
-        unimplemented!("save map");
-    }
-
+    /// create a game
     pub fn create_game(
         &mut self,
         settings: &GameSettings,
@@ -367,6 +344,7 @@ impl Participant {
         Ok(())
     }
 
+    /// request to join a multiplayer game
     pub fn req_join_game(&mut self, ports: &Option<GamePorts>) -> Result<()> {
         let mut req = sc2api::Request::new();
 
@@ -419,14 +397,14 @@ impl Participant {
         Ok(())
     }
 
+    /// await the response after a join game request
     pub fn await_join_game(&mut self) -> Result<()> {
-        let rsp = self.recv()?;
-
-        println!("recv: {:#?}", rsp);
+        self.recv()?;
 
         Ok(())
     }
 
+    /// leave the game
     pub fn leave_game(&mut self) -> Result<()> {
         let mut req = sc2api::Request::new();
 
@@ -441,6 +419,11 @@ impl Participant {
         Ok(())
     }
 
+    /// tell the game instance to step (non-realtime games)
+    ///
+    /// I think this has to be a collaborative effort between instances.
+    /// the response should only come after all participants have requested
+    /// a step.
     pub fn req_step(&mut self, count: usize) -> Result<()> {
         if self.get_app_state() != AppState::Normal {
             bail!("app is in bad state")
@@ -455,6 +438,7 @@ impl Participant {
         Ok(())
     }
 
+    /// await the response from the game after requesting a step
     pub fn await_step(&mut self) -> Result<FrameData> {
         let rsp = self.recv()?;
 
@@ -465,10 +449,7 @@ impl Participant {
         self.update_observation()
     }
 
-    pub fn save_replay(&mut self, _: PathBuf) -> Result<()> {
-        unimplemented!("save replay");
-    }
-
+    /// quit the game
     pub fn quit(&mut self) -> Result<()> {
         let mut req = sc2api::Request::new();
 
@@ -477,6 +458,7 @@ impl Participant {
         self.send(req)
     }
 
+    /// call the user's start function with the inital frame data
     pub fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
         match self.user {
             Some(User::Agent(ref mut a)) => a.start(frame),
@@ -485,6 +467,7 @@ impl Participant {
         }
     }
 
+    /// call the user's update function with the latest frame data
     pub fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
         match self.user {
             Some(User::Agent(ref mut a)) => a.update(frame),
@@ -493,6 +476,7 @@ impl Participant {
         }
     }
 
+    /// call the user's end function with the final frame data
     pub fn end(&mut self, frame: FrameData) -> Result<()> {
         match self.user {
             Some(User::Agent(ref mut a)) => a.end(frame),
@@ -501,6 +485,7 @@ impl Participant {
         }
     }
 
+    /// send the list of commands to the game instance
     pub fn send_commands(&mut self, commands: Vec<Command>) -> Result<()> {
         let mut req_actions = sc2api::Request::new();
         let mut req_debug = sc2api::Request::new();
@@ -510,7 +495,7 @@ impl Participant {
                 Command::Action { units, ability, target } => {
                     let mut a = sc2api::Action::new();
                     {
-                        let mut cmd = a.mut_action_raw().mut_unit_command();
+                        let cmd = a.mut_action_raw().mut_unit_command();
 
                         cmd.set_ability_id(ability.into_proto()? as i32);
 
@@ -630,6 +615,7 @@ impl Participant {
         Ok(())
     }
 
+    /// determine if the user should ignore the replay based on it's info
     pub fn should_ignore(&mut self) -> bool {
         //TODO: figure out how to use this value
         let player_id = 0;
@@ -659,9 +645,9 @@ impl Participant {
 #[derive(PartialEq, Copy, Clone)]
 pub enum AppState {
     Normal,
-    Crashed,
+    //Crashed,
     Timeout,
-    TimeoutZombie,
+    //TimeoutZombie,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]

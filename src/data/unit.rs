@@ -1,7 +1,7 @@
 
 use sc2_proto::raw;
 
-use super::super::{ Result, FromProto, ErrorKind };
+use super::super::{ Result, FromProto };
 use super::{ Ability, Buff, Point2, Point3 };
 
 /// unique tag for a unit instance

@@ -2,9 +2,9 @@
 use std::rc::Rc;
 
 use super::{ Result };
-use participant::{ GameState, GameData, GameEvent, Participant, FrameData };
+use participant::{ FrameData };
 use colors::Color;
-use data::{ Unit, Upgrade, Point2, Point3, Ability, Action, ActionTarget };
+use data::{ Unit, Point2, Point3, Ability, ActionTarget };
 
 /// target for debugging text
 #[derive(Debug, Copy, Clone)]
@@ -15,11 +15,16 @@ pub enum DebugTextTarget {
     World(Point3)
 }
 
+/// a command to issue to the game instance
 #[derive(Debug, Clone)]
 pub enum Command {
+    /// command a set of units
     Action {
+        /// units to command
         units: Vec<Rc<Unit>>,
+        /// ability to trigger
         ability: Ability,
+        /// ability target
         target: Option<ActionTarget>
     },
     // ToggleAutocast {
@@ -72,15 +77,16 @@ pub enum Command {
 
 /// trait for all entities that can handle game events
 pub trait Agent {
-    fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+    /// called at the beginning of a match with the inital frame data
+    fn start(&mut self, _: FrameData) -> Result<Vec<Command>> {
         Ok(vec![ ])
     }
-
-    fn update(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+    /// called throughout the game to step the bot
+    fn update(&mut self, _: FrameData) -> Result<Vec<Command>> {
         Ok(vec![ ])
     }
-
-    fn end(&mut self, frame: FrameData) -> Result<()> {
+    /// called at the end of a match with the final frame data
+    fn end(&mut self, _: FrameData) -> Result<()> {
         Ok(())
     }
 }

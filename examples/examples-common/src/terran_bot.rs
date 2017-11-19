@@ -4,9 +4,9 @@ use std::rc::Rc;
 use rand::random;
 
 use sc2::data::{
-    Tag, Vector2, Point2, TerrainInfo, Alliance, UnitType, Ability, ActionTarget
+    Tag, Vector2, Point2, Alliance, UnitType, Ability, ActionTarget
 };
-use sc2::{ Agent, Participant, Observation, Result, FrameData, Command };
+use sc2::{ Agent, Result, FrameData, Command };
 
 const TARGET_SCV_COUNT: usize = 15;
 
@@ -199,7 +199,7 @@ impl TerranBot {
 }
 
 impl Agent for TerranBot {
-    fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+    fn start(&mut self, _: FrameData) -> Result<Vec<Command>> {
         println!("game started");
 
         Ok(vec![ ])
@@ -240,7 +240,7 @@ impl Agent for TerranBot {
         Ok(commands)
     }
 
-    fn end(&mut self, frame: FrameData) -> Result<()> {
+    fn end(&mut self, _: FrameData) -> Result<()> {
         println!("game ended");
 
         Ok(())

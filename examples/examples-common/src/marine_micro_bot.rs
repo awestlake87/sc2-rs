@@ -1,12 +1,10 @@
 
-use std::rc::Rc;
-
 use na::{ distance, distance_squared, normalize };
 use num::Float;
 use sc2::data::{
-    Tag, Point2, UnitType, Alliance, Ability, Unit, ActionTarget
+    Tag, Point2, UnitType, Alliance, Ability, ActionTarget
 };
-use sc2::{ Agent, Participant, Result, FrameData, Command, GameEvent };
+use sc2::{ Agent, Result, FrameData, Command, GameEvent };
 
 pub struct MarineMicroBot {
     targeted_zergling:      Option<Tag>,
@@ -27,7 +25,7 @@ impl MarineMicroBot {
 }
 
 impl Agent for MarineMicroBot {
-    fn start(&mut self, frame: FrameData) -> Result<Vec<Command>> {
+    fn start(&mut self, _: FrameData) -> Result<Vec<Command>> {
         self.move_back = false;
         self.targeted_zergling = None;
 

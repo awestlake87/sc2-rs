@@ -1,9 +1,9 @@
 
 use sc2_proto::sc2api::{ Request };
 
-use super::super::{ Result, GameEvents, IntoSc2 };
+use super::super::{ Result, IntoSc2 };
 use super::super::data::{ ReplayInfo };
-use super::{ Participant, Observation };
+use super::{ Participant };
 
 /// UNSTABLE replay interface
 pub trait Replay {

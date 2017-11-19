@@ -33,24 +33,12 @@ pub mod colors;
 pub mod data;
 
 use std::path::PathBuf;
-use std::rc::Rc;
 
 pub use agent::{ Agent, Command, DebugTextTarget };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use launcher::{ Launcher, LauncherSettings };
-pub use participant::{
-    Participant,
-    Observation,
-    Query,
-    Replay,
-    User,
-    GameState,
-    FrameData,
-    GameEvent
-};
+pub use participant::{ FrameData, GameEvent, User };
 pub use replay_observer::{ ReplayObserver };
-
-use data::{ Unit, Upgrade };
 
 error_chain! {
     foreign_links {
@@ -101,22 +89,6 @@ error_chain! {
             display("unable to convert protobuf data: {}", msg)
         }
     }
-}
-
-trait GameEvents {
-    fn on_game_full_start(&mut self) -> Result<()>;
-    fn on_game_start(&mut self) -> Result<()>;
-    fn on_game_end(&mut self) -> Result<()>;
-    fn on_step(&mut self) -> Result<()>;
-    fn on_unit_destroyed(&mut self, u: &Rc<Unit>) -> Result<()>;
-    fn on_unit_created(&mut self, u: &Rc<Unit>) -> Result<()>;
-    fn on_unit_idle(&mut self, u: &Rc<Unit>) -> Result<()>;
-    fn on_upgrade_complete(&mut self, u: Upgrade) -> Result<()>;
-    fn on_building_complete(&mut self, u: &Rc<Unit>) -> Result<()>;
-    fn on_nydus_detected(&mut self) -> Result<()>;
-    fn on_nuke_detected(&mut self) -> Result<()>;
-    fn on_unit_detected(&mut self, u: &Rc<Unit>) -> Result<()>;
-    fn should_ignore(&mut self) -> bool;
 }
 
 trait FromProto<T> where Self: Sized {

@@ -1,5 +1,5 @@
 
-use super::super::{ Result, ErrorKind, FromProto, IntoProto };
+use super::super::{ Result, FromProto, IntoProto };
 
 /// list of known StarCraft II abilities
 #[allow(missing_docs)]

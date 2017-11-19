@@ -20,6 +20,7 @@ use examples_common::{
     MarineMicroBot
 };
 
+
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 quick_main!(
