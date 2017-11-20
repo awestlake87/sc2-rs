@@ -93,6 +93,7 @@ pub enum Command {
 }
 
 /// an event from the game
+#[derive(Debug, Clone)]
 pub enum GameEvent {
     /// a unit was destroyed
     UnitDestroyed(Rc<Unit>),
@@ -115,6 +116,7 @@ pub enum GameEvent {
 }
 
 /// game data (may vary depending on version and DLC)
+#[derive(Debug, Clone)]
 pub struct GameData {
     /// data associated with abilities
     pub ability_data:               HashMap<Ability, AbilityData>,
@@ -130,6 +132,7 @@ pub struct GameData {
 }
 
 /// state of the game (changes every frame)
+#[derive(Debug, Clone)]
 pub struct GameState {
     /// the player id associated with the participant
     pub player_id:                  u32,
@@ -218,6 +221,7 @@ impl GameState {
 }
 
 /// all game data passed to agents and observers
+#[derive(Debug, Clone)]
 pub struct FrameData {
     /// state that updates every frame
     pub state: GameState,
