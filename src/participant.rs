@@ -664,9 +664,10 @@ impl Participant {
         };
 
         for data in rsp_data.mut_data().take_units().into_iter() {
-            let u = UnitTypeData::from_proto(data)?;
+            let u = Rc::from(UnitTypeData::from_proto(data)?);
 
-            game_data.unit_type_data.insert(u.unit_type, u);
+            let unit_type = u.unit_type;
+            game_data.unit_type_data.insert(unit_type, u);
         }
 
         self.game_data = Some(Rc::from(game_data));
