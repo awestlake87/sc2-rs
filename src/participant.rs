@@ -666,7 +666,7 @@ impl Participant {
             upgrade_data: HashMap::new(),
             buff_data: HashMap::new(),
 
-            terrain_info: rsp_terrain_info.take_game_info().into()
+            terrain_info: rsp_terrain_info.take_game_info().into_sc2()?
         };
 
         for data in rsp_data.mut_data().take_units().into_iter() {

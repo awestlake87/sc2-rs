@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
-use super::super::{ Result, FromProto };
-use super::{ Point2, Rect2 };
+use super::super::{ Result, FromProto, IntoSc2 };
+use super::{ Point2, Rect2, ImageData };
 
 /// result of the game
 #[allow(missing_docs)]
@@ -79,9 +79,12 @@ pub struct TerrainInfo {
     /// height of the terrain
     pub height:                     i32,
 
-    //pathing_grid
-    //terrain_height
-    //placement_grid
+    /// image that reveals pathable tiles
+    pub pathing_grid:               ImageData,
+    /// image that reveals placable tiles
+    pub placement_grid:             ImageData,
+    /// image that reveals terrain height
+    pub terrain_height:             ImageData,
 
     /// rectangle of the playable area
     pub playable_area:              Rect2,
@@ -91,109 +94,39 @@ pub struct TerrainInfo {
     //player_info
 }
 
-impl Default for TerrainInfo {
-    fn default() -> Self {
-        Self {
-            width: 0,
-            height: 0,
+impl FromProto<sc2api::ResponseGameInfo> for TerrainInfo {
+    fn from_proto(mut info: sc2api::ResponseGameInfo) -> Result<Self> {
+        let mut start_raw = info.take_start_raw();
 
-            playable_area: Rect2 {
-                from: Point2::new(0.0, 0.0), to: Point2::new(0.0, 0.0)
-            },
+        Ok(
+            Self {
+                width: start_raw.get_map_size().get_x(),
+                height: start_raw.get_map_size().get_y(),
 
-            enemy_start_locations: vec![ ],
-        }
-    }
-}
+                pathing_grid: start_raw.take_pathing_grid().into_sc2()?,
+                placement_grid: start_raw.take_placement_grid().into_sc2()?,
+                terrain_height: start_raw.take_terrain_height().into_sc2()?,
 
-impl From<sc2api::ResponseGameInfo> for TerrainInfo {
-    fn from(info: sc2api::ResponseGameInfo) -> Self {
-        let mut w = 0;
-        let mut h = 0;
-        let mut playable_min = Point2::new(0.0, 0.0);
-        let mut playable_max = Point2::new(0.0, 0.0);
-        let mut start_locations = vec![ ];
+                playable_area: {
+                    let area = start_raw.get_playable_area();
 
-        if info.has_start_raw() {
-            let start_raw = info.get_start_raw();
+                    Rect2 {
+                        from: Point2::new(
+                            area.get_p0().get_x() as f32,
+                            area.get_p0().get_y() as f32
+                        ),
+                        to: Point2::new(
+                            area.get_p1().get_x() as f32,
+                            area.get_p1().get_y() as f32
+                        )
+                    }
+                },
 
-            if start_raw.has_map_size() &&
-                start_raw.get_map_size().has_x() &&
-                start_raw.get_map_size().has_y()
-            {
-                w = start_raw.get_map_size().get_x();
-                h = start_raw.get_map_size().get_y();
+                enemy_start_locations: start_raw.take_start_locations()
+                    .into_iter().map(
+                        |p| Point2::new(p.get_x() as f32, p.get_y() as f32)
+                    ).collect(),
             }
-
-            if start_raw.has_playable_area() {
-                let area = start_raw.get_playable_area();
-
-                if area.has_p0() {
-                    playable_min.x = area.get_p0().get_x() as f32;
-                    playable_min.y = area.get_p0().get_y() as f32;
-                }
-                if area.has_p1() {
-                    playable_max.x = area.get_p1().get_x() as f32;
-                    playable_max.y = area.get_p1().get_y() as f32;
-                }
-            }
-
-            for p in start_raw.get_start_locations() {
-                start_locations.push(
-                    Point2::new(p.get_x() as f32, p.get_y() as f32)
-                );
-            }
-        }
-
-        Self {
-            width: w,
-            height: h,
-
-            playable_area: Rect2 { from: playable_min, to: playable_max },
-
-            enemy_start_locations: start_locations,
-        }
-    }
-}
-
-/// current player data as used by the observation interface
-#[derive(Debug, Copy, Clone)]
-pub struct PlayerData {
-    /// current mineral count
-    pub minerals: u32,
-    /// current vespene count
-    pub vespene: u32,
-    /// current food capacity
-    pub food_cap: u32,
-    /// current food used
-    pub food_used: u32,
-    /// current food used by army
-    pub food_army: u32,
-    /// current food used by workers
-    pub food_workers: u32,
-    /// number of idle workers
-    pub idle_worker_count: u32,
-    /// number of military units
-    pub army_count: u32,
-    /// number of warp gates
-    pub warp_gate_count: u32,
-    /// number of larva
-    pub larva_count: u32,
-}
-
-impl From<sc2api::PlayerCommon> for PlayerData {
-    fn from(data: sc2api::PlayerCommon) -> Self {
-        Self {
-            minerals: data.get_minerals(),
-            vespene: data.get_vespene(),
-            food_used: data.get_food_used(),
-            food_cap: data.get_food_cap(),
-            food_army: data.get_food_army(),
-            food_workers: data.get_food_workers(),
-            idle_worker_count: data.get_idle_worker_count(),
-            army_count: data.get_army_count(),
-            warp_gate_count: data.get_warp_gate_count(),
-            larva_count: data.get_larva_count()
-        }
+        )
     }
 }
