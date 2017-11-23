@@ -30,7 +30,13 @@ use super::data::{
     UnitTypeData
 };
 use super::frame::{
-    FrameData, GameState, GameEvent, GameData, Command, DebugTextTarget
+    FrameData,
+    GameState,
+    MapState,
+    GameEvent,
+    GameData,
+    Command,
+    DebugTextTarget
 };
 use super::instance::Instance;
 use super::replay_observer::ReplayObserver;
@@ -887,11 +893,18 @@ impl Participant {
             events.push(GameEvent::NydusWormsDetected(nydus_worms));
         }
 
+        let mut map_state = raw.take_map_state();
+
         Ok(
             FrameData {
                 state: new_state,
                 data: self.get_game_data()?,
-                events: events
+                events: events,
+                map: Rc::from(
+                    MapState {
+                        creep: map_state.take_creep().into_sc2()?
+                    }
+                )
             }
         )
     }

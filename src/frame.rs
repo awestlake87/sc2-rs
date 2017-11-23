@@ -20,7 +20,8 @@ use data::{
     Buff,
     BuffData,
     Visibility,
-    ActionTarget
+    ActionTarget,
+    ImageData
 };
 
 /// target for debugging text
@@ -131,6 +132,13 @@ pub struct GameData {
     pub terrain_info:               TerrainInfo,
 }
 
+/// current state of the map
+#[derive(Debug, Clone)]
+pub struct MapState {
+    /// creep image (sample pixels to find tiles with creep)
+    pub creep:                      ImageData,
+}
+
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
 pub struct GameState {
@@ -224,9 +232,11 @@ impl GameState {
 #[derive(Debug, Clone)]
 pub struct FrameData {
     /// state that updates every frame
-    pub state: GameState,
+    pub state:          GameState,
     /// data that can change on a per game basis
-    pub data: Rc<GameData>,
+    pub data:           Rc<GameData>,
     /// events that have happened since the last update
-    pub events: Vec<GameEvent>
+    pub events:         Vec<GameEvent>,
+    /// current map state
+    pub map:            Rc<MapState>
 }
