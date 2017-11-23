@@ -902,7 +902,8 @@ impl Participant {
                 events: events,
                 map: Rc::from(
                     MapState {
-                        creep: map_state.take_creep().into_sc2()?
+                        creep: map_state.take_creep().into_sc2()?,
+                        visibility: map_state.take_visibility().into_sc2()?
                     }
                 )
             }

@@ -137,6 +137,8 @@ pub struct GameData {
 pub struct MapState {
     /// creep image (sample pixels to find tiles with creep)
     pub creep:                      ImageData,
+    /// visibility image (sample pixels to find visible tiles)
+    pub visibility:                 ImageData,
 }
 
 /// state of the game (changes every frame)
