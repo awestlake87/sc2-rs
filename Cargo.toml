@@ -5,6 +5,7 @@ authors = ["najen"]
 
 [dependencies]
 bytes = "*"
+ctrlc = "*"
 error-chain = "*"
 futures = "*"
 glob = "*"
@@ -17,6 +18,10 @@ tokio-core = "*"
 tokio-tungstenite = "*"
 tungstenite = "*"
 url = "*"
+
+[dependencies.cortical]
+git = "https://github.com/awestlake87/cortical"
+branch = "reactive"
 
 [workspace]
 members = ["examples/examples-common"]
@@ -45,6 +50,11 @@ path = "examples/debug/main.rs"
 name = "replay"
 crate-type = ["bin"]
 path = "examples/replay/main.rs"
+
+[[example]]
+name = "reactive"
+crate-type = ["bin"]
+path = "examples/reactive/main.rs"
 
 [dev-dependencies]
 docopt = "0.8"

@@ -6,9 +6,12 @@
 //! this API is intended to provide functionality similar to that of Blizzard
 //! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
 
-extern crate bytes;
 #[macro_use]
 extern crate error_chain;
+
+extern crate bytes;
+extern crate cortical;
+extern crate ctrlc;
 extern crate futures;
 extern crate glob;
 extern crate nalgebra as na;
@@ -27,6 +30,7 @@ mod coordinator;
 mod instance;
 mod frame;
 mod launcher;
+mod lobes;
 mod participant;
 mod replay_observer;
 
@@ -39,10 +43,14 @@ pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
 pub use launcher::{ Launcher, LauncherSettings };
+pub use lobes::{ MeleeLobe };
 pub use participant::{ User };
 pub use replay_observer::{ ReplayObserver };
 
 error_chain! {
+    links {
+        Cortical(cortical::Error, cortical::ErrorKind) #[doc="cortical glue"];
+    }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
     }
