@@ -18,6 +18,7 @@ tokio-core = "*"
 tokio-tungstenite = "*"
 tungstenite = "*"
 url = "*"
+uuid = { version = "*", features = ["serde", "v4"] }
 
 [dependencies.cortical]
 git = "https://github.com/awestlake87/cortical"

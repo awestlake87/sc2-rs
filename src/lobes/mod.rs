@@ -7,6 +7,9 @@ pub use self::launcher::{ LauncherLobe };
 pub use self::melee::{ MeleeLobe };
 pub use self::observer::{ ObserverLobe };
 
-pub enum Message {
+use uuid::Uuid;
 
+pub enum Message {
+    LaunchInstance,
+    AvailableInstances(Vec<Uuid>),
 }

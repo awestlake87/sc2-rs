@@ -23,6 +23,7 @@ extern crate tokio_core;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate url;
+extern crate uuid;
 
 mod agent;
 mod client;

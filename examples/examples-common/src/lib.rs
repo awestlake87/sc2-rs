@@ -55,9 +55,10 @@ pub struct Args {
     pub flag_step_size:             Option<usize>,
 }
 
-pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let default_settings = LauncherSettings::default();
-    let launcher = Launcher::from(
+    
+    Ok(
         LauncherSettings {
             use_wine: args.flag_wine,
             dir: args.flag_dir.clone(),
@@ -70,7 +71,11 @@ pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
                 }
             }
         }
-    )?;
+    )
+}
+
+pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+    let launcher = Launcher::from(get_launcher_settings(args)?)?;
 
     Ok(
         CoordinatorSettings {
