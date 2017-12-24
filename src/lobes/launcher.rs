@@ -3,7 +3,8 @@ use std::collections::{ HashMap };
 use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
-use cortical::{ Lobe, Protocol, Effector, Handle };
+use cortical;
+use cortical::{ Lobe, Protocol, Effector, Handle, ResultExt };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
@@ -293,19 +294,21 @@ impl LauncherLobe {
 impl Lobe for LauncherLobe {
     type Message = Message;
 
-    fn update(mut self, msg: Protocol<Self::Message>) -> Self {
+    fn update(mut self, msg: Protocol<Message>) -> cortical::Result<Self> {
         match msg {
-            Protocol::Init(effector) => self.init(effector),
+            Protocol::Init(effector) => Ok(self.init(effector)),
             Protocol::AddInput(input) => {
                 assert!(self.input.is_none());
 
                 self.input = Some(input);
 
-                self
+                Ok(self)
             },
 
             Protocol::Message(src, Message::LaunchInstance) => {
-                let (lobe, hdl) = self.launch().unwrap();
+                let (lobe, hdl) = self.launch().chain_err(
+                    || cortical::ErrorKind::LobeError
+                )?;
 
                 lobe.effector().send(
                     lobe.input.unwrap(),
@@ -314,9 +317,9 @@ impl Lobe for LauncherLobe {
                     )
                 );
 
-                lobe
+                Ok(lobe)
             },
-            _ => self
+            _ => Ok(self)
         }
     }
 }

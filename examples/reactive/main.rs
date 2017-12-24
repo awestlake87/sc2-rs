@@ -31,8 +31,8 @@ impl PlayerLobe {
 impl Lobe for PlayerLobe {
     type Message = Message;
 
-    fn update(self, _: Protocol<Self::Message>) -> Self {
-        self
+    fn update(self, _: Protocol<Self::Message>) -> cortical::Result<Self> {
+        Ok(self)
     }
 }
 

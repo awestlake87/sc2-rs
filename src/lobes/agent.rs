@@ -1,4 +1,5 @@
 
+use cortical;
 use cortical::{ Effector, Protocol, Lobe };
 use ctrlc;
 use futures::prelude::*;
@@ -15,7 +16,7 @@ impl AgentLobe {
         Self { }
     }
 
-    fn init(self, effector: Effector<Message>) -> Self {
+    fn init(self, effector: Effector<Message>) -> cortical::Result<Self> {
         let (tx, rx) = mpsc::channel(1);
 
         ctrlc::set_handler(
@@ -40,18 +41,18 @@ impl AgentLobe {
             )
         );
 
-        self
+        Ok(self)
     }
 }
 
 impl Lobe for AgentLobe {
     type Message = Message;
 
-    fn update(self, msg: Protocol<Self::Message>) -> Self {
+    fn update(self, msg: Protocol<Self::Message>) -> cortical::Result<Self> {
         match msg {
             Protocol::Init(effector) => self.init(effector),
 
-            _ => self,
+            _ => Ok(self),
         }
     }
 }

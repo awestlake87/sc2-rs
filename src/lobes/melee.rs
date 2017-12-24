@@ -1,4 +1,5 @@
 
+use cortical;
 use cortical::{ Lobe, Protocol, Cortex, Effector, Handle };
 
 use super::super::{ Result, LauncherSettings };
@@ -91,13 +92,13 @@ impl MeleeLobe {
 impl Lobe for MeleeLobe {
     type Message = Message;
 
-    fn update(self, msg: Protocol<Self::Message>) -> Self {
+    fn update(self, msg: Protocol<Self::Message>) -> cortical::Result<Self> {
         match msg {
-            Protocol::Init(effector) => self.init(effector),
-            Protocol::AddOutput(output) => self.set_output(output),
-            Protocol::Start => self.launch().launch(),
+            Protocol::Init(effector) => Ok(self.init(effector)),
+            Protocol::AddOutput(output) => Ok(self.set_output(output)),
+            Protocol::Start => Ok(self.launch().launch()),
 
-            _ => self,
+            _ => Ok(self),
         }
     }
 }
