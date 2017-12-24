@@ -40,11 +40,13 @@ pub mod data;
 
 use std::path::PathBuf;
 
+use futures::prelude::*;
+
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
 pub use launcher::{ Launcher, LauncherSettings };
-pub use lobes::{ MeleeLobe };
+pub use lobes::{ Message, MeleeLobe, MeleeSettings, MeleeSuite };
 pub use participant::{ User };
 pub use replay_observer::{ ReplayObserver };
 

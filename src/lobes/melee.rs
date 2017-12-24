@@ -1,15 +1,24 @@
 
-use std::sync::Arc;
-use std::sync::atomic::{ AtomicBool, Ordering };
-
 use cortical::{ Lobe, Protocol, Cortex, Effector, Handle };
-use ctrlc;
-use futures::prelude::*;
-use futures::sync::{ mpsc };
 
 use super::super::{ Result, LauncherSettings };
-use super::{ Message };
-use super::launcher::{ LauncherLobe };
+use data::{ GameSettings };
+use lobes::{ Message };
+use lobes::agent::{ AgentLobe };
+use lobes::launcher::{ LauncherLobe };
+
+pub enum MeleeSuite {
+    Single(GameSettings),
+}
+
+pub struct MeleeSettings<L1, L2> {
+    pub launcher:   LauncherSettings,
+
+    pub player1:    L1,
+    pub player2:    L2,
+
+    pub suite:      MeleeSuite,
+}
 
 pub struct MeleeLobe {
     effector:       Option<Effector<Message>>,
@@ -17,22 +26,39 @@ pub struct MeleeLobe {
 }
 
 impl MeleeLobe {
-    pub fn new(settings: LauncherSettings) -> Result<Cortex<Message>> {
+    pub fn new<L1, L2>(settings: MeleeSettings<L1, L2>)
+        -> Result<Cortex<Message>> where
+        L1: Lobe + 'static,
+        L2: Lobe + 'static,
+
+        L1::Message: From<Message> + Into<Message>,
+        L2::Message: From<Message> + Into<Message>,
+
+        Message: From<L1::Message>
+            + Into<L1::Message>
+            + From<L2::Message>
+            + Into<L2::Message>,
+    {
         let mut cortex: Cortex<Message> = Cortex::new(
             MeleeLobe {
                 effector: None,
                 output: None,
             },
-            ControlLobe::new()
+            AgentLobe::new()
         );
 
-        let launcher = cortex.add_lobe(LauncherLobe::from(settings)?);
+        let launcher = cortex.add_lobe(LauncherLobe::from(settings.launcher)?);
 
         let versus = cortex.get_input();
-        let control = cortex.get_output();
+        let agent = cortex.get_output();
+
+        let player1 = cortex.add_lobe(settings.player1);
+        let player2 = cortex.add_lobe(settings.player2);
 
         cortex.connect(versus, launcher);
-        cortex.connect(launcher, control);
+        cortex.connect(launcher, agent);
+        cortex.connect(agent, player1);
+        cortex.connect(agent, player2);
 
         Ok(cortex)
     }
@@ -73,52 +99,5 @@ impl Lobe for MeleeLobe {
 
             _ => self,
         }
-    }
-}
-
-pub struct ControlLobe {
-
-}
-
-impl ControlLobe {
-    fn new() -> Self {
-        Self { }
-    }
-}
-
-impl Lobe for ControlLobe {
-    type Message = Message;
-
-    fn update(self, msg: Protocol<Self::Message>) -> Self {
-        match msg {
-            Protocol::Init(effector) => {
-                let (tx, rx) = mpsc::channel(1);
-
-                ctrlc::set_handler(
-                    move || {
-                        tx.clone()
-                            .send(())
-                            .wait()
-                            .unwrap()
-                        ;
-                    }
-                ).unwrap();
-
-                let done = false;
-                let ctrlc_effector = effector.clone();
-
-                effector.spawn(
-                    rx.for_each(
-                        move |_| {
-                            ctrlc_effector.stop();
-                            Ok(())
-                        }
-                    )
-                );
-            },
-
-            _ => (),
-        }
-        self
     }
 }
