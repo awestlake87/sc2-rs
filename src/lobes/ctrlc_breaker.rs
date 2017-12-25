@@ -7,11 +7,13 @@ use futures::sync::mpsc;
 
 use super::{ Message, Effector, Role };
 
+/// lobe that stops the cortex upon Ctrl-C
 pub struct CtrlcBreakerLobe {
 
 }
 
 impl CtrlcBreakerLobe {
+    /// create a new Ctrl-C breaker lobe
     pub fn new() -> Self {
         Self { }
     }
@@ -29,7 +31,6 @@ impl CtrlcBreakerLobe {
             }
         ).unwrap();
 
-        let done = false;
         let ctrlc_effector = effector.clone();
 
         effector.spawn(

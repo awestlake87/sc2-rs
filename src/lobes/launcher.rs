@@ -10,15 +10,145 @@ use regex::Regex;
 use uuid::Uuid;
 
 use super::super::{ Result, ErrorKind, LauncherSettings };
-use super::{ Message, Effector, Role };
-use data::{ Rect, PortSet, GamePorts };
+use data::{ Rect, PortSet };
 use instance::{ Instance, InstanceSettings, InstanceKind };
+use lobes::{ Message, Effector, Role, RequiredOnce };
+
+/// lobe in charge of launching game instances and assigning ports
+pub struct LauncherLobe {
+    effector:           RequiredOnce<Effector>,
+
+    exe:                PathBuf,
+    pwd:                Option<PathBuf>,
+    current_port:       u16,
+    use_wine:           bool,
+
+    controller:         RequiredOnce<Handle>,
+    instances:          HashMap<Uuid, Instance>,
+}
+
+impl LauncherLobe {
+    /// create a launcher from settings
+    pub fn from(settings: LauncherSettings) -> Result<Self> {
+        let dir = {
+            if let Some(dir) = settings.dir {
+                dir
+            }
+            else {
+                auto_detect_starcraft(settings.use_wine)?
+            }
+        };
+        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
+        let pwd = select_pwd(&dir, arch);
+
+        Ok(
+            Self {
+                effector: RequiredOnce::new(),
+
+                exe: exe,
+                pwd: pwd,
+                current_port: settings.base_port,
+                use_wine: settings.use_wine,
+
+                controller: RequiredOnce::new(),
+                instances: HashMap::new(),
+            }
+        )
+    }
+
+    fn init(mut self, effector: Effector) -> Result<Self> {
+        self.effector.set(effector)?;
+
+        Ok(self)
+    }
+
+    fn add_input(mut self, input: Handle, role: Role) -> Result<Self> {
+        match role {
+            Role::Launcher => self.controller.set(input)?,
+
+            _ => bail!("invalid role {:#?}", role)
+        }
+
+        Ok(self)
+    }
+
+    /// launch an instance
+    fn launch(mut self, src: Handle) -> Result<Self> {
+        assert_eq!(src, *self.controller.get()?);
+
+        let mut instance = Instance::from_settings(
+            InstanceSettings {
+                kind: {
+                    if self.use_wine {
+                        InstanceKind::Wine
+                    }
+                    else {
+                        InstanceKind::Native
+                    }
+                },
+                exe: Some(self.exe.clone()),
+                pwd: self.pwd.clone(),
+                address: ("127.0.0.1".into(), self.current_port),
+                window_rect: Rect::<u32> { x: 10, y: 10, w: 1024, h: 768 },
+                ports: PortSet {
+                    game_port: self.current_port + 1,
+                    base_port: self.current_port + 2,
+                }
+            }
+        )?;
+
+        self.current_port += 3;
+
+        instance.start()?;
+
+        let hdl = Uuid::new_v4();
+        self.instances.insert(hdl, instance);
+
+        self.effector.get()?.send(
+            *self.controller.get()?,
+            Message::InstancePool({
+                let mut instances = vec![ ];
+
+                for (uuid, instance) in self.instances.iter() {
+                    instances.push((*uuid, instance.get_url()?))
+                }
+
+                instances
+            })
+        );
+
+        Ok(self)
+    }
+}
+
+impl Lobe for LauncherLobe {
+    type Message = Message;
+    type Role = Role;
+
+    fn update(self, msg: Protocol<Self::Message, Self::Role>)
+        -> cortical::Result<Self>
+    {
+        match msg {
+            Protocol::Init(effector) => self.init(effector),
+            Protocol::AddInput(input, role) => self.add_input(input, role),
+
+            Protocol::Message(src, Message::LaunchInstance) => {
+                self.launch(src)
+            },
+
+            _ => Ok(self)
+        }.chain_err(
+            || cortical::ErrorKind::LobeError
+        )
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ExeArch {
     X64,
     X32
 }
+
 
 fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
     if cfg!(windows) {
@@ -186,147 +316,5 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
     }
     else {
         None
-    }
-}
-
-/// lobe in charge of launching game instances and assigning ports
-pub struct LauncherLobe {
-    effector:           Option<Effector>,
-
-    exe:                PathBuf,
-    pwd:                Option<PathBuf>,
-    current_port:       u16,
-    use_wine:           bool,
-
-    input:              Option<Handle>,
-    instances:          HashMap<Uuid, Instance>,
-}
-
-impl LauncherLobe {
-    /// create a launcher from settings
-    pub fn from(settings: LauncherSettings) -> Result<Self> {
-        let dir = {
-            if let Some(dir) = settings.dir {
-                dir
-            }
-            else {
-                auto_detect_starcraft(settings.use_wine)?
-            }
-        };
-        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
-        let pwd = select_pwd(&dir, arch);
-
-        Ok(
-            Self {
-                effector: None,
-
-                exe: exe,
-                pwd: pwd,
-                current_port: settings.base_port,
-                use_wine: settings.use_wine,
-
-                input: None,
-                instances: HashMap::new(),
-            }
-        )
-    }
-
-    /// launch an instance
-    fn launch(mut self) -> Result<Self> {
-        let mut instance = Instance::from_settings(
-            InstanceSettings {
-                kind: {
-                    if self.use_wine {
-                        InstanceKind::Wine
-                    }
-                    else {
-                        InstanceKind::Native
-                    }
-                },
-                exe: Some(self.exe.clone()),
-                pwd: self.pwd.clone(),
-                address: ("127.0.0.1".into(), self.current_port),
-                window_rect: Rect::<u32> { x: 10, y: 10, w: 1024, h: 768 },
-                ports: PortSet {
-                    game_port: self.current_port + 1,
-                    base_port: self.current_port + 2,
-                }
-            }
-        )?;
-
-        self.current_port += 3;
-
-        instance.start()?;
-
-        let hdl = Uuid::new_v4();
-        self.instances.insert(hdl, instance);
-
-        self.effector().send(
-            self.input.unwrap(),
-            Message::InstancePool({
-                let mut instances = vec![ ];
-
-                for (uuid, instance) in self.instances.iter() {
-                    instances.push((*uuid, instance.get_url()?))
-                }
-
-                instances
-            })
-        );
-
-        Ok(self)
-    }
-
-    /// create a set of ports for multiplayer games
-    fn create_game_ports(&mut self) -> GamePorts {
-        let ports = GamePorts {
-            shared_port: self.current_port,
-            server_ports: PortSet {
-                game_port: self.current_port + 1,
-                base_port: self.current_port + 2,
-            },
-            client_ports: vec![ ]
-        };
-
-        self.current_port += 3;
-
-        ports
-    }
-
-    fn init(mut self, effector: Effector) -> Self {
-        self.effector = Some(effector);
-
-        self
-    }
-
-    fn effector(&self) -> &Effector {
-        self.effector.as_ref().unwrap()
-    }
-}
-
-impl Lobe for LauncherLobe {
-    type Message = Message;
-    type Role = Role;
-
-    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
-        -> cortical::Result<Self>
-    {
-        match msg {
-            Protocol::Init(effector) => Ok(self.init(effector)),
-            Protocol::AddInput(input, role) => {
-                assert!(self.input.is_none());
-
-                self.input = Some(input);
-
-                Ok(self)
-            },
-
-            Protocol::Message(src, Message::LaunchInstance) => {
-                self.launch()
-            },
-            _ => Ok(self)
-        }.chain_err(
-            || cortical::ErrorKind::LobeError
-        )
     }
 }

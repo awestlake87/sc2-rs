@@ -41,8 +41,6 @@ pub mod data;
 
 use std::path::PathBuf;
 
-use futures::prelude::*;
-
 pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
@@ -51,10 +49,13 @@ pub use lobes::{
     Message,
     Role,
     Effector,
+    RequiredOnce,
 
     MeleeLobe,
     MeleeSettings,
     MeleeSuite,
+
+    ObserverLobe,
 
     CtrlcBreakerLobe
 };

@@ -18,18 +18,22 @@ use examples_common::{ USAGE, Args, get_launcher_settings, get_game_settings };
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct PlayerLobe {
-    race: sc2::data::Race,
-    effector: Option<sc2::Effector>,
-    agent: Option<Handle>,
+    race:               sc2::data::Race,
+    effector:           sc2::RequiredOnce<sc2::Effector>,
+    agent:              sc2::RequiredOnce<Handle>,
 }
 
 impl PlayerLobe {
     fn new(race: sc2::data::Race) -> Self {
-        Self { race: race, effector: None, agent: None }
+        Self {
+            race: race,
+            effector: sc2::RequiredOnce::new(),
+            agent: sc2::RequiredOnce::new(),
+        }
     }
 
     fn init(mut self, effector: sc2::Effector) -> sc2::Result<Self> {
-        self.effector = Some(effector);
+        self.effector.set(effector)?;
 
         Ok(self)
     }
@@ -37,40 +41,25 @@ impl PlayerLobe {
     fn add_input(mut self, input: Handle, role: sc2::Role)
         -> sc2::Result<Self>
     {
-        if role == sc2::Role::Agent {
-            if self.agent.is_none() {
-                self.agent = Some(input);
+        match role {
+            sc2::Role::Agent => self.agent.set(input)?,
 
-                Ok(self)
-            }
-            else {
-                bail!("player can only have 1 agent")
-            }
+            _ => bail!("invalid role {:#?}", role)
         }
-        else {
-            bail!("invalid role {:#?}", role)
-        }
-    }
-
-    fn start(self) -> sc2::Result<Self> {
-        if self.agent.is_some() {
-            Ok(self)
-        }
-        else {
-            bail!("agent not specified")
-        }
-    }
-
-    fn join_game(self) -> sc2::Result<Self> {
-        self.effector().send(
-            self.agent.unwrap(), sc2::Message::JoinGame(self.race)
-        );
 
         Ok(self)
     }
 
-    fn effector(&self) -> &sc2::Effector {
-        self.effector.as_ref().unwrap()
+    fn start(self) -> sc2::Result<Self> {
+        Ok(self)
+    }
+
+    fn join_game(self) -> sc2::Result<Self> {
+        self.effector.get()?.send(
+            *self.agent.get()?, sc2::Message::JoinGame(self.race)
+        );
+
+        Ok(self)
     }
 }
 
@@ -82,11 +71,15 @@ impl Lobe for PlayerLobe {
         -> cortical::Result<Self>
     {
         match msg {
-            Protocol::Init(effector) => self.init(effector),
+            Protocol::Init(effector) => {
+                self.init(effector)
+            },
             Protocol::AddInput(input, role) => {
                 self.add_input(input, role)
             },
-            Protocol::Start => self.start(),
+            Protocol::Start => {
+                self.start()
+            },
 
             Protocol::Message(_, sc2::Message::CreateGame(_)) => {
                 self.join_game()
@@ -111,7 +104,7 @@ quick_main!(|| -> sc2::Result<()> {
     }
 
     let mut cortex = Cortex::new(
-        sc2::MeleeLobe::new(
+        sc2::MeleeLobe::cortex(
             sc2::MeleeSettings {
                 launcher: get_launcher_settings(&args)?,
 
@@ -120,7 +113,7 @@ quick_main!(|| -> sc2::Result<()> {
                     PlayerLobe::new(sc2::data::Race::Terran)
                 ),
 
-                suite: sc2::MeleeSuite::Single(get_game_settings(&args)?),
+                suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
             }
         )?
     );
