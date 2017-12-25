@@ -4,13 +4,13 @@ use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
 use cortical;
-use cortical::{ Lobe, Protocol, Effector, Handle, ResultExt };
+use cortical::{ Lobe, Handle, ResultExt, Protocol };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
 
 use super::super::{ Result, ErrorKind, LauncherSettings };
-use super::{ Message };
+use super::{ Message, Effector, Constraint };
 use data::{ Rect, PortSet, GamePorts };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 
@@ -191,7 +191,7 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
 
 /// lobe in charge of launching game instances and assigning ports
 pub struct LauncherLobe {
-    effector:           Option<Effector<Message>>,
+    effector:           Option<Effector>,
 
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
@@ -280,24 +280,27 @@ impl LauncherLobe {
         ports
     }
 
-    fn init(mut self, effector: Effector<Message>) -> Self {
+    fn init(mut self, effector: Effector) -> Self {
         self.effector = Some(effector);
 
         self
     }
 
-    fn effector(&self) -> &Effector<Message> {
+    fn effector(&self) -> &Effector {
         self.effector.as_ref().unwrap()
     }
 }
 
 impl Lobe for LauncherLobe {
     type Message = Message;
+    type Constraint = Constraint;
 
-    fn update(mut self, msg: Protocol<Message>) -> cortical::Result<Self> {
+    fn update(mut self, msg: Protocol<Self::Message, Self::Constraint>)
+        -> cortical::Result<Self>
+    {
         match msg {
             Protocol::Init(effector) => Ok(self.init(effector)),
-            Protocol::AddInput(input) => {
+            Protocol::AddInput(input, constraint) => {
                 assert!(self.input.is_none());
 
                 self.input = Some(input);
@@ -312,7 +315,7 @@ impl Lobe for LauncherLobe {
 
                 lobe.effector().send(
                     lobe.input.unwrap(),
-                    Message::AvailableInstances(
+                    Message::InstancePool(
                         lobe.instances.keys().map(|uuid| *uuid).collect()
                     )
                 );

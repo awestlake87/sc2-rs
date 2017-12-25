@@ -46,7 +46,9 @@ pub use agent::{ Agent };
 pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
 pub use launcher::{ Launcher, LauncherSettings };
-pub use lobes::{ Message, MeleeLobe, MeleeSettings, MeleeSuite };
+pub use lobes::{
+    Message, Constraint, MeleeLobe, MeleeSettings, MeleeSuite, CtrlcBreakerLobe
+};
 pub use participant::{ User };
 pub use replay_observer::{ ReplayObserver };
 

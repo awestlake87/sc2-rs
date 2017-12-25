@@ -1,11 +1,8 @@
 
 use cortical;
-use cortical::{ Effector, Protocol, Lobe };
-use ctrlc;
-use futures::prelude::*;
-use futures::sync::mpsc;
+use cortical::{ Lobe, Protocol };
 
-use super::{ Message };
+use super::{ Message, Effector, Constraint };
 
 pub struct AgentLobe {
 
@@ -16,39 +13,18 @@ impl AgentLobe {
         Self { }
     }
 
-    fn init(self, effector: Effector<Message>) -> cortical::Result<Self> {
-        let (tx, rx) = mpsc::channel(1);
-
-        ctrlc::set_handler(
-            move || {
-                tx.clone()
-                    .send(())
-                    .wait()
-                    .unwrap()
-                ;
-            }
-        ).unwrap();
-
-        let done = false;
-        let ctrlc_effector = effector.clone();
-
-        effector.spawn(
-            rx.for_each(
-                move |_| {
-                    ctrlc_effector.stop();
-                    Ok(())
-                }
-            )
-        );
-
+    fn init(self, effector: Effector) -> cortical::Result<Self> {
         Ok(self)
     }
 }
 
 impl Lobe for AgentLobe {
     type Message = Message;
+    type Constraint = Constraint;
 
-    fn update(self, msg: Protocol<Self::Message>) -> cortical::Result<Self> {
+    fn update(self, msg: Protocol<Message, Constraint>)
+        -> cortical::Result<Self>
+    {
         match msg {
             Protocol::Init(effector) => self.init(effector),
 
