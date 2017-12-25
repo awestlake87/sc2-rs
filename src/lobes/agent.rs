@@ -56,6 +56,14 @@ impl AgentLobe {
         Ok(self)
     }
 
+    fn on_connected(self, src: Handle) -> Result<Self> {
+        assert_eq!(src, *self.client.get()?);
+
+        self.effector.get()?.send(*self.controller.get()?, Message::Ready);
+
+        Ok(self)
+    }
+
     fn create_game(self, src: Handle, settings: GameSettings) -> Result<Self> {
         assert_eq!(src, *self.controller.get()?);
 
@@ -81,6 +89,10 @@ impl Lobe for AgentLobe {
             },
             Protocol::AddOutput(output, role) => {
                 self.add_output(output, role)
+            },
+
+            Protocol::Message(src, Message::Connected) => {
+                self.on_connected(src)
             },
 
             Protocol::Message(src, Message::CreateGame(settings)) => {

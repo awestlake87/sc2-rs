@@ -30,6 +30,10 @@ pub enum Message {
     ProvideInstance(Uuid, Url),
     /// attempt to connect to instance
     AttemptConnect(Url),
+    /// client successfully connected to instance
+    Connected,
+    /// agent is ready for a game to begin
+    Ready,
 
     /// create a game with the given settings
     CreateGame(GameSettings),

@@ -42,6 +42,8 @@ pub struct MeleeLobe {
     instances:      Option<((Uuid, Url), (Uuid, Url))>,
 
     suite:          MeleeSuite,
+
+    ready:          (bool, bool),
 }
 
 impl MeleeLobe {
@@ -61,6 +63,8 @@ impl MeleeLobe {
             instances: None,
 
             suite: suite,
+
+            ready: (false, false),
         }
     }
 
@@ -183,6 +187,24 @@ impl MeleeLobe {
                 *self.client2.get()?, Message::ProvideInstance(i2.0, i2.1)
             );
 
+            self.ready = (false, false);
+
+            Ok(self)
+        }
+    }
+
+    fn on_agent_ready(mut self, src: Handle) -> Result<Self> {
+        if src == *self.agent1.get()? {
+            self.ready.0 = true;
+        }
+        else if src == *self.agent2.get()? {
+            self.ready.1 = true;
+        }
+        else {
+            bail!("expected source of Ready to be an agent")
+        }
+
+        if self.ready == (true, true) {
             let first_game = match &self.suite {
                 &MeleeSuite::OneAndDone(ref game) => {
                     game.clone()
@@ -191,9 +213,14 @@ impl MeleeLobe {
 
             self.start_game(first_game)
         }
+        else {
+            Ok(self)
+        }
     }
 
     fn start_game(self, _: GameSettings) -> Result<Self> {
+        println!("START GAME!");
+
         Ok(self)
     }
 }
@@ -217,6 +244,10 @@ impl Lobe for MeleeLobe {
             Protocol::Message(src, Message::InstancePool(instances)) => {
                 self.on_instance_pool(src, instances)
             },
+
+            Protocol::Message(src, Message::Ready) => {
+                self.on_agent_ready(src)
+            }
 
             _ => Ok(self),
         }.chain_err(

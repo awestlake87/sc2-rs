@@ -85,9 +85,13 @@ impl ClientLobe {
     fn attempt_connect(mut self, src: Handle, url: Url) -> Result<Self> {
         assert_eq!(src, self.effector.get()?.this_lobe());
 
-        let client_effector = self.effector.get()?.clone();
-        let client_remote = self.effector.get()?.remote();
+        let connected_effector = self.effector.get()?.clone();
+        let retry_effector = self.effector.get()?.clone();
         let timer_effector = self.effector.get()?.clone();
+
+        let client_remote = self.effector.get()?.remote();
+
+        let owner = *self.owner.get()?;
 
         if self.retries == 0 {
             bail!("unable to connect to instance")
@@ -109,15 +113,18 @@ impl ClientLobe {
                 .and_then(
                     move |_| connect_async(url, client_remote)
                         .and_then(
-                            |(_ws_stream, _)| {
-                                println!("CONNECTED!!!!!");
+                            move |(_ws_stream, _)| {
+                                connected_effector.send(
+                                    owner, Message::Connected
+                                );
+
                                 Ok(())
                             }
                         )
                         .or_else(
                             move |_| {
-                                let this_lobe = client_effector.this_lobe();
-                                client_effector.send(
+                                let this_lobe = retry_effector.this_lobe();
+                                retry_effector.send(
                                     this_lobe,
                                     Message::AttemptConnect(retry_url)
                                 );
