@@ -20,6 +20,7 @@ extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
+extern crate tokio_timer;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate url;
@@ -47,7 +48,15 @@ pub use coordinator::{ Coordinator, CoordinatorSettings };
 pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
 pub use launcher::{ Launcher, LauncherSettings };
 pub use lobes::{
-    Message, Constraint, MeleeLobe, MeleeSettings, MeleeSuite, CtrlcBreakerLobe
+    Message,
+    Role,
+    Effector,
+
+    MeleeLobe,
+    MeleeSettings,
+    MeleeSuite,
+
+    CtrlcBreakerLobe
 };
 pub use participant::{ User };
 pub use replay_observer::{ ReplayObserver };
@@ -58,6 +67,7 @@ error_chain! {
     }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
+        UrlParseError(url::ParseError) #[doc="link to url parse errors"];
     }
     errors {
         /// exe was not supplied to the coordinator

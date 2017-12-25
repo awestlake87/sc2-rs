@@ -15,6 +15,7 @@ rand = "*"
 regex = "*"
 sc2-proto = { git = "https://github.com/awestlake87/sc2-proto-rs" }
 tokio-core = "*"
+tokio-timer = "*"
 tokio-tungstenite = "*"
 tungstenite = "*"
 url = "*"

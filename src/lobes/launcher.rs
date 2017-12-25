@@ -10,7 +10,7 @@ use regex::Regex;
 use uuid::Uuid;
 
 use super::super::{ Result, ErrorKind, LauncherSettings };
-use super::{ Message, Effector, Constraint };
+use super::{ Message, Effector, Role };
 use data::{ Rect, PortSet, GamePorts };
 use instance::{ Instance, InstanceSettings, InstanceKind };
 
@@ -232,7 +232,7 @@ impl LauncherLobe {
     }
 
     /// launch an instance
-    fn launch(mut self) -> Result<(Self, Uuid)> {
+    fn launch(mut self) -> Result<Self> {
         let mut instance = Instance::from_settings(
             InstanceSettings {
                 kind: {
@@ -261,7 +261,20 @@ impl LauncherLobe {
         let hdl = Uuid::new_v4();
         self.instances.insert(hdl, instance);
 
-        Ok((self, hdl))
+        self.effector().send(
+            self.input.unwrap(),
+            Message::InstancePool({
+                let mut instances = vec![ ];
+
+                for (uuid, instance) in self.instances.iter() {
+                    instances.push((*uuid, instance.get_url()?))
+                }
+
+                instances
+            })
+        );
+
+        Ok(self)
     }
 
     /// create a set of ports for multiplayer games
@@ -293,14 +306,14 @@ impl LauncherLobe {
 
 impl Lobe for LauncherLobe {
     type Message = Message;
-    type Constraint = Constraint;
+    type Role = Role;
 
-    fn update(mut self, msg: Protocol<Self::Message, Self::Constraint>)
+    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
         match msg {
             Protocol::Init(effector) => Ok(self.init(effector)),
-            Protocol::AddInput(input, constraint) => {
+            Protocol::AddInput(input, role) => {
                 assert!(self.input.is_none());
 
                 self.input = Some(input);
@@ -309,20 +322,11 @@ impl Lobe for LauncherLobe {
             },
 
             Protocol::Message(src, Message::LaunchInstance) => {
-                let (lobe, hdl) = self.launch().chain_err(
-                    || cortical::ErrorKind::LobeError
-                )?;
-
-                lobe.effector().send(
-                    lobe.input.unwrap(),
-                    Message::InstancePool(
-                        lobe.instances.keys().map(|uuid| *uuid).collect()
-                    )
-                );
-
-                Ok(lobe)
+                self.launch()
             },
             _ => Ok(self)
-        }
+        }.chain_err(
+            || cortical::ErrorKind::LobeError
+        )
     }
 }

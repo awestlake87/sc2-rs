@@ -99,12 +99,7 @@ impl Instance {
     }
 
     pub fn connect(&self) -> Result<Client> {
-        let (host, port) = self.address.clone();
-
-        let url = Url::parse(
-            &format!("ws://{}:{}/sc2api", host, port)[..]
-        ).expect("somehow I fucked up the URL");
-
+        let url = self.get_url()?;
         println!("attempting connection to {:?}", url);
 
         for i in 0..10 {
@@ -117,6 +112,11 @@ impl Instance {
         };
 
         Err(ErrorKind::ClientOpenFailed.into())
+    }
+
+    pub fn get_url(&self) -> Result<Url> {
+        let (host, port) = self.address.clone();
+        Ok(Url::parse(&*format!("ws://{}:{}/sc2api", host, port))?)
     }
 
     pub fn kill(&mut self) -> Result<()> {

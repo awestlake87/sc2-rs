@@ -1,11 +1,12 @@
 
 use cortical;
 use cortical::{ Lobe, Handle, Protocol, ResultExt };
+use url::Url;
 use uuid::Uuid;
 
 use super::super::{ Result, LauncherSettings };
 use data::{ GameSettings };
-use lobes::{ Message, Constraint, Effector, Cortex };
+use lobes::{ Message, Role, Effector, Cortex };
 use lobes::agent::{ AgentLobe };
 use lobes::launcher::{ LauncherLobe };
 
@@ -26,6 +27,8 @@ pub struct MeleeLobe {
     agent1:         Option<Handle>,
     agent2:         Option<Handle>,
 
+    instances:      Option<((Uuid, Url), (Uuid, Url))>,
+
     suite:          MeleeSuite,
 }
 
@@ -35,19 +38,24 @@ impl MeleeLobe {
         L2: Lobe,
 
         Message: From<L1::Message> + From<L2::Message>,
-        Constraint: From<L1::Constraint> + From<L2::Constraint>,
+        Role: From<L1::Role> + From<L2::Role>,
 
         L1::Message: From<Message>,
         L2::Message: From<Message>,
-        L1::Constraint: From<Constraint>,
-        L2::Constraint: From<Constraint>,
+
+        L1::Role: From<Role>,
+        L2::Role: From<Role>,
     {
         let mut cortex = Cortex::new(
             MeleeLobe {
                 effector: None,
+
                 launcher: None,
                 agent1: None,
                 agent2: None,
+
+                instances: None,
+
                 suite: settings.suite,
             }
         );
@@ -62,12 +70,12 @@ impl MeleeLobe {
         let agent1 = cortex.add_lobe(AgentLobe::new());
         let agent2 = cortex.add_lobe(AgentLobe::new());
 
-        cortex.connect(melee, launcher, Constraint::InstanceManager);
-        cortex.connect(melee, agent1, Constraint::InstanceAssignment);
-        cortex.connect(melee, agent2, Constraint::InstanceAssignment);
+        cortex.connect(melee, launcher, Role::InstanceManager);
+        cortex.connect(melee, agent1, Role::Controller);
+        cortex.connect(melee, agent2, Role::Controller);
 
-        cortex.connect(agent1, player1, Constraint::Agent);
-        cortex.connect(agent2, player2, Constraint::Agent);
+        cortex.connect(agent1, player1, Role::Agent);
+        cortex.connect(agent2, player2, Role::Agent);
 
         Ok(cortex)
     }
@@ -79,18 +87,14 @@ impl MeleeLobe {
     fn init(mut self, effector: Effector) -> Self {
         self.effector = Some(effector);
 
-        self.launcher = None;
-        self.agent1 = None;
-        self.agent2 = None;
-
         self
     }
 
-    fn add_output(mut self, output: Handle, constraint: Constraint)
+    fn add_output(mut self, output: Handle, role: Role)
         -> Result<Self>
     {
-        match constraint {
-            Constraint::InstanceManager => {
+        match role {
+            Role::InstanceManager => {
                 if self.launcher.is_none() {
                     self.launcher = Some(output);
                 }
@@ -98,7 +102,7 @@ impl MeleeLobe {
                     bail!("launcher already specified")
                 }
             },
-            Constraint::InstanceAssignment => {
+            Role::Controller => {
                 if self.agent1.is_none() {
                     self.agent1 = Some(output);
                 }
@@ -110,7 +114,7 @@ impl MeleeLobe {
                 }
             },
 
-            _ => bail!("invalid constraint")
+            _ => bail!("invalid role")
         }
 
         Ok(self)
@@ -130,33 +134,50 @@ impl MeleeLobe {
         Ok(self)
     }
 
-    fn on_instance_pool(self, instances: Vec<Uuid>) -> Self {
-        if instances.len() < 2 {
+    fn on_instance_pool(mut self, instances: Vec<(Uuid, Url)>) -> Self {
+        if instances.len() < 2 || self.instances.is_some() {
             self
         }
         else {
-            match *&self.suite {
-                MeleeSuite::Single(ref game) => {
+            self.instances = Some(
+                (instances[0].clone(), instances[1].clone())
+            );
 
-                }
-            }
+            let (i1, i2) = self.instances.clone().unwrap();
 
-            self
+            self.effector().send(
+                self.agent1.unwrap(), Message::AssignInstance(i1.0, i1.1)
+            );
+            self.effector().send(
+                self.agent2.unwrap(), Message::AssignInstance(i2.0, i2.1)
+            );
+
+            let first_game = match &self.suite {
+                &MeleeSuite::Single(ref game) => {
+                    game.clone()
+                },
+            };
+
+            self.start_game(first_game)
         }
+    }
+
+    fn start_game(self, game: GameSettings) -> Self {
+        self
     }
 }
 
 impl Lobe for MeleeLobe {
     type Message = Message;
-    type Constraint = Constraint;
+    type Role = Role;
 
-    fn update(self, msg: Protocol<Self::Message, Self::Constraint>)
+    fn update(self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
         match msg {
             Protocol::Init(effector) => Ok(self.init(effector)),
-            Protocol::AddOutput(output, constraint) => {
-                self.add_output(output, constraint)
+            Protocol::AddOutput(output, role) => {
+                self.add_output(output, role)
                     .chain_err(|| cortical::ErrorKind::LobeError)
             },
             Protocol::Start => {

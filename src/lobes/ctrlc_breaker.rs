@@ -5,7 +5,7 @@ use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
-use super::{ Message, Effector, Constraint };
+use super::{ Message, Effector, Role };
 
 pub struct CtrlcBreakerLobe {
 
@@ -47,9 +47,9 @@ impl CtrlcBreakerLobe {
 
 impl Lobe for CtrlcBreakerLobe {
     type Message = Message;
-    type Constraint = Constraint;
+    type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Constraint>)
+    fn update(self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
         match msg {
