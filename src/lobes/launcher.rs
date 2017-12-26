@@ -4,14 +4,14 @@ use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
 use cortical;
-use cortical::{ Lobe, Handle, ResultExt, Protocol };
+use cortical::{ Lobe, Handle, ResultExt, Protocol, Constraint };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
 
 use super::super::{ Result, ErrorKind };
 use data::{ Rect, PortSet, GamePorts };
-use lobes::{ Message, Effector, Role, RequiredOnce };
+use lobes::{ Message, Soma, Role };
 use lobes::instance::{ Instance, InstanceSettings, InstanceKind };
 
 /// settings used to create a launcher
@@ -38,14 +38,13 @@ impl Default for LauncherSettings {
 
 /// lobe in charge of launching game instances and assigning ports
 pub struct LauncherLobe {
-    effector:           RequiredOnce<Effector>,
+    soma:               Soma,
 
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
     current_port:       u16,
     use_wine:           bool,
 
-    controller:         RequiredOnce<Handle>,
     instances:          HashMap<Uuid, Instance>,
     ports:              Vec<GamePorts>,
 }
@@ -66,39 +65,27 @@ impl LauncherLobe {
 
         Ok(
             Self {
-                effector: RequiredOnce::new(),
+                soma: Soma::new(
+                    vec![ Constraint::RequireOne(Role::Launcher) ],
+                    vec![ ]
+                )?,
 
                 exe: exe,
                 pwd: pwd,
                 current_port: settings.base_port,
                 use_wine: settings.use_wine,
 
-                controller: RequiredOnce::new(),
                 instances: HashMap::new(),
                 ports: vec![ ],
             }
         )
     }
 
-    fn init(mut self, effector: Effector) -> Result<Self> {
-        self.effector.set(effector)?;
-
-        Ok(self)
-    }
-
-    fn add_input(mut self, input: Handle, role: Role) -> Result<Self> {
-        match role {
-            Role::Launcher => self.controller.set(input)?,
-
-            _ => bail!("invalid role {:#?}", role)
-        }
-
-        Ok(self)
-    }
-
     /// launch an instance
     fn launch(mut self, src: Handle) -> Result<Self> {
-        assert_eq!(src, *self.controller.get()?);
+        let controller = self.soma.req_input(Role::Launcher)?;
+
+        assert_eq!(src, controller);
 
         let mut instance = Instance::from_settings(
             InstanceSettings {
@@ -128,8 +115,8 @@ impl LauncherLobe {
         let hdl = Uuid::new_v4();
         self.instances.insert(hdl, instance);
 
-        self.effector.get()?.send(
-            *self.controller.get()?,
+        self.soma.send(
+            controller,
             Message::InstancePool({
                 let mut instances = HashMap::new();
 
@@ -141,16 +128,16 @@ impl LauncherLobe {
 
                 instances
             })
-        );
+        )?;
 
         if self.instances.len() / 2 > self.ports.len() {
             let game_ports = self.create_game_ports();
             self.ports.push(game_ports);
 
-            self.effector.get()?.send(
-                *self.controller.get()?,
+            self.soma.send(
+                controller,
                 Message::PortsPool(self.ports.clone())
-            );
+            )?;
         }
 
         Ok(self)
@@ -180,10 +167,9 @@ impl Lobe for LauncherLobe {
     fn update(self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
-        match msg {
-            Protocol::Init(effector) => self.init(effector),
-            Protocol::AddInput(input, role) => self.add_input(input, role),
+        self.soma.update(&msg)?;
 
+        match msg {
             Protocol::Message(src, Message::LaunchInstance) => {
                 self.launch(src)
             },

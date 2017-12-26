@@ -10,13 +10,13 @@ use url::Url;
 use uuid::Uuid;
 
 use super::super::{ Result };
-use super::{ Message, Effector, Role, RequiredOnce };
+use super::{ Message, Soma, Role };
 
 
 const NUM_RETRIES: u32 = 10;
 
 pub struct ClientLobe {
-    effector:           RequiredOnce<Effector>,
+    soma:               Soma,
 
     provider:           RequiredOnce<Handle>,
     owner:              RequiredOnce<Handle>,
@@ -28,24 +28,23 @@ pub struct ClientLobe {
 }
 
 impl ClientLobe {
-    pub fn new() -> Self {
-        Self {
-            effector: RequiredOnce::new(),
+    pub fn new() -> Result<Self> {
+        Ok(
+            Self {
+                effector: Soma::new(
+                    vec![
+                        Constraint::RequireOne(Role::InstanceProvider),
+                        Constraint::RequireOne(Role::Client)
+                    ],
+                    vec![ ]
+                )?,
 
-            provider: RequiredOnce::new(),
-            owner: RequiredOnce::new(),
+                instance: None,
 
-            instance: None,
-
-            timer: Timer::default(),
-            retries: 0,
-        }
-    }
-
-    fn init(mut self, effector: Effector) -> Result<Self> {
-        self.effector.set(effector)?;
-
-        Ok(self)
+                timer: Timer::default(),
+                retries: 0,
+            }
+        )
     }
 
     fn add_input(mut self, input: Handle, role: Role)
@@ -72,8 +71,8 @@ impl ClientLobe {
             self.instance = Some(instance);
             self.retries = NUM_RETRIES;
 
-            let this_lobe = self.effector.get()?.this_lobe();
-            self.effector.get()?.send(this_lobe, Message::AttemptConnect(url));
+            let this_lobe = self.soma.effector()?.this_lobe();
+            self.soma.send(this_lobe, Message::AttemptConnect(url))?;
 
             Ok(self)
         }
@@ -83,15 +82,15 @@ impl ClientLobe {
     }
 
     fn attempt_connect(mut self, src: Handle, url: Url) -> Result<Self> {
-        assert_eq!(src, self.effector.get()?.this_lobe());
+        assert_eq!(src, self.soma.this_lobe()?);
 
-        let connected_effector = self.effector.get()?.clone();
-        let retry_effector = self.effector.get()?.clone();
-        let timer_effector = self.effector.get()?.clone();
+        let connected_effector = self.soma.effector()?.clone();
+        let retry_effector = self.soma.effector()?.clone();
+        let timer_effector = self.soma.effector()?.clone();
 
-        let client_remote = self.effector.get()?.remote();
+        let client_remote = self.soma.effector()?.remote();
 
-        let owner = *self.owner.get()?;
+        let owner = self.soma.req_input(Role::Client)?;
 
         if self.retries == 0 {
             bail!("unable to connect to instance")
@@ -108,7 +107,7 @@ impl ClientLobe {
 
         let retry_url = url.clone();
 
-        self.effector.get()?.spawn(
+        self.soma.spawn(
             self.timer.sleep(Duration::from_secs(5))
                 .and_then(
                     move |_| connect_async(url, client_remote)
@@ -144,7 +143,7 @@ impl ClientLobe {
                         Ok(())
                     }
                 )
-        );
+        )?;
 
         Ok(self)
     }
@@ -157,12 +156,9 @@ impl Lobe for ClientLobe {
     fn update(self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
-        match msg {
-            Protocol::Init(effector) => self.init(effector),
-            Protocol::AddInput(input, role) => {
-                self.add_input(input, role)
-            },
+        self.soma.update(&msg)?;
 
+        match msg {
             Protocol::Message(
                 src, Message::ProvideInstance(instance, url)
             ) => {

@@ -16,14 +16,16 @@ pub struct AgentLobe {
 }
 
 impl AgentLobe {
-    pub fn new() -> Self {
-        Self {
-            effector: RequiredOnce::new(),
+    pub fn new() -> Result<Self> {
+        Ok(
+            Self {
+                effector: RequiredOnce::new(),
 
-            controller: RequiredOnce::new(),
-            client: RequiredOnce::new(),
-            player: RequiredOnce::new(),
-        }
+                controller: RequiredOnce::new(),
+                client: RequiredOnce::new(),
+                player: RequiredOnce::new(),
+            }
+        )
     }
     fn init(mut self, effector: Effector) -> Result<Self> {
         self.effector.set(effector)?;

@@ -2,13 +2,13 @@
 use std::collections::HashMap;
 
 use cortical;
-use cortical::{ Lobe, Handle, Protocol, ResultExt };
+use cortical::{ Lobe, Handle, Protocol, ResultExt, Constraint };
 use url::Url;
 use uuid::Uuid;
 
 use super::super::{ Result };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
-use lobes::{ Message, Role, Effector, Cortex, RequiredOnce };
+use lobes::{ Message, Role, Cortex, Soma };
 use lobes::agent::{ AgentLobe };
 use lobes::client::{ ClientLobe };
 use lobes::launcher::{ LauncherLobe, LauncherSettings };
@@ -31,15 +31,10 @@ pub struct MeleeSettings<L1: Lobe + 'static, L2: Lobe + 'static> {
 
 /// lobe designed to pit two bots against each other in Sc2 games
 pub struct MeleeLobe {
-    effector:       RequiredOnce<Effector>,
+    soma:           Soma,
 
-    launcher:       RequiredOnce<Handle>,
-
-    agent1:         RequiredOnce<Handle>,
-    agent2:         RequiredOnce<Handle>,
-
-    client1:        RequiredOnce<Handle>,
-    client2:        RequiredOnce<Handle>,
+    agents:         Vec<Handle>,
+    clients:        Vec<Handle>,
 
     instances:      HashMap<Uuid, (Url, PortSet)>,
     ports:          Vec<GamePorts>,
@@ -55,29 +50,34 @@ pub struct MeleeLobe {
 
 impl MeleeLobe {
     /// melee lobe only works as a controller in a melee cortex
-    fn new(suite: MeleeSuite) -> Self {
-        Self {
-            effector: RequiredOnce::new(),
+    fn new(suite: MeleeSuite) -> Result<Self> {
+        Ok(
+            Self {
+                soma: Soma::new(
+                    vec![ ],
+                    vec![
+                        Constraint::RequireOne(Role::Launcher),
 
-            launcher: RequiredOnce::new(),
+                        Constraint::Variadic(Role::Controller),
+                        Constraint::Variadic(Role::InstanceProvider),
+                    ]
+                )?,
 
-            agent1: RequiredOnce::new(),
-            agent2: RequiredOnce::new(),
+                agents: vec![ ],
+                clients: vec![ ],
 
-            client1: RequiredOnce::new(),
-            client2: RequiredOnce::new(),
+                instances: HashMap::new(),
+                ports: vec![ ],
 
-            instances: HashMap::new(),
-            ports: vec![ ],
+                suite: Some(suite),
 
-            suite: Some(suite),
-
-            provided: false,
-            ready: (false, false),
-            game_settings: None,
-            game_ports: None,
-            player_setup: (None, None),
-        }
+                provided: false,
+                ready: (false, false),
+                game_settings: None,
+                game_ports: None,
+                player_setup: (None, None),
+            }
+        )
     }
 
     /// create the melee cortex
@@ -95,7 +95,7 @@ impl MeleeLobe {
             L1::Role: From<Role>,
             L2::Role: From<Role>,
     {
-        let mut cortex = Cortex::new(MeleeLobe::new(settings.suite));
+        let mut cortex = Cortex::new(MeleeLobe::new(settings.suite)?);
 
         let launcher = cortex.add_lobe(LauncherLobe::from(settings.launcher)?);
 
@@ -104,11 +104,11 @@ impl MeleeLobe {
         let player1 = cortex.add_lobe(settings.players.0);
         let player2 = cortex.add_lobe(settings.players.1);
 
-        let agent1 = cortex.add_lobe(AgentLobe::new());
-        let agent2 = cortex.add_lobe(AgentLobe::new());
+        let agent1 = cortex.add_lobe(AgentLobe::new()?);
+        let agent2 = cortex.add_lobe(AgentLobe::new()?);
 
-        let client1 = cortex.add_lobe(ClientLobe::new());
-        let client2 = cortex.add_lobe(ClientLobe::new());
+        let client1 = cortex.add_lobe(ClientLobe::new()?);
+        let client2 = cortex.add_lobe(ClientLobe::new()?);
 
         cortex.connect(melee, launcher, Role::Launcher);
 
@@ -126,59 +126,23 @@ impl MeleeLobe {
         Ok(cortex)
     }
 
-    fn init(mut self, effector: Effector) -> Result<Self> {
-        self.effector.set(effector)?;
-
-        Ok(self)
-    }
-
-    fn add_output(mut self, output: Handle, role: Role)
-        -> Result<Self>
-    {
-        match role {
-            Role::Launcher => self.launcher.set(output)?,
-            Role::Controller => {
-                if !self.agent1.is_set() {
-                    self.agent1.set(output)?;
-                }
-                else if !self.agent2.is_set() {
-                    self.agent2.set(output)?;
-                }
-                else {
-                    bail!("both agents are already specified")
-                }
-            },
-            Role::InstanceProvider => {
-                if !self.client1.is_set() {
-                    self.client1.set(output)?;
-                }
-                else if !self.client2.is_set() {
-                    self.client2.set(output)?;
-                }
-                else {
-                    bail!("both clients are already specified")
-                }
-            },
-
-            _ => bail!("invalid role {:#?}", role)
-        }
-
-        Ok(self)
-    }
-
     fn start(mut self) -> Result<Self> {
+        let clients = self.soma.var_output(Role::InstanceProvider)?.clone();
+        let agents = self.soma.var_output(Role::Controller)?.clone();
+
+        assert_eq!(2, clients.len());
+        assert_eq!(2, agents.len());
+
         if self.suite.is_none() {
-            self.effector.get()?.stop();
+            self.soma.stop()?;
         }
         else {
             self.provided = false;
 
-            self.effector.get()?.send(
-                *self.launcher.get()?, Message::LaunchInstance
-            );
-            self.effector.get()?.send(
-                *self.launcher.get()?, Message::LaunchInstance
-            );
+            let launcher = self.soma.req_output(Role::Launcher)?;
+
+            self.soma.send(launcher, Message::LaunchInstance)?;
+            self.soma.send(launcher, Message::LaunchInstance)?;
         }
 
         Ok(self)
@@ -189,7 +153,7 @@ impl MeleeLobe {
     )
         -> Result<Self>
     {
-        assert_eq!(src, *self.launcher.get()?);
+        assert_eq!(src, self.soma.req_output(Role::Launcher)?);
 
         self.instances = instances;
         self.provide_instances()
@@ -198,7 +162,7 @@ impl MeleeLobe {
     fn on_ports_pool(mut self, src: Handle, ports: Vec<GamePorts>)
         -> Result<Self>
     {
-        assert_eq!(src, *self.launcher.get()?);
+        assert_eq!(src, self.soma.req_output(Role::Launcher)?);
 
         self.ports = ports;
         self.provide_instances()
@@ -223,14 +187,14 @@ impl MeleeLobe {
                     .nth(1).unwrap()
                 ;
 
-                self.effector.get()?.send(
-                    *self.client1.get()?,
+                self.soma.send(
+                    self.clients[0],
                     Message::ProvideInstance(*id1, url1.clone())
-                );
-                self.effector.get()?.send(
-                    *self.client2.get()?,
+                )?;
+                self.soma.send(
+                    self.clients[1],
                     Message::ProvideInstance(*id2, url2.clone())
-                );
+                )?;
 
                 let mut game_ports = self.ports[0].clone();
 
@@ -254,10 +218,10 @@ impl MeleeLobe {
     }
 
     fn on_agent_ready(mut self, src: Handle) -> Result<Self> {
-        if src == *self.agent1.get()? {
+        if src == self.agents[0] {
             self.ready.0 = true;
         }
-        else if src == *self.agent2.get()? {
+        else if src == self.agents[1] {
             self.ready.1 = true;
         }
         else {
@@ -287,12 +251,12 @@ impl MeleeLobe {
     fn request_player_setup(self) -> Result<Self> {
         let settings = self.game_settings.as_ref().unwrap().clone();
 
-        self.effector.get()?.send(
-            *self.agent1.get()?, Message::RequestPlayerSetup(settings.clone())
-        );
-        self.effector.get()?.send(
-            *self.agent2.get()?, Message::RequestPlayerSetup(settings)
-        );
+        self.soma.send(
+            self.agents[0], Message::RequestPlayerSetup(settings.clone())
+        )?;
+        self.soma.send(
+            self.agents[1], Message::RequestPlayerSetup(settings)
+        )?;
 
         Ok(self)
     }
@@ -300,10 +264,10 @@ impl MeleeLobe {
     fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
         -> Result<Self>
     {
-        if src == *self.agent1.get()? {
+        if src == self.agents[0] {
             self.player_setup.0 = Some(setup);
         }
-        else if src == *self.agent2.get()? {
+        else if src == self.agents[1] {
             self.player_setup.1 = Some(setup);
         }
         else {
@@ -326,10 +290,10 @@ impl MeleeLobe {
     )
         -> Result<Self>
     {
-        self.effector.get()?.send(
-            *self.agent1.get()?,
+        self.soma.send(
+            self.agents[0],
             Message::CreateGame(game.clone(), vec![ players.0, players.1 ])
-        );
+        )?;
 
         Ok(self)
     }
@@ -337,19 +301,15 @@ impl MeleeLobe {
     fn on_game_created(self, src: Handle)
         -> Result<Self>
     {
-        assert_eq!(src, *self.agent1.get()?);
+        assert_eq!(src, self.agents[0]);
 
         let setup1 = self.player_setup.0.clone().unwrap();
         let setup2 = self.player_setup.1.clone().unwrap();
         let ports1 = self.game_ports.clone().unwrap();
         let ports2 = ports1.clone();
 
-        self.effector.get()?.send(
-            *self.agent1.get()?, Message::GameReady(setup1, ports1)
-        );
-        self.effector.get()?.send(
-            *self.agent2.get()?, Message::GameReady(setup2, ports2)
-        );
+        self.soma.send(self.agents[0], Message::GameReady(setup1, ports1))?;
+        self.soma.send(self.agents[1], Message::GameReady(setup2, ports2))?;
 
         Ok(self)
     }
@@ -362,11 +322,9 @@ impl Lobe for MeleeLobe {
     fn update(self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
+        self.soma.update(&msg)?;
+
         match msg {
-            Protocol::Init(effector) => self.init(effector),
-            Protocol::AddOutput(output, role) => {
-                self.add_output(output, role)
-            },
             Protocol::Start => {
                 self.start()
             },

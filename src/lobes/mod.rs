@@ -56,7 +56,7 @@ pub enum Message {
     JoinGame(GamePorts),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 /// defines the roles that govern how connections between lobes are made
 pub enum Role {
     /// launches new game instances or kills them
@@ -74,46 +74,7 @@ pub enum Role {
     Client,
 }
 
-/// type alias for an Sc2 Effector
-pub type Effector = cortical::Effector<Message, Role>;
 /// type alias for an Sc2 Cortex
 pub type Cortex = cortical::Cortex<Message, Role>;
-
-/// useful structure for storing lobe handles and effectors
-pub struct RequiredOnce<T> {
-    value: Option<T>,
-}
-
-impl<T> RequiredOnce<T> {
-    /// create a new empty value
-    pub fn new() -> Self {
-        Self { value: None }
-    }
-
-    /// whether or not the value has been set
-    pub fn is_set(&self) -> bool {
-        self.value.is_some()
-    }
-
-    /// set the value or Err if it has already been set
-    pub fn set(&mut self, value: T) -> Result<()> {
-        if self.value.is_none() {
-            self.value = Some(value);
-
-            Ok(())
-        }
-        else {
-            bail!("this can only be set once")
-        }
-    }
-
-    /// get the value or Err if it has not been set
-    pub fn get(&self) -> Result<&T> {
-        if self.value.is_some() {
-            Ok(self.value.as_ref().unwrap())
-        }
-        else {
-            bail!("required value was never set")
-        }
-    }
-}
+/// type alias for an Sc2 Soma
+pub type Soma = cortical::Soma<Message, Role>;

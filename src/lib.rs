@@ -36,8 +36,7 @@ use std::path::PathBuf;
 pub use lobes::{
     Message,
     Role,
-    Effector,
-    RequiredOnce,
+    Soma,
 
     LauncherLobe,
     LauncherSettings,
