@@ -1,14 +1,11 @@
 
 use std::path::PathBuf;
-use std::time;
-use std::thread;
 use std::process;
 
 use url::Url;
 
-use super::{ Result, ErrorKind };
+use super::super::{ Result, ErrorKind };
 use data::{ Rect, PortSet };
-use client::{ Client };
 
 #[derive(Copy, Clone)]
 pub enum InstanceKind {
@@ -96,22 +93,6 @@ impl Instance {
         self.child = Some(cmd.spawn()?);
 
         Ok(())
-    }
-
-    pub fn connect(&self) -> Result<Client> {
-        let url = self.get_url()?;
-        println!("attempting connection to {:?}", url);
-
-        for i in 0..10 {
-            match Client::connect(url.clone()) {
-                Ok(client) => return Ok(client),
-                Err(_) => ()
-            };
-            thread::sleep(time::Duration::from_millis(5000));
-            println!("retrying {}...", 10 - i);
-        };
-
-        Err(ErrorKind::ClientOpenFailed.into())
     }
 
     pub fn get_url(&self) -> Result<Url> {

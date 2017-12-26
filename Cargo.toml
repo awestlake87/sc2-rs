@@ -29,31 +29,6 @@ branch = "reactive"
 members = ["examples/examples-common"]
 
 [[example]]
-name = "bot-micro"
-crate-type = ["bin"]
-path = "examples/bot-micro/main.rs"
-
-[[example]]
-name = "bot-mp"
-crate-type = ["bin"]
-path = "examples/bot-mp/main.rs"
-
-[[example]]
-name = "bot-simple"
-crate-type = ["bin"]
-path = "examples/bot-simple/main.rs"
-
-[[example]]
-name = "debug"
-crate-type = ["bin"]
-path = "examples/debug/main.rs"
-
-[[example]]
-name = "replay"
-crate-type = ["bin"]
-path = "examples/replay/main.rs"
-
-[[example]]
 name = "reactive"
 crate-type = ["bin"]
 path = "examples/reactive/main.rs"

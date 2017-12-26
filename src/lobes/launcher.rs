@@ -9,10 +9,32 @@ use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
 
-use super::super::{ Result, ErrorKind, LauncherSettings };
-use data::{ Rect, PortSet };
-use instance::{ Instance, InstanceSettings, InstanceKind };
+use super::super::{ Result, ErrorKind };
+use data::{ Rect, PortSet, GamePorts };
 use lobes::{ Message, Effector, Role, RequiredOnce };
+use lobes::instance::{ Instance, InstanceSettings, InstanceKind };
+
+/// settings used to create a launcher
+pub struct LauncherSettings {
+    /// installation directory
+    ///
+    /// auto-detect if not specified
+    pub dir:            Option<PathBuf>,
+    /// use Wine to run the game - Linux users
+    pub use_wine:       bool,
+    /// starting point for game ports
+    pub base_port:      u16,
+}
+
+impl Default for LauncherSettings {
+    fn default() -> Self {
+        Self {
+            dir: None,
+            use_wine: false,
+            base_port: 9168,
+        }
+    }
+}
 
 /// lobe in charge of launching game instances and assigning ports
 pub struct LauncherLobe {
@@ -25,6 +47,7 @@ pub struct LauncherLobe {
 
     controller:         RequiredOnce<Handle>,
     instances:          HashMap<Uuid, Instance>,
+    ports:              Vec<GamePorts>,
 }
 
 impl LauncherLobe {
@@ -52,6 +75,7 @@ impl LauncherLobe {
 
                 controller: RequiredOnce::new(),
                 instances: HashMap::new(),
+                ports: vec![ ],
             }
         )
     }
@@ -107,17 +131,45 @@ impl LauncherLobe {
         self.effector.get()?.send(
             *self.controller.get()?,
             Message::InstancePool({
-                let mut instances = vec![ ];
+                let mut instances = HashMap::new();
 
                 for (uuid, instance) in self.instances.iter() {
-                    instances.push((*uuid, instance.get_url()?))
+                    instances.insert(
+                        *uuid, (instance.get_url()?, instance.ports)
+                    );
                 }
 
                 instances
             })
         );
 
+        if self.instances.len() / 2 > self.ports.len() {
+            let game_ports = self.create_game_ports();
+            self.ports.push(game_ports);
+
+            self.effector.get()?.send(
+                *self.controller.get()?,
+                Message::PortsPool(self.ports.clone())
+            );
+        }
+
         Ok(self)
+    }
+
+    /// create a set of ports for multiplayer games
+    pub fn create_game_ports(&mut self) -> GamePorts {
+        let ports = GamePorts {
+            shared_port: self.current_port,
+            server_ports: PortSet {
+                game_port: self.current_port + 1,
+                base_port: self.current_port + 2,
+            },
+            client_ports: vec![ ]
+        };
+
+        self.current_port += 3;
+
+        ports
     }
 }
 

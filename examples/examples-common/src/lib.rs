@@ -10,18 +10,15 @@ extern crate serde_derive;
 
 extern crate sc2;
 
-mod marine_micro_bot;
-mod terran_bot;
-
 use std::path::PathBuf;
 
 use rand::random;
 
-use sc2::{ CoordinatorSettings, Result, Launcher, LauncherSettings };
+use sc2::{ Result, LauncherSettings };
 use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
 
-pub use marine_micro_bot::{ MarineMicroBot };
-pub use terran_bot::{ TerranBot };
+//pub use marine_micro_bot::{ MarineMicroBot };
+//pub use terran_bot::{ TerranBot };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
@@ -57,7 +54,7 @@ pub struct Args {
 
 pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let default_settings = LauncherSettings::default();
-    
+
     Ok(
         LauncherSettings {
             use_wine: args.flag_wine,
@@ -74,7 +71,7 @@ pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     )
 }
 
-pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+/*pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
     let launcher = Launcher::from(get_launcher_settings(args)?)?;
 
     Ok(
@@ -89,7 +86,7 @@ pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
             },
         }
     )
-}
+}*/
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     let map = match args.flag_map {

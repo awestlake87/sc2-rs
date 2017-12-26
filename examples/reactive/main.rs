@@ -54,9 +54,14 @@ impl PlayerLobe {
         Ok(self)
     }
 
-    fn join_game(self) -> sc2::Result<Self> {
+    fn on_req_player_setup(self, src: Handle) -> sc2::Result<Self> {
+        assert_eq!(src, *self.agent.get()?);
+
         self.effector.get()?.send(
-            *self.agent.get()?, sc2::Message::JoinGame(self.race)
+            *self.agent.get()?,
+            sc2::Message::PlayerSetup(
+                sc2::data::PlayerSetup::Player { race: self.race }
+            )
         );
 
         Ok(self)
@@ -81,8 +86,8 @@ impl Lobe for PlayerLobe {
                 self.start()
             },
 
-            Protocol::Message(_, sc2::Message::CreateGame(_)) => {
-                self.join_game()
+            Protocol::Message(src, sc2::Message::RequestPlayerSetup(_)) => {
+                self.on_req_player_setup(src)
             }
 
             _ => Ok(self)

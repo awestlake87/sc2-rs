@@ -2,21 +2,24 @@
 mod agent;
 mod client;
 mod ctrlc_breaker;
+mod instance;
 mod launcher;
 mod melee;
 mod observer;
 
 pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
-pub use self::launcher::{ LauncherLobe };
+pub use self::launcher::{ LauncherLobe, LauncherSettings };
 pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
 pub use self::observer::{ ObserverLobe };
+
+use std::collections::HashMap;
 
 use cortical;
 use url::Url;
 use uuid::Uuid;
 
 use super::{ Result };
-use data::{ GameSettings, Race };
+use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
 
 #[derive(Debug)]
 /// the messages that can be sent between Sc2 capable
@@ -24,21 +27,33 @@ pub enum Message {
     /// launch an instance
     LaunchInstance,
     /// the pool of instances to choose from
-    InstancePool(Vec<(Uuid, Url)>),
+    InstancePool(HashMap<Uuid, (Url, PortSet)>),
+    /// the pool of game ports to choose from (num_instances / 2)
+    PortsPool(Vec<GamePorts>),
 
     /// allow a lobe to take complete control of an instance
     ProvideInstance(Uuid, Url),
     /// attempt to connect to instance
     AttemptConnect(Url),
+
     /// client successfully connected to instance
     Connected,
     /// agent is ready for a game to begin
     Ready,
 
-    /// create a game with the given settings
-    CreateGame(GameSettings),
+    /// request player setup
+    RequestPlayerSetup(GameSettings),
+    /// respond with player setup
+    PlayerSetup(PlayerSetup),
+
+    /// create a game with the given settings and list of participants
+    CreateGame(GameSettings, Vec<PlayerSetup>),
+    /// game was created with the given settings
+    GameCreated,
+    /// notify agents that game is ready to join with the given player setup
+    GameReady(PlayerSetup, GamePorts),
     /// join an existing game
-    JoinGame(Race),
+    JoinGame(GamePorts),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

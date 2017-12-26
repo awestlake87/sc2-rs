@@ -5,36 +5,14 @@ use std::path::{ PathBuf, MAIN_SEPARATOR };
 use glob::glob;
 use regex::Regex;
 
-use super::{ Result, ErrorKind };
 use data::{ Rect, PortSet, GamePorts };
 use instance::{ Instance, InstanceSettings, InstanceKind };
+use lobes::{ Result, ErrorKind };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ExeArch {
     X64,
     X32
-}
-
-/// settings used to create a launcher
-pub struct LauncherSettings {
-    /// installation directory
-    ///
-    /// auto-detect if not specified
-    pub dir:            Option<PathBuf>,
-    /// use Wine to run the game - Linux users
-    pub use_wine:       bool,
-    /// starting point for game ports
-    pub base_port:      u16,
-}
-
-impl Default for LauncherSettings {
-    fn default() -> Self {
-        Self {
-            dir: None,
-            use_wine: false,
-            base_port: 9168,
-        }
-    }
 }
 
 /// object in charge of launching game instances and assigning ports

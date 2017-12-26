@@ -26,30 +26,21 @@ extern crate tungstenite;
 extern crate url;
 extern crate uuid;
 
-mod agent;
-mod client;
-mod coordinator;
-mod instance;
-mod frame;
-mod launcher;
 mod lobes;
-mod participant;
-mod replay_observer;
 
 pub mod colors;
 pub mod data;
 
 use std::path::PathBuf;
 
-pub use agent::{ Agent };
-pub use coordinator::{ Coordinator, CoordinatorSettings };
-pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
-pub use launcher::{ Launcher, LauncherSettings };
 pub use lobes::{
     Message,
     Role,
     Effector,
     RequiredOnce,
+
+    LauncherLobe,
+    LauncherSettings,
 
     MeleeLobe,
     MeleeSettings,
@@ -59,8 +50,6 @@ pub use lobes::{
 
     CtrlcBreakerLobe
 };
-pub use participant::{ User };
-pub use replay_observer::{ ReplayObserver };
 
 error_chain! {
     links {

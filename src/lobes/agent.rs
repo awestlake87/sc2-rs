@@ -5,7 +5,7 @@ use cortical::{ ResultExt, Handle, Lobe, Protocol };
 use super::super::{ Result };
 use super::{ Message, Effector, Role, RequiredOnce };
 
-use data::{ GameSettings };
+use data::{ GameSettings, GamePorts, PlayerSetup };
 
 pub struct AgentLobe {
     effector:           RequiredOnce<Effector>,
@@ -64,12 +64,54 @@ impl AgentLobe {
         Ok(self)
     }
 
-    fn create_game(self, src: Handle, settings: GameSettings) -> Result<Self> {
+    fn on_req_player_setup(self, src: Handle, settings: GameSettings)
+        -> Result<Self>
+    {
         assert_eq!(src, *self.controller.get()?);
 
         self.effector.get()?.send(
-            *self.player.get()?, Message::CreateGame(settings)
+            *self.player.get()?, Message::RequestPlayerSetup(settings)
         );
+
+        Ok(self)
+    }
+
+    fn on_player_setup(self, src: Handle, setup: PlayerSetup) -> Result<Self> {
+        assert_eq!(src, *self.player.get()?);
+
+        self.effector.get()?.send(
+            *self.controller.get()?, Message::PlayerSetup(setup)
+        );
+
+        Ok(self)
+    }
+
+    fn create_game(
+        self, src: Handle, settings: GameSettings, players: Vec<PlayerSetup>
+    )
+        -> Result<Self>
+    {
+        assert_eq!(src, *self.controller.get()?);
+
+        println!("create game with settings: {:#?}", settings);
+        println!("fake it for now");
+
+        self.effector.get()?.send(
+            *self.controller.get()?, Message::GameCreated
+        );
+
+        Ok(self)
+    }
+
+    fn on_game_ready(
+        self, src: Handle, setup: PlayerSetup, ports: GamePorts
+    )
+        -> Result<Self>
+    {
+        assert_eq!(src, *self.controller.get()?);
+
+        println!("join game with setup {:#?} and ports {:#?}", setup, ports);
+        println!("fake it for now");
 
         Ok(self)
     }
@@ -95,9 +137,18 @@ impl Lobe for AgentLobe {
                 self.on_connected(src)
             },
 
-            Protocol::Message(src, Message::CreateGame(settings)) => {
-                self.create_game(src, settings)
+            Protocol::Message(src, Message::RequestPlayerSetup(settings)) => {
+                self.on_req_player_setup(src, settings)
             },
+            Protocol::Message(src, Message::PlayerSetup(setup)) => {
+                self.on_player_setup(src, setup)
+            },
+            Protocol::Message(src, Message::CreateGame(settings, players)) => {
+                self.create_game(src, settings, players)
+            },
+            Protocol::Message(src, Message::GameReady(setup, ports)) => {
+                self.on_game_ready(src, setup, ports)
+            }
 
             _ => Ok(self),
         }.chain_err(

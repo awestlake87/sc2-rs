@@ -48,7 +48,7 @@ impl IntoProto<common::Race> for Race {
 
 /// difficulty setting for built-in StarCraft II AI
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Difficulty {
     VeryEasy,
     Easy,
@@ -81,7 +81,7 @@ impl Difficulty {
 }
 
 /// settings for players
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum PlayerSetup {
     /// add a built-in StarCraft II bot with the given race and difficulty
     Computer {

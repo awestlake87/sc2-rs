@@ -1,15 +1,17 @@
 
+use std::collections::HashMap;
+
 use cortical;
 use cortical::{ Lobe, Handle, Protocol, ResultExt };
 use url::Url;
 use uuid::Uuid;
 
-use super::super::{ Result, LauncherSettings };
-use data::{ GameSettings };
+use super::super::{ Result };
+use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
 use lobes::{ Message, Role, Effector, Cortex, RequiredOnce };
 use lobes::agent::{ AgentLobe };
 use lobes::client::{ ClientLobe };
-use lobes::launcher::{ LauncherLobe };
+use lobes::launcher::{ LauncherLobe, LauncherSettings };
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {
@@ -39,11 +41,16 @@ pub struct MeleeLobe {
     client1:        RequiredOnce<Handle>,
     client2:        RequiredOnce<Handle>,
 
-    instances:      Option<((Uuid, Url), (Uuid, Url))>,
+    instances:      HashMap<Uuid, (Url, PortSet)>,
+    ports:          Vec<GamePorts>,
 
-    suite:          MeleeSuite,
+    suite:          Option<MeleeSuite>,
 
+    provided:       bool,
     ready:          (bool, bool),
+    game_settings:  Option<GameSettings>,
+    game_ports:     Option<GamePorts>,
+    player_setup:   (Option<PlayerSetup>, Option<PlayerSetup>),
 }
 
 impl MeleeLobe {
@@ -60,11 +67,16 @@ impl MeleeLobe {
             client1: RequiredOnce::new(),
             client2: RequiredOnce::new(),
 
-            instances: None,
+            instances: HashMap::new(),
+            ports: vec![ ],
 
-            suite: suite,
+            suite: Some(suite),
 
+            provided: false,
             ready: (false, false),
+            game_settings: None,
+            game_ports: None,
+            player_setup: (None, None),
         }
     }
 
@@ -154,41 +166,89 @@ impl MeleeLobe {
         Ok(self)
     }
 
-    fn start(self) -> Result<Self> {
-        self.effector.get()?.send(
-            *self.launcher.get()?, Message::LaunchInstance
-        );
-        self.effector.get()?.send(
-            *self.launcher.get()?, Message::LaunchInstance
-        );
+    fn start(mut self) -> Result<Self> {
+        if self.suite.is_none() {
+            self.effector.get()?.stop();
+        }
+        else {
+            self.provided = false;
+
+            self.effector.get()?.send(
+                *self.launcher.get()?, Message::LaunchInstance
+            );
+            self.effector.get()?.send(
+                *self.launcher.get()?, Message::LaunchInstance
+            );
+        }
 
         Ok(self)
     }
 
-    fn on_instance_pool(mut self, src: Handle, instances: Vec<(Uuid, Url)>)
+    fn on_instance_pool(
+        mut self, src: Handle, instances: HashMap<Uuid, (Url, PortSet)>
+    )
         -> Result<Self>
     {
         assert_eq!(src, *self.launcher.get()?);
 
-        if instances.len() < 2 || self.instances.is_some() {
+        self.instances = instances;
+        self.provide_instances()
+    }
+
+    fn on_ports_pool(mut self, src: Handle, ports: Vec<GamePorts>)
+        -> Result<Self>
+    {
+        assert_eq!(src, *self.launcher.get()?);
+
+        self.ports = ports;
+        self.provide_instances()
+    }
+
+    fn provide_instances(mut self) -> Result<Self> {
+        if self.ports.len() < 1 {
+            // not enough game ports to start
+            Ok(self)
+        }
+        else if self.instances.len() < 2 {
+            // not enough instances to start
+            Ok(self)
+        }
+        else if !self.provided {
+            // we haven't already provided the instances
+            let game_ports = {
+                let (id1, &(ref url1, ref ports1)) = self.instances.iter()
+                    .nth(0).unwrap()
+                ;
+                let (id2, &(ref url2, ref ports2)) = self.instances.iter()
+                    .nth(1).unwrap()
+                ;
+
+                self.effector.get()?.send(
+                    *self.client1.get()?,
+                    Message::ProvideInstance(*id1, url1.clone())
+                );
+                self.effector.get()?.send(
+                    *self.client2.get()?,
+                    Message::ProvideInstance(*id2, url2.clone())
+                );
+
+                let mut game_ports = self.ports[0].clone();
+
+                game_ports.client_ports = vec![ *ports1, *ports2 ];
+
+                game_ports
+            };
+
+            self.provided = true;
+            self.ready = (false, false);
+            self.game_settings = None;
+            self.game_ports = Some(game_ports);
+            self.player_setup = (None, None);
+
             Ok(self)
         }
         else {
-            self.instances = Some(
-                (instances[0].clone(), instances[1].clone())
-            );
-
-            let (i1, i2) = self.instances.clone().unwrap();
-
-            self.effector.get()?.send(
-                *self.client1.get()?, Message::ProvideInstance(i1.0, i1.1)
-            );
-            self.effector.get()?.send(
-                *self.client2.get()?, Message::ProvideInstance(i2.0, i2.1)
-            );
-
-            self.ready = (false, false);
-
+            // everything is taken care of
             Ok(self)
         }
     }
@@ -205,21 +265,91 @@ impl MeleeLobe {
         }
 
         if self.ready == (true, true) {
-            let first_game = match &self.suite {
-                &MeleeSuite::OneAndDone(ref game) => {
-                    game.clone()
-                },
-            };
+            self.suite = match self.suite {
+                Some(MeleeSuite::OneAndDone(game)) => {
+                    self.game_settings = Some(game);
 
-            self.start_game(first_game)
+                    // set melee suite to none afterwards
+                    None
+                },
+
+                None => bail!("expected melee suite to contain data")
+            };
+            assert!(self.game_settings.is_some());
+
+            self.request_player_setup()
         }
         else {
             Ok(self)
         }
     }
 
-    fn start_game(self, _: GameSettings) -> Result<Self> {
-        println!("START GAME!");
+    fn request_player_setup(self) -> Result<Self> {
+        let settings = self.game_settings.as_ref().unwrap().clone();
+
+        self.effector.get()?.send(
+            *self.agent1.get()?, Message::RequestPlayerSetup(settings.clone())
+        );
+        self.effector.get()?.send(
+            *self.agent2.get()?, Message::RequestPlayerSetup(settings)
+        );
+
+        Ok(self)
+    }
+
+    fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
+        -> Result<Self>
+    {
+        if src == *self.agent1.get()? {
+            self.player_setup.0 = Some(setup);
+        }
+        else if src == *self.agent2.get()? {
+            self.player_setup.1 = Some(setup);
+        }
+        else {
+            bail!("invalid source for player setup")
+        }
+
+        match self.player_setup {
+            (Some(setup1), Some(setup2)) => {
+                let settings = self.game_settings.clone().unwrap();
+
+                self.create_game(settings, (setup1, setup2))
+            },
+
+            _ => Ok(self)
+        }
+    }
+
+    fn create_game(
+        self, game: GameSettings, players: (PlayerSetup, PlayerSetup)
+    )
+        -> Result<Self>
+    {
+        self.effector.get()?.send(
+            *self.agent1.get()?,
+            Message::CreateGame(game.clone(), vec![ players.0, players.1 ])
+        );
+
+        Ok(self)
+    }
+
+    fn on_game_created(self, src: Handle)
+        -> Result<Self>
+    {
+        assert_eq!(src, *self.agent1.get()?);
+
+        let setup1 = self.player_setup.0.clone().unwrap();
+        let setup2 = self.player_setup.1.clone().unwrap();
+        let ports1 = self.game_ports.clone().unwrap();
+        let ports2 = ports1.clone();
+
+        self.effector.get()?.send(
+            *self.agent1.get()?, Message::GameReady(setup1, ports1)
+        );
+        self.effector.get()?.send(
+            *self.agent2.get()?, Message::GameReady(setup2, ports2)
+        );
 
         Ok(self)
     }
@@ -244,10 +374,19 @@ impl Lobe for MeleeLobe {
             Protocol::Message(src, Message::InstancePool(instances)) => {
                 self.on_instance_pool(src, instances)
             },
+            Protocol::Message(src, Message::PortsPool(ports)) => {
+                self.on_ports_pool(src, ports)
+            },
 
             Protocol::Message(src, Message::Ready) => {
                 self.on_agent_ready(src)
-            }
+            },
+            Protocol::Message(src, Message::PlayerSetup(setup)) => {
+                self.on_player_setup(src, setup)
+            },
+            Protocol::Message(src, Message::GameCreated) => {
+                self.on_game_created(src)
+            },
 
             _ => Ok(self),
         }.chain_err(
