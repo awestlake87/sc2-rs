@@ -11,7 +11,7 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
-use cortical::{ Lobe, Protocol, Handle, Cortex, ResultExt };
+use cortical::{ Lobe, Protocol, Handle, Cortex, ResultExt, Constraint };
 use docopt::Docopt;
 use examples_common::{ USAGE, Args, get_launcher_settings, get_game_settings };
 
@@ -19,50 +19,31 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct PlayerLobe {
     race:               sc2::data::Race,
-    effector:           sc2::RequiredOnce<sc2::Effector>,
-    agent:              sc2::RequiredOnce<Handle>,
+    soma:               sc2::Soma,
 }
 
 impl PlayerLobe {
-    fn new(race: sc2::data::Race) -> Self {
-        Self {
-            race: race,
-            effector: sc2::RequiredOnce::new(),
-            agent: sc2::RequiredOnce::new(),
-        }
-    }
-
-    fn init(mut self, effector: sc2::Effector) -> sc2::Result<Self> {
-        self.effector.set(effector)?;
-
-        Ok(self)
-    }
-
-    fn add_input(mut self, input: Handle, role: sc2::Role)
-        -> sc2::Result<Self>
-    {
-        match role {
-            sc2::Role::Agent => self.agent.set(input)?,
-
-            _ => bail!("invalid role {:#?}", role)
-        }
-
-        Ok(self)
-    }
-
-    fn start(self) -> sc2::Result<Self> {
-        Ok(self)
+    fn new(race: sc2::data::Race) -> sc2::Result<Self> {
+        Ok(
+            Self {
+                race: race,
+                soma: sc2::Soma::new(
+                    vec![ Constraint::RequireOne(sc2::Role::Agent) ],
+                    vec![ ],
+                )?,
+            }
+        )
     }
 
     fn on_req_player_setup(self, src: Handle) -> sc2::Result<Self> {
-        assert_eq!(src, *self.agent.get()?);
+        assert_eq!(src, self.soma.req_input(sc2::Role::Agent)?);
 
-        self.effector.get()?.send(
-            *self.agent.get()?,
+        self.soma.send_req_input(
+            sc2::Role::Agent,
             sc2::Message::PlayerSetup(
                 sc2::data::PlayerSetup::Player { race: self.race }
             )
-        );
+        )?;
 
         Ok(self)
     }
@@ -72,20 +53,12 @@ impl Lobe for PlayerLobe {
     type Message = sc2::Message;
     type Role = sc2::Role;
 
-    fn update(self, msg: Protocol<Self::Message, Self::Role>)
+    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
-        match msg {
-            Protocol::Init(effector) => {
-                self.init(effector)
-            },
-            Protocol::AddInput(input, role) => {
-                self.add_input(input, role)
-            },
-            Protocol::Start => {
-                self.start()
-            },
+        self.soma.update(&msg)?;
 
+        match msg {
             Protocol::Message(src, sc2::Message::RequestPlayerSetup(_)) => {
                 self.on_req_player_setup(src)
             }
@@ -114,8 +87,8 @@ quick_main!(|| -> sc2::Result<()> {
                 launcher: get_launcher_settings(&args)?,
 
                 players: (
-                    PlayerLobe::new(sc2::data::Race::Zerg),
-                    PlayerLobe::new(sc2::data::Race::Terran)
+                    PlayerLobe::new(sc2::data::Race::Zerg)?,
+                    PlayerLobe::new(sc2::data::Race::Terran)?
                 ),
 
                 suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
@@ -123,7 +96,7 @@ quick_main!(|| -> sc2::Result<()> {
         )?
     );
 
-    cortex.add_lobe(sc2::CtrlcBreakerLobe::new());
+    cortex.add_lobe(sc2::CtrlcBreakerLobe::new()?);
 
     cortical::run(cortex)?;
 

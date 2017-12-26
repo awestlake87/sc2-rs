@@ -34,14 +34,14 @@ impl CtrlcBreakerLobe {
 
         let ctrlc_effector = self.soma.effector()?.clone();
 
-        self.soma.spawn(
+        self.soma.effector()?.spawn(
             rx.for_each(
                 move |_| {
                     ctrlc_effector.stop();
                     Ok(())
                 }
             )
-        )?;
+        );
 
         Ok(self)
     }
@@ -51,7 +51,7 @@ impl Lobe for CtrlcBreakerLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>)
+    fn update(mut self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
         self.soma.update(&msg)?;

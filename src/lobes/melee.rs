@@ -127,22 +127,22 @@ impl MeleeLobe {
     }
 
     fn start(mut self) -> Result<Self> {
-        let clients = self.soma.var_output(Role::InstanceProvider)?.clone();
-        let agents = self.soma.var_output(Role::Controller)?.clone();
+        self.clients = self.soma.var_output(Role::InstanceProvider)?.clone();
+        self.agents = self.soma.var_output(Role::Controller)?.clone();
 
-        assert_eq!(2, clients.len());
-        assert_eq!(2, agents.len());
+        assert_eq!(2, self.clients.len());
+        assert_eq!(2, self.agents.len());
 
         if self.suite.is_none() {
-            self.soma.stop()?;
+            self.soma.effector()?.stop();
         }
         else {
             self.provided = false;
 
             let launcher = self.soma.req_output(Role::Launcher)?;
 
-            self.soma.send(launcher, Message::LaunchInstance)?;
-            self.soma.send(launcher, Message::LaunchInstance)?;
+            self.soma.effector()?.send(launcher, Message::LaunchInstance);
+            self.soma.effector()?.send(launcher, Message::LaunchInstance);
         }
 
         Ok(self)
@@ -187,14 +187,14 @@ impl MeleeLobe {
                     .nth(1).unwrap()
                 ;
 
-                self.soma.send(
+                self.soma.effector()?.send(
                     self.clients[0],
                     Message::ProvideInstance(*id1, url1.clone())
-                )?;
-                self.soma.send(
+                );
+                self.soma.effector()?.send(
                     self.clients[1],
                     Message::ProvideInstance(*id2, url2.clone())
-                )?;
+                );
 
                 let mut game_ports = self.ports[0].clone();
 
@@ -251,12 +251,12 @@ impl MeleeLobe {
     fn request_player_setup(self) -> Result<Self> {
         let settings = self.game_settings.as_ref().unwrap().clone();
 
-        self.soma.send(
+        self.soma.effector()?.send(
             self.agents[0], Message::RequestPlayerSetup(settings.clone())
-        )?;
-        self.soma.send(
+        );
+        self.soma.effector()?.send(
             self.agents[1], Message::RequestPlayerSetup(settings)
-        )?;
+        );
 
         Ok(self)
     }
@@ -290,10 +290,10 @@ impl MeleeLobe {
     )
         -> Result<Self>
     {
-        self.soma.send(
+        self.soma.effector()?.send(
             self.agents[0],
             Message::CreateGame(game.clone(), vec![ players.0, players.1 ])
-        )?;
+        );
 
         Ok(self)
     }
@@ -308,8 +308,12 @@ impl MeleeLobe {
         let ports1 = self.game_ports.clone().unwrap();
         let ports2 = ports1.clone();
 
-        self.soma.send(self.agents[0], Message::GameReady(setup1, ports1))?;
-        self.soma.send(self.agents[1], Message::GameReady(setup2, ports2))?;
+        self.soma.effector()?.send(
+            self.agents[0], Message::GameReady(setup1, ports1)
+        );
+        self.soma.effector()?.send(
+            self.agents[1], Message::GameReady(setup2, ports2)
+        );
 
         Ok(self)
     }
@@ -319,7 +323,7 @@ impl Lobe for MeleeLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Self::Message, Self::Role>)
+    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
         self.soma.update(&msg)?;

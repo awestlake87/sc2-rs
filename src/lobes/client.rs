@@ -2,7 +2,7 @@
 use std::time::Duration;
 
 use cortical;
-use cortical::{ ResultExt, Handle, Lobe, Protocol };
+use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
 use futures::prelude::*;
 use tokio_timer::{ Timer };
 use tokio_tungstenite::{ connect_async };
@@ -18,9 +18,6 @@ const NUM_RETRIES: u32 = 10;
 pub struct ClientLobe {
     soma:               Soma,
 
-    provider:           RequiredOnce<Handle>,
-    owner:              RequiredOnce<Handle>,
-
     instance:           Option<Uuid>,
 
     timer:              Timer,
@@ -31,7 +28,7 @@ impl ClientLobe {
     pub fn new() -> Result<Self> {
         Ok(
             Self {
-                effector: Soma::new(
+                soma: Soma::new(
                     vec![
                         Constraint::RequireOne(Role::InstanceProvider),
                         Constraint::RequireOne(Role::Client)
@@ -47,32 +44,21 @@ impl ClientLobe {
         )
     }
 
-    fn add_input(mut self, input: Handle, role: Role)
-        -> Result<Self>
-    {
-        match role {
-            Role::Client => self.owner.set(input)?,
-            Role::InstanceProvider => self.provider.set(input)?,
-
-            _ => bail!("invalid input role {:#?}", role)
-        }
-
-        Ok(self)
-    }
-
     fn assign_instance(
         mut self, src: Handle, instance: Uuid, url: Url
     )
         -> Result<Self>
     {
-        assert_eq!(src, *self.provider.get()?);
+        assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
 
         if self.instance.is_none() {
             self.instance = Some(instance);
             self.retries = NUM_RETRIES;
 
             let this_lobe = self.soma.effector()?.this_lobe();
-            self.soma.send(this_lobe, Message::AttemptConnect(url))?;
+            self.soma.effector()?.send(
+                this_lobe, Message::AttemptConnect(url)
+            );
 
             Ok(self)
         }
@@ -82,7 +68,7 @@ impl ClientLobe {
     }
 
     fn attempt_connect(mut self, src: Handle, url: Url) -> Result<Self> {
-        assert_eq!(src, self.soma.this_lobe()?);
+        assert_eq!(src, self.soma.effector()?.this_lobe());
 
         let connected_effector = self.soma.effector()?.clone();
         let retry_effector = self.soma.effector()?.clone();
@@ -107,7 +93,7 @@ impl ClientLobe {
 
         let retry_url = url.clone();
 
-        self.soma.spawn(
+        self.soma.effector()?.spawn(
             self.timer.sleep(Duration::from_secs(5))
                 .and_then(
                     move |_| connect_async(url, client_remote)
@@ -143,7 +129,7 @@ impl ClientLobe {
                         Ok(())
                     }
                 )
-        )?;
+        );
 
         Ok(self)
     }
@@ -153,7 +139,7 @@ impl Lobe for ClientLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>)
+    fn update(mut self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
         self.soma.update(&msg)?;

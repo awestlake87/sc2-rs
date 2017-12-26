@@ -18,7 +18,6 @@ use cortical;
 use url::Url;
 use uuid::Uuid;
 
-use super::{ Result };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
 
 #[derive(Debug)]

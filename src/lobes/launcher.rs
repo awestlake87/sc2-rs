@@ -115,7 +115,7 @@ impl LauncherLobe {
         let hdl = Uuid::new_v4();
         self.instances.insert(hdl, instance);
 
-        self.soma.send(
+        self.soma.effector()?.send(
             controller,
             Message::InstancePool({
                 let mut instances = HashMap::new();
@@ -128,16 +128,16 @@ impl LauncherLobe {
 
                 instances
             })
-        )?;
+        );
 
         if self.instances.len() / 2 > self.ports.len() {
             let game_ports = self.create_game_ports();
             self.ports.push(game_ports);
 
-            self.soma.send(
+            self.soma.effector()?.send(
                 controller,
                 Message::PortsPool(self.ports.clone())
-            )?;
+            );
         }
 
         Ok(self)
@@ -164,7 +164,7 @@ impl Lobe for LauncherLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Self::Message, Self::Role>)
+    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
         self.soma.update(&msg)?;

@@ -1,67 +1,35 @@
 
 use cortical;
-use cortical::{ ResultExt, Handle, Lobe, Protocol };
+use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
 
 use super::super::{ Result };
-use super::{ Message, Effector, Role, RequiredOnce };
+use super::{ Message, Role, Soma };
 
 use data::{ GameSettings, GamePorts, PlayerSetup };
 
 pub struct AgentLobe {
-    effector:           RequiredOnce<Effector>,
-
-    controller:         RequiredOnce<Handle>,
-    client:             RequiredOnce<Handle>,
-    player:             RequiredOnce<Handle>,
+    soma:               Soma,
 }
 
 impl AgentLobe {
     pub fn new() -> Result<Self> {
         Ok(
             Self {
-                effector: RequiredOnce::new(),
-
-                controller: RequiredOnce::new(),
-                client: RequiredOnce::new(),
-                player: RequiredOnce::new(),
+                soma: Soma::new(
+                    vec![ Constraint::RequireOne(Role::Controller) ],
+                    vec![
+                        Constraint::RequireOne(Role::Client),
+                        Constraint::RequireOne(Role::Agent),
+                    ],
+                )?,
             }
         )
     }
-    fn init(mut self, effector: Effector) -> Result<Self> {
-        self.effector.set(effector)?;
-
-        Ok(self)
-    }
-
-    fn add_input(mut self, input: Handle, role: Role)
-        -> Result<Self>
-    {
-        match role {
-            Role::Controller => self.controller.set(input)?,
-
-            _ => bail!("invalid input role {:#?}", role)
-        }
-
-        Ok(self)
-    }
-
-    fn add_output(mut self, output: Handle, role: Role)
-        -> Result<Self>
-    {
-        match role {
-            Role::Agent => self.player.set(output)?,
-            Role::Client => self.client.set(output)?,
-
-            _ => bail!("invalid output role {:#?}", role)
-        }
-
-        Ok(self)
-    }
 
     fn on_connected(self, src: Handle) -> Result<Self> {
-        assert_eq!(src, *self.client.get()?);
+        assert_eq!(src, self.soma.req_output(Role::Client)?);
 
-        self.effector.get()?.send(*self.controller.get()?, Message::Ready);
+        self.soma.send_req_input(Role::Controller, Message::Ready)?;
 
         Ok(self)
     }
@@ -69,21 +37,21 @@ impl AgentLobe {
     fn on_req_player_setup(self, src: Handle, settings: GameSettings)
         -> Result<Self>
     {
-        assert_eq!(src, *self.controller.get()?);
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
-        self.effector.get()?.send(
-            *self.player.get()?, Message::RequestPlayerSetup(settings)
-        );
+        self.soma.send_req_output(
+            Role::Agent, Message::RequestPlayerSetup(settings)
+        )?;
 
         Ok(self)
     }
 
     fn on_player_setup(self, src: Handle, setup: PlayerSetup) -> Result<Self> {
-        assert_eq!(src, *self.player.get()?);
+        assert_eq!(src, self.soma.req_output(Role::Agent)?);
 
-        self.effector.get()?.send(
-            *self.controller.get()?, Message::PlayerSetup(setup)
-        );
+        self.soma.send_req_input(
+            Role::Controller, Message::PlayerSetup(setup)
+        )?;
 
         Ok(self)
     }
@@ -93,14 +61,14 @@ impl AgentLobe {
     )
         -> Result<Self>
     {
-        assert_eq!(src, *self.controller.get()?);
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
         println!("create game with settings: {:#?}", settings);
         println!("fake it for now");
 
-        self.effector.get()?.send(
-            *self.controller.get()?, Message::GameCreated
-        );
+        self.soma.send_req_input(
+            Role::Controller, Message::GameCreated
+        )?;
 
         Ok(self)
     }
@@ -110,7 +78,7 @@ impl AgentLobe {
     )
         -> Result<Self>
     {
-        assert_eq!(src, *self.controller.get()?);
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
         println!("join game with setup {:#?} and ports {:#?}", setup, ports);
         println!("fake it for now");
@@ -123,18 +91,12 @@ impl Lobe for AgentLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>)
+    fn update(mut self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
-        match msg {
-            Protocol::Init(effector) => self.init(effector),
-            Protocol::AddInput(input, role) => {
-                self.add_input(input, role)
-            },
-            Protocol::AddOutput(output, role) => {
-                self.add_output(output, role)
-            },
+        self.soma.update(&msg)?;
 
+        match msg {
             Protocol::Message(src, Message::Connected) => {
                 self.on_connected(src)
             },
