@@ -135,17 +135,78 @@ impl MeleeLobe {
 
         if self.suite.is_none() {
             self.soma.effector()?.stop();
+
+            Ok(self)
         }
         else {
-            self.provided = false;
+            self.game_settings = None;
+            self.suite = match self.suite {
+                Some(MeleeSuite::OneAndDone(game)) => {
+                    self.game_settings = Some(game);
 
-            let launcher = self.soma.req_output(Role::Launcher)?;
+                    // set melee suite to none afterwards
+                    None
+                },
 
-            self.soma.effector()?.send(launcher, Message::LaunchInstance);
-            self.soma.effector()?.send(launcher, Message::LaunchInstance);
+                None => bail!("expected melee suite to contain data")
+            };
+            assert!(self.game_settings.is_some());
+
+            self.request_player_setup()
         }
+    }
+
+    fn request_player_setup(mut self) -> Result<Self> {
+        self.player_setup = (None, None);
+
+        let settings = self.game_settings.as_ref().unwrap().clone();
+
+        self.soma.effector()?.send(
+            self.agents[0], Message::RequestPlayerSetup(settings.clone())
+        );
+        self.soma.effector()?.send(
+            self.agents[1], Message::RequestPlayerSetup(settings)
+        );
 
         Ok(self)
+    }
+
+    fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
+        -> Result<Self>
+    {
+        if src == self.agents[0] {
+            self.player_setup.0 = Some(setup);
+        }
+        else if src == self.agents[1] {
+            self.player_setup.1 = Some(setup);
+        }
+        else {
+            bail!("invalid source for player setup")
+        }
+
+        match self.player_setup {
+            (Some(setup1), Some(setup2)) => {
+                self.provided = false;
+
+                match setup1 {
+                    PlayerSetup::Player { .. } => (),
+                    _ => bail!("unsupported player setup")
+                }
+                match setup2 {
+                    PlayerSetup::Player { .. } => (),
+                    _ => bail!("unsupported player setup")
+                }
+
+                let launcher = self.soma.req_output(Role::Launcher)?;
+
+                self.soma.effector()?.send(launcher, Message::LaunchInstance);
+                self.soma.effector()?.send(launcher, Message::LaunchInstance);
+
+                Ok(self)
+            },
+
+            _ => Ok(self)
+        }
     }
 
     fn on_instance_pool(
@@ -205,9 +266,7 @@ impl MeleeLobe {
 
             self.provided = true;
             self.ready = (false, false);
-            self.game_settings = None;
             self.game_ports = Some(game_ports);
-            self.player_setup = (None, None);
 
             Ok(self)
         }
@@ -229,59 +288,16 @@ impl MeleeLobe {
         }
 
         if self.ready == (true, true) {
-            self.suite = match self.suite {
-                Some(MeleeSuite::OneAndDone(game)) => {
-                    self.game_settings = Some(game);
+            let settings = self.game_settings.clone().unwrap();
 
-                    // set melee suite to none afterwards
-                    None
-                },
+            let setup = (
+                self.player_setup.0.unwrap(), self.player_setup.1.unwrap()
+            );
 
-                None => bail!("expected melee suite to contain data")
-            };
-            assert!(self.game_settings.is_some());
-
-            self.request_player_setup()
+            self.create_game(settings, setup)
         }
         else {
             Ok(self)
-        }
-    }
-
-    fn request_player_setup(self) -> Result<Self> {
-        let settings = self.game_settings.as_ref().unwrap().clone();
-
-        self.soma.effector()?.send(
-            self.agents[0], Message::RequestPlayerSetup(settings.clone())
-        );
-        self.soma.effector()?.send(
-            self.agents[1], Message::RequestPlayerSetup(settings)
-        );
-
-        Ok(self)
-    }
-
-    fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
-        -> Result<Self>
-    {
-        if src == self.agents[0] {
-            self.player_setup.0 = Some(setup);
-        }
-        else if src == self.agents[1] {
-            self.player_setup.1 = Some(setup);
-        }
-        else {
-            bail!("invalid source for player setup")
-        }
-
-        match self.player_setup {
-            (Some(setup1), Some(setup2)) => {
-                let settings = self.game_settings.clone().unwrap();
-
-                self.create_game(settings, (setup1, setup2))
-            },
-
-            _ => Ok(self)
         }
     }
 
