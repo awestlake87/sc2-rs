@@ -10,7 +10,6 @@ use super::super::{ Result };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
 use lobes::{ Message, Role, Cortex, Soma };
 use lobes::agent::{ AgentLobe };
-use lobes::client::{ ClientLobe };
 use lobes::launcher::{ LauncherLobe, LauncherSettings };
 
 /// suite of games to choose from when pitting bots against each other
@@ -31,15 +30,18 @@ pub struct MeleeSettings<L1: Lobe + 'static, L2: Lobe + 'static> {
 
 /// lobe designed to pit two bots against each other in Sc2 games
 pub enum MeleeLobe {
+    /// wait for soma to gather effector, inputs, and outputs
     Init(MeleeInit),
 
+    /// fetch player info in order to decide how many instances it needs
     Setup(MeleeSetup),
+    /// gather instances and game ports, then transition to PVP or PVC
     Launch(MeleeLaunch),
 
+    /// coordinate two instances for player vs player
     PlayerVsPlayer(MeleePlayerVsPlayer),
+    /// coordinate one instance for player vs the built-in Sc2 AI
     PlayerVsComputer(MeleePlayerVsComputer),
-
-    Done,
 }
 
 impl MeleeLobe {
@@ -85,27 +87,15 @@ impl MeleeLobe {
 
         let melee = cortex.get_main_handle();
 
-        let player1 = cortex.add_lobe(settings.players.0);
-        let player2 = cortex.add_lobe(settings.players.1);
-
-        let agent1 = cortex.add_lobe(AgentLobe::new()?);
-        let agent2 = cortex.add_lobe(AgentLobe::new()?);
-
-        let client1 = cortex.add_lobe(ClientLobe::new()?);
-        let client2 = cortex.add_lobe(ClientLobe::new()?);
+        let agent1 = cortex.add_lobe(AgentLobe::cortex(settings.players.0)?);
+        let agent2 = cortex.add_lobe(AgentLobe::cortex(settings.players.1)?);
 
         cortex.connect(melee, launcher, Role::Launcher);
 
         cortex.connect(melee, agent1, Role::Controller);
         cortex.connect(melee, agent2, Role::Controller);
-        cortex.connect(melee, client1, Role::InstanceProvider);
-        cortex.connect(melee, client2, Role::InstanceProvider);
-
-        cortex.connect(agent1, player1, Role::Agent);
-        cortex.connect(agent2, player2, Role::Agent);
-
-        cortex.connect(agent1, client1, Role::Client);
-        cortex.connect(agent2, client2, Role::Client);
+        cortex.connect(melee, agent1, Role::InstanceProvider);
+        cortex.connect(melee, agent2, Role::InstanceProvider);
 
         Ok(cortex)
     }
@@ -139,8 +129,8 @@ impl MeleeInit {
             bail!("expected 2 agents, got {}", agents.len())
         }
 
-        let (game, suite) = match self.suite {
-            MeleeSuite::OneAndDone(game) => (game, None),
+        let game = match self.suite {
+            MeleeSuite::OneAndDone(game) => game,
         };
 
         self.soma.effector()?.send(
@@ -154,7 +144,6 @@ impl MeleeInit {
             MeleeLobe::Setup(
                 MeleeSetup {
                     soma: self.soma,
-                    suite: suite,
 
                     agents: (agents[0], agents[1]),
                     clients: (clients[0], clients[1]),
@@ -169,7 +158,6 @@ impl MeleeInit {
 
 pub struct MeleeSetup {
     soma:               Soma,
-    suite:              Option<MeleeSuite>,
 
     agents:             (Handle, Handle),
     clients:            (Handle, Handle),
@@ -240,7 +228,6 @@ impl MeleeSetup {
                     MeleeLobe::Launch(
                         MeleeLaunch {
                             soma: self.soma,
-                            suite: self.suite,
                             launcher: launcher,
 
                             agents: self.agents,
@@ -264,7 +251,6 @@ impl MeleeSetup {
 
 pub struct MeleeLaunch {
     soma:               Soma,
-    suite:              Option<MeleeSuite>,
     launcher:           Handle,
 
     agents:             (Handle, Handle),
@@ -342,17 +328,12 @@ impl MeleeLaunch {
                     MeleeLobe::PlayerVsPlayer(
                         MeleePlayerVsPlayer {
                             soma: self.soma,
-                            suite: self.suite,
 
                             agents: self.agents,
-                            clients: self.clients,
 
                             game: self.game,
                             ports: ports,
                             players: self.players,
-                            instances: (
-                                (*id1, url1.clone()), (*id2, url2.clone())
-                            ),
 
                             ready: (false, false),
                         }
@@ -365,23 +346,9 @@ impl MeleeLaunch {
         }
         else {
             if self.instances.len() >= 1 {
-                let (id, &(ref url, _)) = self.instances.iter()
-                    .nth(0).unwrap()
-                ;
-
                 Ok(
                     MeleeLobe::PlayerVsComputer(
-                        MeleePlayerVsComputer {
-                            soma: self.soma,
-                            suite: self.suite,
-
-                            agents: self.agents,
-                            clients: self.clients,
-
-                            game: self.game,
-                            players: self.players,
-                            instance: (*id, url.clone())
-                        }
+                        MeleePlayerVsComputer { }
                     )
                 )
             }
@@ -394,15 +361,12 @@ impl MeleeLaunch {
 
 pub struct MeleePlayerVsPlayer {
     soma: Soma,
-    suite: Option<MeleeSuite>,
 
     agents: (Handle, Handle),
-    clients: (Handle, Handle),
 
     game: GameSettings,
     ports: GamePorts,
     players: (PlayerSetup, PlayerSetup),
-    instances: ((Uuid, Url), (Uuid, Url)),
 
     ready: (bool, bool)
 }
@@ -464,19 +428,10 @@ impl MeleePlayerVsPlayer {
 
 /// MeleeLobe state that pits players against the built-in AI
 pub struct MeleePlayerVsComputer {
-    soma: Soma,
-    suite: Option<MeleeSuite>,
-
-    agents: (Handle, Handle),
-    clients: (Handle, Handle),
-
-    game: GameSettings,
-    players: (PlayerSetup, PlayerSetup),
-    instance: (Uuid, Url)
 }
 
 impl MeleePlayerVsComputer {
-    fn update(self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(self, _msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
         unimplemented!()
     }
 }
@@ -485,7 +440,7 @@ impl Lobe for MeleeLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
+    fn update(self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
         match self {
@@ -494,8 +449,6 @@ impl Lobe for MeleeLobe {
             MeleeLobe::Launch(state) => state.update(msg),
             MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
             MeleeLobe::PlayerVsComputer(state) => state.update(msg),
-
-            _ => Ok(self),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )

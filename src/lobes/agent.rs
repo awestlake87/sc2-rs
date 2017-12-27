@@ -1,9 +1,11 @@
 
 use cortical;
 use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
+use url::Url;
 
 use super::super::{ Result };
-use super::{ Message, Role, Soma };
+use lobes::{ Message, Role, Soma, Cortex };
+use lobes::client::{ ClientLobe };
 
 use data::{ GameSettings, GamePorts, PlayerSetup };
 
@@ -12,18 +14,48 @@ pub struct AgentLobe {
 }
 
 impl AgentLobe {
-    pub fn new() -> Result<Self> {
+    fn new() -> Result<Self> {
         Ok(
             Self {
                 soma: Soma::new(
-                    vec![ Constraint::RequireOne(Role::Controller) ],
+                    vec![
+                        Constraint::RequireOne(Role::Controller),
+                        Constraint::RequireOne(Role::InstanceProvider),
+                    ],
                     vec![
                         Constraint::RequireOne(Role::Client),
                         Constraint::RequireOne(Role::Agent),
+                        Constraint::RequireOne(Role::InstanceProvider),
                     ],
                 )?,
             }
         )
+    }
+
+    pub fn cortex<L>(lobe: L) -> Result<Cortex> where
+        L: Lobe + 'static,
+
+        L::Message: From<Message>,
+        L::Role: From<Role>,
+
+        Message: From<L::Message>,
+        Role: From<L::Role>,
+    {
+        let mut cortex = Cortex::new(AgentLobe::new()?);
+
+        let agent = cortex.get_main_handle();
+        let player = cortex.add_lobe(lobe);
+
+        // TODO: find out why this explicit annotation is needed. it's possible
+        // that it's a bug in the rust type system because it will work when
+        // the function is generic across two lobe types, but not one
+        let client = cortex.add_lobe::<ClientLobe>(ClientLobe::new()?);
+
+        cortex.connect(agent, client, Role::InstanceProvider);
+        cortex.connect(agent, client, Role::Client);
+        cortex.connect(agent, player, Role::Agent);
+
+        Ok(cortex)
     }
 
     fn on_connected(self, src: Handle) -> Result<Self> {
@@ -56,8 +88,20 @@ impl AgentLobe {
         Ok(self)
     }
 
+    fn provide_instance(self, src: Handle, instance: Handle, url: Url)
+        -> Result<Self>
+    {
+        assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
+
+        self.soma.send_req_output(
+            Role::InstanceProvider, Message::ProvideInstance(instance, url)
+        )?;
+
+        Ok(self)
+    }
+
     fn create_game(
-        self, src: Handle, settings: GameSettings, players: Vec<PlayerSetup>
+        self, src: Handle, settings: GameSettings, _players: Vec<PlayerSetup>
     )
         -> Result<Self>
     {
@@ -107,6 +151,11 @@ impl Lobe for AgentLobe {
             Protocol::Message(src, Message::PlayerSetup(setup)) => {
                 self.on_player_setup(src, setup)
             },
+            Protocol::Message(
+                src, Message::ProvideInstance(instance, url)
+            ) => {
+                self.provide_instance(src, instance, url)
+            }
             Protocol::Message(src, Message::CreateGame(settings, players)) => {
                 self.create_game(src, settings, players)
             },
