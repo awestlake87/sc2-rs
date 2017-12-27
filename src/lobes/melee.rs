@@ -30,53 +30,37 @@ pub struct MeleeSettings<L1: Lobe + 'static, L2: Lobe + 'static> {
 }
 
 /// lobe designed to pit two bots against each other in Sc2 games
-pub struct MeleeLobe {
-    soma:           Soma,
+pub enum MeleeLobe {
+    Init(MeleeInit),
 
-    agents:         Vec<Handle>,
-    clients:        Vec<Handle>,
+    Setup(MeleeSetup),
+    Launch(MeleeLaunch),
 
-    instances:      HashMap<Uuid, (Url, PortSet)>,
-    ports:          Vec<GamePorts>,
+    PlayerVsPlayer(MeleePlayerVsPlayer),
+    PlayerVsComputer(MeleePlayerVsComputer),
 
-    suite:          Option<MeleeSuite>,
-
-    provided:       bool,
-    ready:          (bool, bool),
-    game_settings:  Option<GameSettings>,
-    game_ports:     Option<GamePorts>,
-    player_setup:   (Option<PlayerSetup>, Option<PlayerSetup>),
+    Done,
 }
 
 impl MeleeLobe {
     /// melee lobe only works as a controller in a melee cortex
     fn new(suite: MeleeSuite) -> Result<Self> {
         Ok(
-            Self {
-                soma: Soma::new(
-                    vec![ ],
-                    vec![
-                        Constraint::RequireOne(Role::Launcher),
+            MeleeLobe::Init(
+                MeleeInit {
+                    soma: Soma::new(
+                        vec![ ],
+                        vec![
+                            Constraint::RequireOne(Role::Launcher),
 
-                        Constraint::Variadic(Role::Controller),
-                        Constraint::Variadic(Role::InstanceProvider),
-                    ]
-                )?,
+                            Constraint::Variadic(Role::Controller),
+                            Constraint::Variadic(Role::InstanceProvider),
+                        ]
+                    )?,
 
-                agents: vec![ ],
-                clients: vec![ ],
-
-                instances: HashMap::new(),
-                ports: vec![ ],
-
-                suite: Some(suite),
-
-                provided: false,
-                ready: (false, false),
-                game_settings: None,
-                game_ports: None,
-                player_setup: (None, None),
-            }
+                    suite: suite,
+                }
+            )
         )
     }
 
@@ -125,162 +109,325 @@ impl MeleeLobe {
 
         Ok(cortex)
     }
+}
 
-    fn start(mut self) -> Result<Self> {
-        self.clients = self.soma.var_output(Role::InstanceProvider)?.clone();
-        self.agents = self.soma.var_output(Role::Controller)?.clone();
+pub struct MeleeInit {
+    soma:               Soma,
+    suite:              MeleeSuite,
+}
 
-        assert_eq!(2, self.clients.len());
-        assert_eq!(2, self.agents.len());
+impl MeleeInit {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
 
-        if self.suite.is_none() {
-            self.soma.effector()?.stop();
+        match msg {
+            Protocol::Start => self.start(),
 
-            Ok(self)
-        }
-        else {
-            self.game_settings = None;
-            self.suite = match self.suite {
-                Some(MeleeSuite::OneAndDone(game)) => {
-                    self.game_settings = Some(game);
-
-                    // set melee suite to none afterwards
-                    None
-                },
-
-                None => bail!("expected melee suite to contain data")
-            };
-            assert!(self.game_settings.is_some());
-
-            self.request_player_setup()
+            _ => Ok(MeleeLobe::Init(self)),
         }
     }
 
-    fn request_player_setup(mut self) -> Result<Self> {
-        self.player_setup = (None, None);
+    fn start(self) -> Result<MeleeLobe> {
+        let clients = self.soma.var_output(Role::InstanceProvider)?.clone();
+        let agents = self.soma.var_output(Role::Controller)?.clone();
 
-        let settings = self.game_settings.as_ref().unwrap().clone();
+        if clients.len() != 2 {
+            bail!("expected 2 clients, got {}", clients.len())
+        }
+
+        if agents.len() != 2 {
+            bail!("expected 2 agents, got {}", agents.len())
+        }
+
+        let (game, suite) = match self.suite {
+            MeleeSuite::OneAndDone(game) => (game, None),
+        };
 
         self.soma.effector()?.send(
-            self.agents[0], Message::RequestPlayerSetup(settings.clone())
+            agents[0], Message::RequestPlayerSetup(game.clone())
         );
         self.soma.effector()?.send(
-            self.agents[1], Message::RequestPlayerSetup(settings)
+            agents[1], Message::RequestPlayerSetup(game.clone())
         );
 
-        Ok(self)
+        Ok(
+            MeleeLobe::Setup(
+                MeleeSetup {
+                    soma: self.soma,
+                    suite: suite,
+
+                    agents: (agents[0], agents[1]),
+                    clients: (clients[0], clients[1]),
+
+                    game: game,
+                    players: (None, None),
+                }
+            )
+        )
+    }
+}
+
+pub struct MeleeSetup {
+    soma:               Soma,
+    suite:              Option<MeleeSuite>,
+
+    agents:             (Handle, Handle),
+    clients:            (Handle, Handle),
+
+    game:               GameSettings,
+    players:            (Option<PlayerSetup>, Option<PlayerSetup>),
+}
+
+impl MeleeSetup {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::PlayerSetup(setup)) => {
+                self.on_player_setup(src, setup)
+            },
+
+            _ => Ok(MeleeLobe::Setup(self))
+        }
     }
 
     fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
-        -> Result<Self>
+        -> Result<MeleeLobe>
     {
-        if src == self.agents[0] {
-            self.player_setup.0 = Some(setup);
+        if src == self.agents.0 {
+            self.players.0 = Some(setup);
         }
-        else if src == self.agents[1] {
-            self.player_setup.1 = Some(setup);
+        else if src == self.agents.1 {
+            self.players.1 = Some(setup);
         }
         else {
             bail!("invalid source for player setup")
         }
 
-        match self.player_setup {
+        match self.players {
             (Some(setup1), Some(setup2)) => {
-                self.provided = false;
-
-                match setup1 {
-                    PlayerSetup::Player { .. } => (),
-                    _ => bail!("unsupported player setup")
-                }
-                match setup2 {
-                    PlayerSetup::Player { .. } => (),
-                    _ => bail!("unsupported player setup")
-                }
+                let is_pvp = match setup1 {
+                    PlayerSetup::Player { .. } => match setup2 {
+                        PlayerSetup::Player { .. } => true,
+                        PlayerSetup::Computer { .. } => false,
+                        _ => bail!(
+                            "melee lobe cannot do player vs observer"
+                        )
+                    },
+                    PlayerSetup::Computer { .. } => match setup2 {
+                        PlayerSetup::Player { .. } => false,
+                        PlayerSetup::Computer { .. } => bail!(
+                            "melee lobe cannot do computer vs computer"
+                        ),
+                        _ => bail!(
+                            "melee lobe cannot do computer vs observer"
+                        )
+                    },
+                    _ => bail!("melee lobe cannot use observer")
+                };
 
                 let launcher = self.soma.req_output(Role::Launcher)?;
 
                 self.soma.effector()?.send(launcher, Message::LaunchInstance);
-                self.soma.effector()?.send(launcher, Message::LaunchInstance);
 
-                Ok(self)
+                if is_pvp {
+                    self.soma.effector()?.send(
+                        launcher, Message::LaunchInstance
+                    );
+                }
+
+                Ok(
+                    MeleeLobe::Launch(
+                        MeleeLaunch {
+                            soma: self.soma,
+                            suite: self.suite,
+                            launcher: launcher,
+
+                            agents: self.agents,
+                            clients: self.clients,
+
+                            game: self.game,
+                            players: (setup1, setup2),
+                            instances: HashMap::new(),
+                            ports: vec![ ],
+
+                            is_pvp: is_pvp,
+                        }
+                    )
+                )
             },
 
-            _ => Ok(self)
+            _ => Ok(MeleeLobe::Setup(self))
+        }
+    }
+}
+
+pub struct MeleeLaunch {
+    soma:               Soma,
+    suite:              Option<MeleeSuite>,
+    launcher:           Handle,
+
+    agents:             (Handle, Handle),
+    clients:            (Handle, Handle),
+
+    game:               GameSettings,
+    players:            (PlayerSetup, PlayerSetup),
+    instances:          HashMap<Uuid, (Url, PortSet)>,
+    ports:              Vec<GamePorts>,
+
+    is_pvp:             bool,
+}
+
+impl MeleeLaunch {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::InstancePool(instances)) => {
+                self.on_instance_pool(src, instances)
+            },
+            Protocol::Message(src, Message::PortsPool(ports)) => {
+                self.on_ports_pool(src, ports)
+            },
+
+            _ => Ok(MeleeLobe::Launch(self))
         }
     }
 
     fn on_instance_pool(
         mut self, src: Handle, instances: HashMap<Uuid, (Url, PortSet)>
     )
-        -> Result<Self>
+        -> Result<MeleeLobe>
     {
-        assert_eq!(src, self.soma.req_output(Role::Launcher)?);
+        assert_eq!(src, self.launcher);
 
         self.instances = instances;
-        self.provide_instances()
+
+        self.try_provide_instances()
     }
 
     fn on_ports_pool(mut self, src: Handle, ports: Vec<GamePorts>)
-        -> Result<Self>
+        -> Result<MeleeLobe>
     {
-        assert_eq!(src, self.soma.req_output(Role::Launcher)?);
+        assert_eq!(src, self.launcher);
 
         self.ports = ports;
-        self.provide_instances()
+
+        self.try_provide_instances()
     }
 
-    fn provide_instances(mut self) -> Result<Self> {
-        if self.ports.len() < 1 {
-            // not enough game ports to start
-            Ok(self)
-        }
-        else if self.instances.len() < 2 {
-            // not enough instances to start
-            Ok(self)
-        }
-        else if !self.provided {
-            // we haven't already provided the instances
-            let game_ports = {
+    fn try_provide_instances(self) -> Result<MeleeLobe> {
+        if self.is_pvp {
+            if self.instances.len() >= 2 && self.ports.len() >= 1 {
                 let (id1, &(ref url1, ref ports1)) = self.instances.iter()
                     .nth(0).unwrap()
                 ;
                 let (id2, &(ref url2, ref ports2)) = self.instances.iter()
                     .nth(1).unwrap()
                 ;
+                let mut ports = self.ports[0].clone();
+
+                ports.client_ports = vec![ *ports1, *ports2 ];
 
                 self.soma.effector()?.send(
-                    self.clients[0],
+                    self.clients.0,
                     Message::ProvideInstance(*id1, url1.clone())
                 );
                 self.soma.effector()?.send(
-                    self.clients[1],
+                    self.clients.1,
                     Message::ProvideInstance(*id2, url2.clone())
                 );
 
-                let mut game_ports = self.ports[0].clone();
+                Ok(
+                    MeleeLobe::PlayerVsPlayer(
+                        MeleePlayerVsPlayer {
+                            soma: self.soma,
+                            suite: self.suite,
 
-                game_ports.client_ports = vec![ *ports1, *ports2 ];
+                            agents: self.agents,
+                            clients: self.clients,
 
-                game_ports
-            };
+                            game: self.game,
+                            ports: ports,
+                            players: self.players,
+                            instances: (
+                                (*id1, url1.clone()), (*id2, url2.clone())
+                            ),
 
-            self.provided = true;
-            self.ready = (false, false);
-            self.game_ports = Some(game_ports);
-
-            Ok(self)
+                            ready: (false, false),
+                        }
+                    )
+                )
+            }
+            else {
+                Ok(MeleeLobe::Launch(self))
+            }
         }
         else {
-            // everything is taken care of
-            Ok(self)
+            if self.instances.len() >= 1 {
+                let (id, &(ref url, _)) = self.instances.iter()
+                    .nth(0).unwrap()
+                ;
+
+                Ok(
+                    MeleeLobe::PlayerVsComputer(
+                        MeleePlayerVsComputer {
+                            soma: self.soma,
+                            suite: self.suite,
+
+                            agents: self.agents,
+                            clients: self.clients,
+
+                            game: self.game,
+                            players: self.players,
+                            instance: (*id, url.clone())
+                        }
+                    )
+                )
+            }
+            else {
+                Ok(MeleeLobe::Launch(self))
+            }
+        }
+    }
+}
+
+pub struct MeleePlayerVsPlayer {
+    soma: Soma,
+    suite: Option<MeleeSuite>,
+
+    agents: (Handle, Handle),
+    clients: (Handle, Handle),
+
+    game: GameSettings,
+    ports: GamePorts,
+    players: (PlayerSetup, PlayerSetup),
+    instances: ((Uuid, Url), (Uuid, Url)),
+
+    ready: (bool, bool)
+}
+
+impl MeleePlayerVsPlayer {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::Ready) => {
+                self.on_agent_ready(src)
+            },
+            Protocol::Message(src, Message::GameCreated) => {
+                self.on_game_created(src)
+            },
+
+            _ => Ok(MeleeLobe::PlayerVsPlayer(self))
         }
     }
 
-    fn on_agent_ready(mut self, src: Handle) -> Result<Self> {
-        if src == self.agents[0] {
+    fn on_agent_ready(mut self, src: Handle) -> Result<MeleeLobe> {
+        if src == self.agents.0 {
             self.ready.0 = true;
         }
-        else if src == self.agents[1] {
+        else if src == self.agents.1 {
             self.ready.1 = true;
         }
         else {
@@ -288,50 +435,49 @@ impl MeleeLobe {
         }
 
         if self.ready == (true, true) {
-            let settings = self.game_settings.clone().unwrap();
-
-            let setup = (
-                self.player_setup.0.unwrap(), self.player_setup.1.unwrap()
+            self.soma.effector()?.send(
+                self.agents.0,
+                Message::CreateGame(
+                    self.game.clone(), vec![ self.players.0, self.players.1 ]
+                )
             );
+        }
 
-            self.create_game(settings, setup)
-        }
-        else {
-            Ok(self)
-        }
+        Ok(MeleeLobe::PlayerVsPlayer(self))
     }
 
-    fn create_game(
-        self, game: GameSettings, players: (PlayerSetup, PlayerSetup)
-    )
-        -> Result<Self>
-    {
+    fn on_game_created(self, src: Handle) -> Result<MeleeLobe> {
+        assert_eq!(src, self.agents.0);
+
         self.soma.effector()?.send(
-            self.agents[0],
-            Message::CreateGame(game.clone(), vec![ players.0, players.1 ])
+            self.agents.0,
+            Message::GameReady(self.players.0, self.ports.clone())
+        );
+        self.soma.effector()?.send(
+            self.agents.1,
+            Message::GameReady(self.players.1, self.ports.clone())
         );
 
-        Ok(self)
+        Ok(MeleeLobe::PlayerVsPlayer(self))
     }
+}
 
-    fn on_game_created(self, src: Handle)
-        -> Result<Self>
-    {
-        assert_eq!(src, self.agents[0]);
+/// MeleeLobe state that pits players against the built-in AI
+pub struct MeleePlayerVsComputer {
+    soma: Soma,
+    suite: Option<MeleeSuite>,
 
-        let setup1 = self.player_setup.0.clone().unwrap();
-        let setup2 = self.player_setup.1.clone().unwrap();
-        let ports1 = self.game_ports.clone().unwrap();
-        let ports2 = ports1.clone();
+    agents: (Handle, Handle),
+    clients: (Handle, Handle),
 
-        self.soma.effector()?.send(
-            self.agents[0], Message::GameReady(setup1, ports1)
-        );
-        self.soma.effector()?.send(
-            self.agents[1], Message::GameReady(setup2, ports2)
-        );
+    game: GameSettings,
+    players: (PlayerSetup, PlayerSetup),
+    instance: (Uuid, Url)
+}
 
-        Ok(self)
+impl MeleePlayerVsComputer {
+    fn update(self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        unimplemented!()
     }
 }
 
@@ -342,29 +488,12 @@ impl Lobe for MeleeLobe {
     fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
-        self.soma.update(&msg)?;
-
-        match msg {
-            Protocol::Start => {
-                self.start()
-            },
-
-            Protocol::Message(src, Message::InstancePool(instances)) => {
-                self.on_instance_pool(src, instances)
-            },
-            Protocol::Message(src, Message::PortsPool(ports)) => {
-                self.on_ports_pool(src, ports)
-            },
-
-            Protocol::Message(src, Message::Ready) => {
-                self.on_agent_ready(src)
-            },
-            Protocol::Message(src, Message::PlayerSetup(setup)) => {
-                self.on_player_setup(src, setup)
-            },
-            Protocol::Message(src, Message::GameCreated) => {
-                self.on_game_created(src)
-            },
+        match self {
+            MeleeLobe::Init(state) => state.update(msg),
+            MeleeLobe::Setup(state) => state.update(msg),
+            MeleeLobe::Launch(state) => state.update(msg),
+            MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
+            MeleeLobe::PlayerVsComputer(state) => state.update(msg),
 
             _ => Ok(self),
         }.chain_err(
