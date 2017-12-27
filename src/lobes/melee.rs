@@ -101,6 +101,25 @@ impl MeleeLobe {
     }
 }
 
+impl Lobe for MeleeLobe {
+    type Message = Message;
+    type Role = Role;
+
+    fn update(self, msg: Protocol<Self::Message, Self::Role>)
+        -> cortical::Result<Self>
+    {
+        match self {
+            MeleeLobe::Init(state) => state.update(msg),
+            MeleeLobe::Setup(state) => state.update(msg),
+            MeleeLobe::Launch(state) => state.update(msg),
+            MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
+            MeleeLobe::PlayerVsComputer(state) => state.update(msg),
+        }.chain_err(
+            || cortical::ErrorKind::LobeError
+        )
+    }
+}
+
 pub struct MeleeInit {
     soma:               Soma,
     suite:              MeleeSuite,
@@ -433,24 +452,5 @@ pub struct MeleePlayerVsComputer {
 impl MeleePlayerVsComputer {
     fn update(self, _msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
         unimplemented!()
-    }
-}
-
-impl Lobe for MeleeLobe {
-    type Message = Message;
-    type Role = Role;
-
-    fn update(self, msg: Protocol<Self::Message, Self::Role>)
-        -> cortical::Result<Self>
-    {
-        match self {
-            MeleeLobe::Init(state) => state.update(msg),
-            MeleeLobe::Setup(state) => state.update(msg),
-            MeleeLobe::Launch(state) => state.update(msg),
-            MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
-            MeleeLobe::PlayerVsComputer(state) => state.update(msg),
-        }.chain_err(
-            || cortical::ErrorKind::LobeError
-        )
     }
 }

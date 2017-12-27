@@ -9,26 +9,29 @@ use lobes::client::{ ClientLobe };
 
 use data::{ GameSettings, GamePorts, PlayerSetup };
 
-pub struct AgentLobe {
-    soma:               Soma,
+pub enum AgentLobe {
+    Init(AgentInit),
+    Setup(AgentSetup),
 }
 
 impl AgentLobe {
     fn new() -> Result<Self> {
         Ok(
-            Self {
-                soma: Soma::new(
-                    vec![
-                        Constraint::RequireOne(Role::Controller),
-                        Constraint::RequireOne(Role::InstanceProvider),
-                    ],
-                    vec![
-                        Constraint::RequireOne(Role::Client),
-                        Constraint::RequireOne(Role::Agent),
-                        Constraint::RequireOne(Role::InstanceProvider),
-                    ],
-                )?,
-            }
+            AgentLobe::Init(
+                AgentInit {
+                    soma: Soma::new(
+                        vec![
+                            Constraint::RequireOne(Role::Controller),
+                            Constraint::RequireOne(Role::InstanceProvider),
+                        ],
+                        vec![
+                            Constraint::RequireOne(Role::Client),
+                            Constraint::RequireOne(Role::Agent),
+                            Constraint::RequireOne(Role::InstanceProvider),
+                        ],
+                    )?,
+                }
+            )
         )
     }
 
@@ -57,87 +60,50 @@ impl AgentLobe {
 
         Ok(cortex)
     }
-
-    fn on_connected(self, src: Handle) -> Result<Self> {
-        assert_eq!(src, self.soma.req_output(Role::Client)?);
-
-        self.soma.send_req_input(Role::Controller, Message::Ready)?;
-
-        Ok(self)
-    }
-
-    fn on_req_player_setup(self, src: Handle, settings: GameSettings)
-        -> Result<Self>
-    {
-        assert_eq!(src, self.soma.req_input(Role::Controller)?);
-
-        self.soma.send_req_output(
-            Role::Agent, Message::RequestPlayerSetup(settings)
-        )?;
-
-        Ok(self)
-    }
-
-    fn on_player_setup(self, src: Handle, setup: PlayerSetup) -> Result<Self> {
-        assert_eq!(src, self.soma.req_output(Role::Agent)?);
-
-        self.soma.send_req_input(
-            Role::Controller, Message::PlayerSetup(setup)
-        )?;
-
-        Ok(self)
-    }
-
-    fn provide_instance(self, src: Handle, instance: Handle, url: Url)
-        -> Result<Self>
-    {
-        assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
-
-        self.soma.send_req_output(
-            Role::InstanceProvider, Message::ProvideInstance(instance, url)
-        )?;
-
-        Ok(self)
-    }
-
-    fn create_game(
-        self, src: Handle, settings: GameSettings, _players: Vec<PlayerSetup>
-    )
-        -> Result<Self>
-    {
-        assert_eq!(src, self.soma.req_input(Role::Controller)?);
-
-        println!("create game with settings: {:#?}", settings);
-        println!("fake it for now");
-
-        self.soma.send_req_input(
-            Role::Controller, Message::GameCreated
-        )?;
-
-        Ok(self)
-    }
-
-    fn on_game_ready(
-        self, src: Handle, setup: PlayerSetup, ports: GamePorts
-    )
-        -> Result<Self>
-    {
-        assert_eq!(src, self.soma.req_input(Role::Controller)?);
-
-        println!("join game with setup {:#?} and ports {:#?}", setup, ports);
-        println!("fake it for now");
-
-        Ok(self)
-    }
 }
 
 impl Lobe for AgentLobe {
     type Message = Message;
     type Role = Role;
 
-    fn update(mut self, msg: Protocol<Message, Role>)
+    fn update(self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
+        match self {
+            AgentLobe::Init(state) => state.update(msg),
+            AgentLobe::Setup(state) => state.update(msg),
+        }.chain_err(
+            || cortical::ErrorKind::LobeError
+        )
+    }
+}
+
+pub struct AgentInit {
+    soma:           Soma,
+}
+
+impl AgentInit {
+    fn update(mut self, msg: Protocol<Message, Role>)
+        -> Result<AgentLobe>
+    {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Start => {
+                Ok(AgentLobe::Setup(AgentSetup { soma: self.soma }))
+            },
+
+            _ => Ok(AgentLobe::Init(self)),
+        }
+    }
+}
+
+pub struct AgentSetup {
+    soma:           Soma,
+}
+
+impl AgentSetup {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
         match msg {
@@ -163,9 +129,81 @@ impl Lobe for AgentLobe {
                 self.on_game_ready(src, setup, ports)
             }
 
-            _ => Ok(self),
-        }.chain_err(
-            || cortical::ErrorKind::LobeError
-        )
+            _ => Ok(AgentLobe::Setup(self))
+        }
+    }
+
+    fn on_connected(self, src: Handle) -> Result<AgentLobe> {
+        assert_eq!(src, self.soma.req_output(Role::Client)?);
+
+        self.soma.send_req_input(Role::Controller, Message::Ready)?;
+
+        Ok(AgentLobe::Setup(self))
+    }
+
+    fn on_req_player_setup(self, src: Handle, settings: GameSettings)
+        -> Result<AgentLobe>
+    {
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
+
+        self.soma.send_req_output(
+            Role::Agent, Message::RequestPlayerSetup(settings)
+        )?;
+
+        Ok(AgentLobe::Setup(self))
+    }
+
+    fn on_player_setup(self, src: Handle, setup: PlayerSetup)
+        -> Result<AgentLobe>
+    {
+        assert_eq!(src, self.soma.req_output(Role::Agent)?);
+
+        self.soma.send_req_input(
+            Role::Controller, Message::PlayerSetup(setup)
+        )?;
+
+        Ok(AgentLobe::Setup(self))
+    }
+
+    fn provide_instance(self, src: Handle, instance: Handle, url: Url)
+        -> Result<AgentLobe>
+    {
+        assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
+
+        self.soma.send_req_output(
+            Role::InstanceProvider, Message::ProvideInstance(instance, url)
+        )?;
+
+        Ok(AgentLobe::Setup(self))
+    }
+
+    fn create_game(
+        self, src: Handle, settings: GameSettings, _players: Vec<PlayerSetup>
+    )
+        -> Result<AgentLobe>
+    {
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
+
+        println!("create game with settings: {:#?}", settings);
+        println!("fake it for now");
+
+        self.soma.send_req_input(
+            Role::Controller, Message::GameCreated
+        )?;
+
+        Ok(AgentLobe::Setup(self))
+    }
+
+    fn on_game_ready(
+        self, src: Handle, setup: PlayerSetup, ports: GamePorts
+    )
+        -> Result<AgentLobe>
+    {
+        assert_eq!(src, self.soma.req_input(Role::Controller)?);
+
+        println!("join game with setup {:#?} and ports {:#?}", setup, ports);
+        println!("fake it for now");
+
+        Ok(AgentLobe::Setup(self))
     }
 }
