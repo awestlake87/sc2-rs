@@ -2,6 +2,7 @@
 mod agent;
 mod client;
 mod ctrlc_breaker;
+mod frame;
 mod instance;
 mod launcher;
 mod melee;
@@ -14,6 +15,7 @@ pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
 pub use self::observer::{ ObserverLobe };
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use cortical;
 use futures::sync::mpsc::{ Sender };
@@ -23,6 +25,7 @@ use uuid::Uuid;
 
 use super::{ Error };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
+use lobes::frame::{ FrameData };
 
 /// the messages that can be sent between Sc2 capable
 pub enum Message {
@@ -62,6 +65,15 @@ pub enum Message {
     /// respond with player setup
     PlayerSetup(PlayerSetup),
 
+    /// request update interval from player
+    RequestUpdateInterval,
+    /// respond with preferred update interval in game steps
+    UpdateInterval(u32),
+    /// handle game update update
+    Update(Rc<FrameData>),
+    /// notify the stepper that the lobe is done updating
+    UpdateComplete,
+
     /// create a game with the given settings and list of participants
     CreateGame(GameSettings, Vec<PlayerSetup>),
     /// game was created with the given settings
@@ -88,6 +100,9 @@ pub enum Role {
     Agent,
     /// provides client interface to agents or observers
     Client,
+
+    /// provides periodic updates from other lobes to agent
+    Stepper,
 }
 
 /// type alias for an Sc2 Cortex

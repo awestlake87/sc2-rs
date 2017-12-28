@@ -28,7 +28,10 @@ impl PlayerLobe {
             Self {
                 race: race,
                 soma: sc2::Soma::new(
-                    vec![ Constraint::RequireOne(sc2::Role::Agent) ],
+                    vec![
+                        Constraint::RequireOne(sc2::Role::Agent),
+                        Constraint::RequireOne(sc2::Role::Stepper),
+                    ],
                     vec![ ],
                 )?,
             }
@@ -47,6 +50,17 @@ impl PlayerLobe {
 
         Ok(self)
     }
+
+    fn on_req_update_interval(self, src: Handle) -> sc2::Result<Self> {
+        assert_eq!(src, self.soma.req_input(sc2::Role::Stepper)?);
+
+        self.soma.send_req_input(
+            sc2::Role::Stepper,
+            sc2::Message::UpdateInterval(1)
+        )?;
+
+        Ok(self)
+    }
 }
 
 impl Lobe for PlayerLobe {
@@ -61,6 +75,9 @@ impl Lobe for PlayerLobe {
         match msg {
             Protocol::Message(src, sc2::Message::RequestPlayerSetup(_)) => {
                 self.on_req_player_setup(src)
+            },
+            Protocol::Message(src, sc2::Message::RequestUpdateInterval) => {
+                self.on_req_update_interval(src)
             }
 
             _ => Ok(self)

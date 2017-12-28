@@ -20,7 +20,10 @@ pub enum AgentLobe {
     GameCreated(AgentGameCreated),
     JoinGame(AgentJoinGame),
 
+    StepperSetup(AgentStepperSetup),
+
     InGame(AgentInGame),
+    Step(AgentStep),
 }
 
 impl AgentLobe {
@@ -37,6 +40,7 @@ impl AgentLobe {
                             Constraint::RequireOne(Role::Client),
                             Constraint::RequireOne(Role::Agent),
                             Constraint::RequireOne(Role::InstanceProvider),
+                            Constraint::RequireOne(Role::Stepper),
                         ],
                     )?,
                 }
@@ -58,14 +62,15 @@ impl AgentLobe {
         let agent = cortex.get_main_handle();
         let player = cortex.add_lobe(lobe);
 
-        // TODO: find out why this explicit annotation is needed. it's possible
-        // that it's a bug in the rust type system because it will work when
-        // the function is generic across two lobe types, but not one
+        // TODO: find out why these explicit annotation is needed. it's
+        // possible that it's a bug in the rust type system because it will
+        // work when the function is generic across two lobe types, but not one
         let client = cortex.add_lobe::<ClientLobe>(ClientLobe::new()?);
 
         cortex.connect(agent, client, Role::InstanceProvider);
         cortex.connect(agent, client, Role::Client);
         cortex.connect(agent, player, Role::Agent);
+        cortex.connect(agent, player, Role::Stepper);
 
         Ok(cortex)
     }
@@ -86,7 +91,10 @@ impl Lobe for AgentLobe {
             AgentLobe::GameCreated(state) => state.update(msg),
             AgentLobe::JoinGame(state) => state.update(msg),
 
+            AgentLobe::StepperSetup(state) => state.update(msg),
+
             AgentLobe::InGame(state) => state.update(msg),
+            AgentLobe::Step(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
@@ -138,6 +146,7 @@ impl AgentSetup {
             Protocol::Message(src, Message::PlayerSetup(setup)) => {
                 self.on_player_setup(src, setup)
             },
+
             Protocol::Message(
                 src, Message::ProvideInstance(instance, url)
             ) => {
@@ -146,7 +155,7 @@ impl AgentSetup {
             Protocol::Message(src, Message::CreateGame(settings, players)) => {
                 self.create_game(src, settings, players)
             },
-            Protocol::Message(src, Message::GameReady(setup, ports)) => {
+            Protocol::Message(_, Message::GameReady(setup, ports)) => {
                 self.on_game_ready(setup, ports)
             },
 
@@ -403,17 +412,66 @@ impl AgentJoinGame {
             Protocol::Message(src, Message::ClientResponse(rsp)) => {
                 self.transactor.expect(src, rsp)?;
 
-                println!("in game");
+                let stepper = self.soma.req_output(Role::Stepper)?;
 
-                Ok(AgentLobe::InGame(AgentInGame { soma: self.soma }))
+                self.soma.effector()?.send(
+                    stepper, Message::RequestUpdateInterval
+                );
+
+                Ok(
+                    AgentLobe::StepperSetup(
+                        AgentStepperSetup {
+                            soma: self.soma, stepper: stepper
+                        }
+                    )
+                )
             }
             _ => Ok(AgentLobe::JoinGame(self))
         }
     }
 }
 
+pub struct AgentStepperSetup {
+    soma:           Soma,
+    stepper:        Handle,
+}
+
+impl AgentStepperSetup {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::UpdateInterval(interval)) => {
+                self.on_update_interval(src, interval)
+            },
+
+            _ => Ok(AgentLobe::StepperSetup(self))
+        }
+    }
+
+    fn on_update_interval(self, src: Handle, interval: u32)
+        -> Result<AgentLobe>
+    {
+        if src == self.stepper {
+            let this_lobe = self.soma.effector()?.this_lobe();
+
+            self.soma.effector()?.send(this_lobe, Message::UpdateComplete);
+
+            Ok(
+                AgentLobe::InGame(
+                    AgentInGame { soma: self.soma, interval: interval }
+                )
+            )
+        }
+        else {
+            bail!("unexpected source of update interval: {}", src)
+        }
+    }
+}
+
 pub struct AgentInGame {
     soma:           Soma,
+    interval:       u32,
 }
 
 impl AgentInGame {
@@ -421,7 +479,62 @@ impl AgentInGame {
         self.soma.update(&msg)?;
 
         match msg {
+            Protocol::Message(_, Message::UpdateComplete) => {
+                self.step()
+            }
             _ => Ok(AgentLobe::InGame(self))
+        }
+    }
+
+    fn step(self) -> Result<AgentLobe> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_step().set_count(self.interval);
+
+        let transactor = Transactor::send(
+            &self.soma, ClientRequest::new(req)
+        )?;
+
+        Ok(
+            AgentLobe::Step(
+                AgentStep {
+                    soma: self.soma,
+                    interval: self.interval,
+                    transactor: transactor
+                }
+            )
+        )
+    }
+}
+
+pub struct AgentStep {
+    soma:           Soma,
+    interval:       u32,
+    transactor:     Transactor,
+}
+
+impl AgentStep {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                self.transactor.expect(src, rsp)?;
+
+                let this_lobe = self.soma.effector()?.this_lobe();
+                self.soma.effector()?.send(this_lobe, Message::UpdateComplete);
+
+                Ok(
+                    AgentLobe::InGame(
+                        AgentInGame {
+                            soma: self.soma,
+                            interval: self.interval,
+                        }
+                    )
+                )
+            },
+
+            _ => Ok(AgentLobe::Step(self)),
         }
     }
 }
