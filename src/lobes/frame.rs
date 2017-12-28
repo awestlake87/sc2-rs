@@ -49,7 +49,10 @@ pub enum Command {
     //     units: Vec<Rc<Unit>>,
     //     ability: Ability
     // },
+}
 
+/// a debug command for the game
+pub enum DebugCommand {
     /// shows debug text in the game instance
     DebugText {
         /// text to display
@@ -92,6 +95,7 @@ pub enum Command {
         color: Color,
     }
 }
+
 
 /// an event from the game
 #[derive(Debug, Clone)]

@@ -8,7 +8,8 @@ use url::Url;
 
 use super::super::{ Result, IntoProto };
 use lobes::{ Message, Role, Soma, Cortex };
-use lobes::client::{ ClientLobe, Transactor, ClientRequest };
+use lobes::client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
+use lobes::frame::{ FrameData, Command, DebugCommand };
 
 use data::{ GameSettings, GamePorts, PlayerSetup, Map };
 
@@ -21,8 +22,11 @@ pub enum AgentLobe {
     JoinGame(AgentJoinGame),
 
     StepperSetup(AgentStepperSetup),
+    FetchGameData(AgentFetchGameData),
 
-    InGame(AgentInGame),
+    Update(AgentUpdate),
+    SendActions(AgentSendActions),
+    SendDebug(AgentSendDebug),
     Step(AgentStep),
 }
 
@@ -92,8 +96,11 @@ impl Lobe for AgentLobe {
             AgentLobe::JoinGame(state) => state.update(msg),
 
             AgentLobe::StepperSetup(state) => state.update(msg),
+            AgentLobe::FetchGameData(state) => state.update(msg),
 
-            AgentLobe::InGame(state) => state.update(msg),
+            AgentLobe::Update(state) => state.update(msg),
+            AgentLobe::SendActions(state) => state.update(msg),
+            AgentLobe::SendDebug(state) => state.update(msg),
             AgentLobe::Step(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
@@ -217,8 +224,6 @@ impl AgentSetup {
     {
         assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
-        println!("create game with settings: {:#?}", settings);
-
         let mut req = sc2api::Request::new();
 
         match settings.map {
@@ -300,17 +305,7 @@ impl AgentCreateGame {
             Protocol::Message(src, Message::ClientResponse(rsp)) => {
                 self.transactor.expect(src, rsp)?;
 
-                self.soma.send_req_input(
-                    Role::Controller, Message::GameCreated
-                )?;
-
-                Ok(
-                    AgentLobe::GameCreated(
-                        AgentGameCreated {
-                            soma: self.soma,
-                        }
-                    )
-                )
+                AgentGameCreated::game_created(self.soma)
             },
 
             _ => Ok(AgentLobe::CreateGame(self))
@@ -323,25 +318,42 @@ pub struct AgentGameCreated {
 }
 
 impl AgentGameCreated {
+    fn game_created(soma: Soma) -> Result<AgentLobe> {
+        soma.send_req_input(
+            Role::Controller, Message::GameCreated
+        )?;
+
+        Ok(
+            AgentLobe::GameCreated(
+                AgentGameCreated {
+                    soma: soma,
+                }
+            )
+        )
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
         match msg {
             Protocol::Message(src, Message::GameReady(setup, ports)) => {
-                self.on_game_ready(src, setup, ports)
+                AgentJoinGame::join_game(self.soma, setup, ports)
             },
 
             _ => Ok(AgentLobe::GameCreated(self))
         }
     }
+}
 
-    fn on_game_ready(
-        self, _: Handle, setup: PlayerSetup, ports: GamePorts
-    )
+pub struct AgentJoinGame {
+    soma:           Soma,
+    transactor:     Transactor,
+}
+
+impl AgentJoinGame {
+    fn join_game(soma: Soma, setup: PlayerSetup, ports: GamePorts)
         -> Result<AgentLobe>
     {
-        println!("join game with setup {:#?} and ports {:#?}", setup, ports);
-
         let mut req = sc2api::Request::new();
 
         match setup {
@@ -384,27 +396,64 @@ impl AgentGameCreated {
         }
 
         let transactor = Transactor::send(
-            &self.soma,
+            &soma,
             ClientRequest::with_timeout(req, time::Duration::from_secs(60))
         )?;
 
         Ok(
             AgentLobe::JoinGame(
                 AgentJoinGame {
-                    soma: self.soma,
+                    soma: soma,
                     transactor: transactor,
                 }
             )
         )
     }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                self.on_join_game(src, rsp)
+            }
+            _ => Ok(AgentLobe::JoinGame(self))
+        }
+    }
+
+    fn on_join_game(self, src: Handle, rsp: ClientResponse)
+        -> Result<AgentLobe>
+    {
+        self.transactor.expect(src, rsp)?;
+
+        AgentFetchGameData::fetch(self.soma)
+    }
 }
 
-pub struct AgentJoinGame {
+pub struct AgentFetchGameData {
     soma:           Soma,
     transactor:     Transactor,
 }
 
-impl AgentJoinGame {
+impl AgentFetchGameData {
+    fn fetch(soma: Soma) -> Result<AgentLobe> {
+        let mut req = sc2api::Request::new();
+        req.mut_data().set_unit_type_id(true);
+
+        let transactor = Transactor::send(
+            &soma, ClientRequest::new(req)
+        )?;
+
+        Ok(
+            AgentLobe::FetchGameData(
+                AgentFetchGameData {
+                    soma: soma,
+                    transactor: transactor
+                }
+            )
+        )
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
@@ -412,21 +461,11 @@ impl AgentJoinGame {
             Protocol::Message(src, Message::ClientResponse(rsp)) => {
                 self.transactor.expect(src, rsp)?;
 
-                let stepper = self.soma.req_output(Role::Stepper)?;
+                println!("got game data");
 
-                self.soma.effector()?.send(
-                    stepper, Message::RequestUpdateInterval
-                );
-
-                Ok(
-                    AgentLobe::StepperSetup(
-                        AgentStepperSetup {
-                            soma: self.soma, stepper: stepper
-                        }
-                    )
-                )
+                AgentStepperSetup::setup(self.soma)
             }
-            _ => Ok(AgentLobe::JoinGame(self))
+            _ => Ok(AgentLobe::FetchGameData(self))
         }
     }
 }
@@ -437,6 +476,21 @@ pub struct AgentStepperSetup {
 }
 
 impl AgentStepperSetup {
+    fn setup(soma: Soma) -> Result<AgentLobe> {
+        let stepper = soma.req_output(Role::Stepper)?;
+
+        soma.effector()?.send(stepper, Message::RequestUpdateInterval);
+
+        Ok(
+            AgentLobe::StepperSetup(
+                AgentStepperSetup {
+                    soma: soma,
+                    stepper: stepper
+                }
+            )
+        )
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
@@ -453,15 +507,7 @@ impl AgentStepperSetup {
         -> Result<AgentLobe>
     {
         if src == self.stepper {
-            let this_lobe = self.soma.effector()?.this_lobe();
-
-            self.soma.effector()?.send(this_lobe, Message::UpdateComplete);
-
-            Ok(
-                AgentLobe::InGame(
-                    AgentInGame { soma: self.soma, interval: interval }
-                )
-            )
+            AgentStep::step(self.soma, interval)
         }
         else {
             bail!("unexpected source of update interval: {}", src)
@@ -469,41 +515,113 @@ impl AgentStepperSetup {
     }
 }
 
-pub struct AgentInGame {
+pub struct AgentUpdate {
     soma:           Soma,
     interval:       u32,
 }
 
-impl AgentInGame {
+impl AgentUpdate {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
         match msg {
             Protocol::Message(_, Message::UpdateComplete) => {
-                self.step()
-            }
-            _ => Ok(AgentLobe::InGame(self))
+                AgentSendActions::send_actions(
+                    self.soma, self.interval, vec![ ], vec![ ]
+                )
+            },
+            _ => Ok(AgentLobe::Update(self))
         }
     }
+}
 
-    fn step(self) -> Result<AgentLobe> {
+pub struct AgentSendActions {
+    soma:           Soma,
+    interval:       u32,
+    transactor:     Transactor,
+    debug_actions:  Vec<DebugCommand>,
+}
+
+impl AgentSendActions {
+    fn send_actions(
+        soma: Soma,
+        interval: u32,
+        actions: Vec<Command>,
+        debug_actions: Vec<DebugCommand>
+    )
+        -> Result<AgentLobe>
+    {
         let mut req = sc2api::Request::new();
+        req.mut_action().mut_actions();
 
-        req.mut_step().set_count(self.interval);
-
-        let transactor = Transactor::send(
-            &self.soma, ClientRequest::new(req)
-        )?;
+        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            AgentLobe::Step(
-                AgentStep {
-                    soma: self.soma,
-                    interval: self.interval,
-                    transactor: transactor
+            AgentLobe::SendActions(
+                AgentSendActions {
+                    soma: soma,
+                    interval: interval,
+                    transactor: transactor,
+                    debug_actions: debug_actions,
                 }
             )
         )
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                let rsp = self.transactor.expect(src, rsp)?;
+
+                AgentSendDebug::send_debug(
+                    self.soma, self.interval, self.debug_actions
+                )
+            }
+            _ => Ok(AgentLobe::SendActions(self))
+        }
+    }
+}
+
+pub struct AgentSendDebug {
+    soma:           Soma,
+    interval:       u32,
+    transactor:     Transactor,
+}
+
+impl AgentSendDebug {
+    fn send_debug(soma: Soma, interval: u32, actions: Vec<DebugCommand>)
+        -> Result<AgentLobe>
+    {
+        let mut req = sc2api::Request::new();
+
+        req.mut_debug().mut_debug();
+
+        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
+
+        Ok(
+            AgentLobe::SendDebug(
+                AgentSendDebug {
+                    soma: soma,
+                    interval: interval,
+                    transactor: transactor,
+                }
+            )
+        )
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                let rsp = self.transactor.expect(src, rsp)?;
+
+                AgentStep::step(self.soma, self.interval)
+            }
+            _ => Ok(AgentLobe::SendDebug(self))
+        }
     }
 }
 
@@ -514,6 +632,24 @@ pub struct AgentStep {
 }
 
 impl AgentStep {
+    fn step(soma: Soma, interval: u32) -> Result<AgentLobe> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_step().set_count(interval);
+
+        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
+
+        Ok(
+            AgentLobe::Step(
+                AgentStep {
+                    soma: soma,
+                    interval: interval,
+                    transactor: transactor,
+                }
+            )
+        )
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
@@ -525,8 +661,8 @@ impl AgentStep {
                 self.soma.effector()?.send(this_lobe, Message::UpdateComplete);
 
                 Ok(
-                    AgentLobe::InGame(
-                        AgentInGame {
+                    AgentLobe::Update(
+                        AgentUpdate {
                             soma: self.soma,
                             interval: self.interval,
                         }
