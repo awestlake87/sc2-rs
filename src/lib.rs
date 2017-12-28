@@ -57,6 +57,7 @@ error_chain! {
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
         UrlParseError(url::ParseError) #[doc="link to url parse errors"];
+        Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
     }
     errors {
         /// exe was not supplied to the coordinator

@@ -7,6 +7,7 @@ mod launcher;
 mod melee;
 mod observer;
 
+pub use self::client::{ ClientRequest, ClientResponse, TransactionId };
 pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
 pub use self::launcher::{ LauncherLobe, LauncherSettings };
 pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
@@ -15,12 +16,14 @@ pub use self::observer::{ ObserverLobe };
 use std::collections::HashMap;
 
 use cortical;
+use futures::sync::mpsc::{ Sender };
+use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
+use super::{ Error };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
 
-#[derive(Debug)]
 /// the messages that can be sent between Sc2 capable
 pub enum Message {
     /// launch an instance
@@ -35,8 +38,22 @@ pub enum Message {
     /// attempt to connect to instance
     AttemptConnect(Url),
 
-    /// client successfully connected to instance
-    Connected,
+    /// send some request to the game instance
+    ClientRequest(ClientRequest),
+    /// game instance responded within the expected timeframe
+    ClientResponse(ClientResponse),
+    /// game instance timed out on request
+    ClientTimeout(TransactionId),
+    /// client has closed
+    ClientClosed,
+    /// client encountered a websocket error
+    ClientError(Error),
+
+    /// internal-use client successfully connected to instance
+    Connected(Sender<tungstenite::Message>),
+    /// internal-use client received a message
+    ClientReceive(tungstenite::Message),
+
     /// agent is ready for a game to begin
     Ready,
 
