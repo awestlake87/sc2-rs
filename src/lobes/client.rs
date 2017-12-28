@@ -22,6 +22,59 @@ use super::{ Message, Soma, Role };
 
 pub type TransactionId = Uuid;
 
+pub struct Transactor {
+    client:         Handle,
+    transaction:    TransactionId,
+    kind:           ClientMessageKind,
+}
+
+impl Transactor {
+    pub fn send(soma: &Soma, req: ClientRequest) -> Result<Self> {
+        let transaction = req.transaction;
+        let kind = req.kind;
+
+        let client = soma.req_output(Role::Client)?;
+
+        soma.effector()?.send(client, Message::ClientRequest(req));
+
+        Ok(
+            Self {
+                client: client,
+                transaction: transaction,
+                kind: kind,
+            }
+        )
+    }
+
+    pub fn expect(self, src: Handle, rsp: ClientResponse)
+        -> Result<ClientResponse>
+    {
+        if self.client != src {
+            bail!("unexpected source for client response")
+        }
+
+        if self.transaction != rsp.transaction {
+            bail!("transaction id mismatch")
+        }
+
+        if self.kind != rsp.kind {
+            bail!("expected {:?} message, got {:?}", self.kind, rsp.kind)
+        }
+
+        if rsp.response.get_error().len() != 0 {
+            bail!(
+                ErrorKind::GameErrors(
+                    rsp.response.get_error().iter()
+                        .map(|e| e.clone())
+                        .collect()
+                )
+            )
+        }
+
+        Ok(rsp)
+    }
+}
+
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum ClientMessageKind {
     Unknown,

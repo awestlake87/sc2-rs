@@ -6,17 +6,21 @@ use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
 use sc2_proto::{ sc2api, common };
 use url::Url;
 
-use super::super::{ Result, IntoProto, ErrorKind };
+use super::super::{ Result, IntoProto };
 use lobes::{ Message, Role, Soma, Cortex };
-use lobes::client::{
-    ClientLobe, TransactionId, ClientRequest, ClientResponse, ClientMessageKind
-};
+use lobes::client::{ ClientLobe, Transactor, ClientRequest };
 
 use data::{ GameSettings, GamePorts, PlayerSetup, Map };
 
 pub enum AgentLobe {
     Init(AgentInit),
     Setup(AgentSetup),
+
+    CreateGame(AgentCreateGame),
+    GameCreated(AgentGameCreated),
+    JoinGame(AgentJoinGame),
+
+    InGame(AgentInGame),
 }
 
 impl AgentLobe {
@@ -77,6 +81,12 @@ impl Lobe for AgentLobe {
         match self {
             AgentLobe::Init(state) => state.update(msg),
             AgentLobe::Setup(state) => state.update(msg),
+
+            AgentLobe::CreateGame(state) => state.update(msg),
+            AgentLobe::GameCreated(state) => state.update(msg),
+            AgentLobe::JoinGame(state) => state.update(msg),
+
+            AgentLobe::InGame(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
@@ -99,7 +109,6 @@ impl AgentInit {
                     AgentLobe::Setup(
                         AgentSetup {
                             soma: self.soma,
-                            transaction: None
                         }
                     )
                 )
@@ -112,7 +121,6 @@ impl AgentInit {
 
 pub struct AgentSetup {
     soma:           Soma,
-    transaction:    Option<(TransactionId, ClientMessageKind)>,
 }
 
 impl AgentSetup {
@@ -138,12 +146,9 @@ impl AgentSetup {
             Protocol::Message(src, Message::CreateGame(settings, players)) => {
                 self.create_game(src, settings, players)
             },
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_response(src, rsp)
-            },
             Protocol::Message(src, Message::GameReady(setup, ports)) => {
-                self.on_game_ready(src, setup, ports)
-            }
+                self.on_game_ready(setup, ports)
+            },
 
             _ => Ok(AgentLobe::Setup(self))
         }
@@ -246,73 +251,86 @@ impl AgentSetup {
 
         req.mut_create_game().set_realtime(false);
 
-        self.send(ClientRequest::new(req))
-    }
-
-    fn send(mut self, req: ClientRequest) -> Result<AgentLobe> {
-        self.transaction = Some((req.transaction, req.kind));
-
-        self.soma.send_req_output(
-            Role::Client, Message::ClientRequest(req)
+        let transactor = Transactor::send(
+            &self.soma, ClientRequest::new(req)
         )?;
 
-        Ok(AgentLobe::Setup(self))
+        Ok(
+            AgentLobe::CreateGame(
+                AgentCreateGame {
+                    soma: self.soma,
+                    transactor: transactor,
+                }
+            )
+        )
     }
 
-    fn on_response(self, src: Handle, rsp: ClientResponse)
+    fn on_game_ready(self, setup: PlayerSetup, ports: GamePorts)
         -> Result<AgentLobe>
     {
-        assert_eq!(src, self.soma.req_output(Role::Client)?);
+        let this_lobe = self.soma.effector()?.this_lobe();
 
-        let (transaction, req_kind) = {
-            if let Some(transaction) = self.transaction {
-                transaction
-            }
-            else {
-                bail!("unexpected message {:#?}", rsp.response)
-            }
-        };
+        self.soma.effector()?.send(
+            this_lobe, Message::GameReady(setup, ports)
+        );
 
-        if transaction != rsp.transaction {
-            bail!("transaction id mismatch")
-        }
+        Ok(AgentLobe::GameCreated(AgentGameCreated { soma: self.soma }))
+    }
+}
 
-        if req_kind != rsp.kind {
-            bail!("expected {:?} message, got {:?}", req_kind, rsp.kind)
-        }
+pub struct AgentCreateGame {
+    soma:           Soma,
+    transactor:     Transactor,
+}
 
-        if rsp.response.get_error().len() != 0 {
-            bail!(
-                ErrorKind::GameErrors(
-                    rsp.response.get_error().iter()
-                        .map(|e| e.clone())
-                        .collect()
-                )
-            )
-        }
+impl AgentCreateGame {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
 
-        match rsp.kind {
-            ClientMessageKind::CreateGame => {
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                self.transactor.expect(src, rsp)?;
+
                 self.soma.send_req_input(
                     Role::Controller, Message::GameCreated
                 )?;
-            },
-            ClientMessageKind::JoinGame => {
-                println!("game joined {:#?}", rsp.response);
-            },
-            _ => bail!("unexpected message {:#?}", rsp.response)
-        }
 
-        Ok(AgentLobe::Setup(self))
+                Ok(
+                    AgentLobe::GameCreated(
+                        AgentGameCreated {
+                            soma: self.soma,
+                        }
+                    )
+                )
+            },
+
+            _ => Ok(AgentLobe::CreateGame(self))
+        }
+    }
+}
+
+pub struct AgentGameCreated {
+    soma:           Soma,
+}
+
+impl AgentGameCreated {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::GameReady(setup, ports)) => {
+                self.on_game_ready(src, setup, ports)
+            },
+
+            _ => Ok(AgentLobe::GameCreated(self))
+        }
     }
 
     fn on_game_ready(
-        self, src: Handle, setup: PlayerSetup, ports: GamePorts
+        self, _: Handle, setup: PlayerSetup, ports: GamePorts
     )
         -> Result<AgentLobe>
     {
-        assert_eq!(src, self.soma.req_input(Role::Controller)?);
-
         println!("join game with setup {:#?} and ports {:#?}", setup, ports);
 
         let mut req = sc2api::Request::new();
@@ -356,8 +374,54 @@ impl AgentSetup {
             options.set_score(true);
         }
 
-        self.send(
+        let transactor = Transactor::send(
+            &self.soma,
             ClientRequest::with_timeout(req, time::Duration::from_secs(60))
+        )?;
+
+        Ok(
+            AgentLobe::JoinGame(
+                AgentJoinGame {
+                    soma: self.soma,
+                    transactor: transactor,
+                }
+            )
         )
+    }
+}
+
+pub struct AgentJoinGame {
+    soma:           Soma,
+    transactor:     Transactor,
+}
+
+impl AgentJoinGame {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                self.transactor.expect(src, rsp)?;
+
+                println!("in game");
+
+                Ok(AgentLobe::InGame(AgentInGame { soma: self.soma }))
+            }
+            _ => Ok(AgentLobe::JoinGame(self))
+        }
+    }
+}
+
+pub struct AgentInGame {
+    soma:           Soma,
+}
+
+impl AgentInGame {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            _ => Ok(AgentLobe::InGame(self))
+        }
     }
 }
