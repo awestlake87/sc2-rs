@@ -47,7 +47,9 @@ pub use lobes::{
 
     ObserverLobe,
 
-    CtrlcBreakerLobe
+    CtrlcBreakerLobe,
+
+    FrameData,
 };
 
 error_chain! {

@@ -10,6 +10,7 @@ mod observer;
 
 pub use self::client::{ ClientRequest, ClientResponse, TransactionId };
 pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
+pub use self::frame::{ FrameData, Command, DebugCommand };
 pub use self::launcher::{ LauncherLobe, LauncherSettings };
 pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
 pub use self::observer::{ ObserverLobe };
@@ -25,7 +26,6 @@ use uuid::Uuid;
 
 use super::{ Error };
 use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
-use lobes::frame::{ FrameData };
 
 /// the messages that can be sent between Sc2 capable
 pub enum Message {
@@ -69,7 +69,7 @@ pub enum Message {
     RequestUpdateInterval,
     /// respond with preferred update interval in game steps
     UpdateInterval(u32),
-    /// handle game update update
+    /// handle game update
     Update(Rc<FrameData>),
     /// notify the stepper that the lobe is done updating
     UpdateComplete,

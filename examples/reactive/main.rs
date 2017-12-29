@@ -11,6 +11,8 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
+use std::rc::Rc;
+
 use cortical::{ Lobe, Protocol, Handle, Cortex, ResultExt, Constraint };
 use docopt::Docopt;
 use examples_common::{ USAGE, Args, get_launcher_settings, get_game_settings };
@@ -61,6 +63,18 @@ impl PlayerLobe {
 
         Ok(self)
     }
+
+    fn on_update(self, src: Handle, _: Rc<sc2::FrameData>)
+        -> sc2::Result<Self>
+    {
+        assert_eq!(src, self.soma.req_input(sc2::Role::Stepper)?);
+
+        self.soma.send_req_input(
+            sc2::Role::Stepper, sc2::Message::UpdateComplete
+        )?;
+
+        Ok(self)
+    }
 }
 
 impl Lobe for PlayerLobe {
@@ -78,7 +92,11 @@ impl Lobe for PlayerLobe {
             },
             Protocol::Message(src, sc2::Message::RequestUpdateInterval) => {
                 self.on_req_update_interval(src)
-            }
+            },
+
+            Protocol::Message(src, sc2::Message::Update(frame)) => {
+                self.on_update(src, frame)
+            },
 
             _ => Ok(self)
         }.chain_err(

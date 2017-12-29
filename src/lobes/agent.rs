@@ -691,8 +691,9 @@ impl Update {
     fn next(soma: Soma, interval: u32, data: AgentData, frame: Rc<FrameData>)
         -> Result<AgentLobe>
     {
-        let this_lobe = soma.effector()?.this_lobe();
-        soma.effector()?.send(this_lobe, Message::UpdateComplete);
+        soma.send_req_output(
+            Role::Stepper, Message::Update(Rc::clone(&frame))
+        )?;
 
         Ok(
             AgentLobe::Update(
