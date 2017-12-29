@@ -154,6 +154,58 @@ impl AbilityData {
     }
 }
 
+impl FromProto<data::AbilityData> for AbilityData {
+    fn from_proto(mut data: data::AbilityData) -> Result<Self> {
+        Ok(
+            Self {
+                available: data.get_available(),
+                ability: Ability::from_proto(data.get_ability_id())?,
+                link_name: data.take_link_name(),
+                link_index: data.get_link_index(),
+                button_name: data.take_button_name(),
+                friendly_name: data.take_friendly_name(),
+                hotkey: data.take_hotkey(),
+                remaps_to_ability: {
+                    if data.has_remaps_to_ability_id() {
+                        Some(
+                            Ability::from_proto(
+                                data.get_remaps_to_ability_id()
+                            )?
+                        )
+                    }
+                    else {
+                        None
+                    }
+                },
+                remaps_from_ability: vec![ ],
+                target: match data.get_target() {
+                    data::AbilityData_Target::None => {
+                        None
+                    },
+                    data::AbilityData_Target::Point => {
+                        Some(AbilityTarget::Point)
+                    },
+                    data::AbilityData_Target::Unit => {
+                        Some(AbilityTarget::Unit)
+                    },
+                    data::AbilityData_Target::PointOrUnit => {
+                        Some(AbilityTarget::PointOrUnit)
+                    },
+                    data::AbilityData_Target::PointOrNone => {
+                        Some(AbilityTarget::PointOrNone)
+                    },
+                },
+                allow_minimap: data.get_allow_minimap(),
+                allow_autocast: data.get_allow_autocast(),
+                is_building: data.get_is_building(),
+                footprint_radius: data.get_footprint_radius(),
+                is_instant_placement: data.get_is_instant_placement(),
+                cast_range: data.get_cast_range(),
+            }
+        )
+    }
+}
+
 /// all abilities available to a unit
 #[derive(Debug, Clone)]
 pub struct AvailableUnitAbilities {
@@ -420,6 +472,21 @@ pub struct UpgradeData {
     pub research_time:          f32,
 }
 
+impl FromProto<data::UpgradeData> for UpgradeData {
+    fn from_proto(mut data: data::UpgradeData) -> Result<Self> {
+        Ok(
+            Self {
+                upgrade: Upgrade::from_proto(data.get_upgrade_id())?,
+                name: data.take_name(),
+                mineral_cost: data.get_mineral_cost(),
+                vespene_cost: data.get_vespene_cost(),
+                ability: Ability::from_proto(data.get_ability_id())?,
+                research_time: data.get_research_time(),
+            }
+        )
+    }
+}
+
 /// buff data
 #[derive(Debug, Clone)]
 pub struct BuffData {
@@ -427,6 +494,17 @@ pub struct BuffData {
     pub buff:                   Buff,
     /// buff name (corresponds to the game's catalog)
     pub name:                   String,
+}
+
+impl FromProto<data::BuffData> for BuffData {
+    fn from_proto(mut data: data::BuffData) -> Result<Self> {
+        Ok(
+            BuffData {
+                buff: Buff::from_proto(data.get_buff_id())?,
+                name: data.take_name(),
+            }
+        )
+    }
 }
 
 /// effect data

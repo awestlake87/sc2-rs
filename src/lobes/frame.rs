@@ -124,13 +124,13 @@ pub enum GameEvent {
 #[derive(Debug, Clone)]
 pub struct GameData {
     /// data associated with abilities
-    pub ability_data:               HashMap<Ability, Rc<AbilityData>>,
+    pub ability_data:               HashMap<Ability, AbilityData>,
     /// data associated with unit types
-    pub unit_type_data:             HashMap<UnitType, Rc<UnitTypeData>>,
+    pub unit_type_data:             HashMap<UnitType, UnitTypeData>,
     /// data associated with upgrades
-    pub upgrade_data:               HashMap<Upgrade, Rc<UpgradeData>>,
+    pub upgrade_data:               HashMap<Upgrade, UpgradeData>,
     /// data associated buffs
-    pub buff_data:                  HashMap<Buff, Rc<BuffData>>,
+    pub buff_data:                  HashMap<Buff, BuffData>,
 
     /// playable area info
     pub terrain_info:               TerrainInfo,
