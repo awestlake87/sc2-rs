@@ -1,14 +1,18 @@
 
 #[macro_use]
 extern crate error_chain;
+#[macro_use]
+extern crate serde_derive;
+
+extern crate cortical;
 extern crate glutin;
 extern crate nalgebra as na;
 extern crate num;
 extern crate rand;
-#[macro_use]
-extern crate serde_derive;
 
 extern crate sc2;
+
+mod terran_lobe;
 
 use std::path::PathBuf;
 
@@ -18,7 +22,7 @@ use sc2::{ Result, LauncherSettings };
 use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
 
 //pub use marine_micro_bot::{ MarineMicroBot };
-//pub use terran_bot::{ TerranBot };
+pub use terran_lobe::{ TerranLobe };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.

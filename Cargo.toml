@@ -29,6 +29,11 @@ branch = "reactive"
 members = ["examples/examples-common"]
 
 [[example]]
+name = "bot-mp"
+crate-type = ["bin"]
+path = "examples/bot-mp/main.rs"
+
+[[example]]
 name = "reactive"
 crate-type = ["bin"]
 path = "examples/reactive/main.rs"

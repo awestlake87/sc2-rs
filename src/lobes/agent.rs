@@ -711,13 +711,15 @@ impl Update {
         self.soma.update(&msg)?;
 
         match msg {
-            Protocol::Message(_, Message::UpdateComplete) => {
+            Protocol::Message(
+                _, Message::UpdateComplete(commands, debug_commands)
+            ) => {
                 SendActions::send_actions(
                     self.soma,
                     self.interval,
                     self.data,
-                    vec![ ],
-                    vec![ ]
+                    commands,
+                    debug_commands
                 )
             },
             _ => Ok(AgentLobe::Update(self))
@@ -961,6 +963,8 @@ impl Step {
     fn first(soma: Soma, interval: u32, data: Rc<GameData>)
         -> Result<AgentLobe>
     {
+        soma.send_req_output(Role::Agent, Message::GameStarted)?;
+
         Step::step(
             soma,
             interval,

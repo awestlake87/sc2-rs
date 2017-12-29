@@ -65,15 +65,6 @@ pub enum Message {
     /// respond with player setup
     PlayerSetup(PlayerSetup),
 
-    /// request update interval from player
-    RequestUpdateInterval,
-    /// respond with preferred update interval in game steps
-    UpdateInterval(u32),
-    /// handle game update
-    Update(Rc<FrameData>),
-    /// notify the stepper that the lobe is done updating
-    UpdateComplete,
-
     /// create a game with the given settings and list of participants
     CreateGame(GameSettings, Vec<PlayerSetup>),
     /// game was created with the given settings
@@ -82,6 +73,19 @@ pub enum Message {
     GameReady(PlayerSetup, GamePorts),
     /// join an existing game
     JoinGame(GamePorts),
+
+    /// request update interval from player
+    RequestUpdateInterval,
+    /// respond with preferred update interval in game steps
+    UpdateInterval(u32),
+
+    /// game started
+    GameStarted,
+
+    /// handle game update
+    Update(Rc<FrameData>),
+    /// notify the stepper that the lobe is done updating
+    UpdateComplete(Vec<Command>, Vec<DebugCommand>),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]

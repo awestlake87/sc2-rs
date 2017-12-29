@@ -33,10 +33,20 @@ pub mod data;
 
 use std::path::PathBuf;
 
+pub use data::{
+    Alliance,
+    Vector2,
+    Point2,
+    ActionTarget,
+    Tag,
+    Ability,
+    UnitType,
+};
 pub use lobes::{
     Message,
     Role,
     Soma,
+    Cortex,
 
     LauncherLobe,
     LauncherSettings,
@@ -50,6 +60,8 @@ pub use lobes::{
     CtrlcBreakerLobe,
 
     FrameData,
+    Command,
+    DebugCommand,
 };
 
 error_chain! {
