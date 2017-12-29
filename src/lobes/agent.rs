@@ -1,5 +1,6 @@
 
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
+use std::mem;
 use std::rc::Rc;
 use std::time;
 
@@ -17,6 +18,9 @@ use lobes::frame::{
     DebugCommand,
     DebugTextTarget,
     GameData,
+    GameState,
+    GameEvent,
+    MapState,
 };
 
 use data::{
@@ -33,6 +37,13 @@ use data::{
     AbilityData,
     UnitType,
     UnitTypeData,
+    Action,
+    SpatialAction,
+    Unit,
+    Tag,
+    Alliance,
+    Point2,
+    DisplayType,
 };
 
 pub enum AgentLobe {
@@ -51,6 +62,7 @@ pub enum AgentLobe {
     SendActions(SendActions),
     SendDebug(SendDebug),
     Step(Step),
+    Observe(Observe)
 }
 
 impl AgentLobe {
@@ -126,6 +138,7 @@ impl Lobe for AgentLobe {
             AgentLobe::SendActions(state) => state.update(msg),
             AgentLobe::SendDebug(state) => state.update(msg),
             AgentLobe::Step(state) => state.update(msg),
+            AgentLobe::Observe(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
@@ -644,7 +657,7 @@ impl StepperSetup {
         -> Result<AgentLobe>
     {
         if src == self.stepper {
-            Step::step(self.soma, interval, self.game_data)
+            Step::first(self.soma, interval, self.game_data)
         }
         else {
             bail!("unexpected source of update interval: {}", src)
@@ -652,14 +665,30 @@ impl StepperSetup {
     }
 }
 
+struct AgentData {
+    previous_step:      u32,
+    current_step:       u32,
+    previous_units:     HashMap<Tag, Rc<Unit>>,
+    units:              HashMap<Tag, Rc<Unit>>,
+
+    previous_upgrades:  HashSet<Upgrade>,
+    upgrades:           HashSet<Upgrade>,
+
+    actions:            Vec<Action>,
+    spatial_actions:    Vec<SpatialAction>,
+
+    game_data:          Rc<GameData>,
+}
+
 pub struct Update {
-    soma:           Soma,
-    interval:       u32,
-    game_data:      Rc<GameData>,
+    soma:               Soma,
+    interval:           u32,
+    data:               AgentData,
+    frame:              Rc<FrameData>,
 }
 
 impl Update {
-    fn next(soma: Soma, interval: u32, game_data: Rc<GameData>)
+    fn next(soma: Soma, interval: u32, data: AgentData, frame: Rc<FrameData>)
         -> Result<AgentLobe>
     {
         let this_lobe = soma.effector()?.this_lobe();
@@ -670,7 +699,8 @@ impl Update {
                 Update {
                     soma: soma,
                     interval: interval,
-                    game_data: game_data,
+                    data: data,
+                    frame: frame,
                 }
             )
         )
@@ -682,7 +712,11 @@ impl Update {
         match msg {
             Protocol::Message(_, Message::UpdateComplete) => {
                 SendActions::send_actions(
-                    self.soma, self.interval, self.game_data, vec![ ], vec![ ]
+                    self.soma,
+                    self.interval,
+                    self.data,
+                    vec![ ],
+                    vec![ ]
                 )
             },
             _ => Ok(AgentLobe::Update(self))
@@ -695,7 +729,7 @@ pub struct SendActions {
     interval:           u32,
     transactor:         Transactor,
 
-    game_data:          Rc<GameData>,
+    data:               AgentData,
     debug_commands:     Vec<DebugCommand>,
 }
 
@@ -703,7 +737,7 @@ impl SendActions {
     fn send_actions(
         soma: Soma,
         interval: u32,
-        game_data: Rc<GameData>,
+        data: AgentData,
         commands: Vec<Command>,
         debug_commands: Vec<DebugCommand>
     )
@@ -753,7 +787,7 @@ impl SendActions {
                     interval: interval,
                     transactor: transactor,
 
-                    game_data: game_data,
+                    data: data,
                     debug_commands: debug_commands,
                 }
             )
@@ -770,7 +804,7 @@ impl SendActions {
                 SendDebug::send_debug(
                     self.soma,
                     self.interval,
-                    self.game_data,
+                    self.data,
                     self.debug_commands
                 )
             }
@@ -784,14 +818,14 @@ pub struct SendDebug {
     interval:       u32,
     transactor:     Transactor,
 
-    game_data:      Rc<GameData>,
+    data:           AgentData,
 }
 
 impl SendDebug {
     fn send_debug(
         soma: Soma,
         interval: u32,
-        game_data: Rc<GameData>,
+        data: AgentData,
         commands: Vec<DebugCommand>
     )
         -> Result<AgentLobe>
@@ -894,7 +928,7 @@ impl SendDebug {
                     interval: interval,
                     transactor: transactor,
 
-                    game_data: game_data,
+                    data: data,
                 }
             )
         )
@@ -907,7 +941,7 @@ impl SendDebug {
             Protocol::Message(src, Message::ClientResponse(rsp)) => {
                 let rsp = self.transactor.expect(src, rsp)?;
 
-                Step::step(self.soma, self.interval, self.game_data)
+                Step::step(self.soma, self.interval, self.data)
             }
             _ => Ok(AgentLobe::SendDebug(self))
         }
@@ -919,11 +953,33 @@ pub struct Step {
     interval:       u32,
     transactor:     Transactor,
 
-    game_data:      Rc<GameData>,
+    data:           AgentData,
 }
 
 impl Step {
-    fn step(soma: Soma, interval: u32, game_data: Rc<GameData>)
+    fn first(soma: Soma, interval: u32, data: Rc<GameData>)
+        -> Result<AgentLobe>
+    {
+        Step::step(
+            soma,
+            interval,
+            AgentData {
+                previous_step: 0,
+                current_step: 0,
+                previous_units: HashMap::new(),
+                units: HashMap::new(),
+
+                previous_upgrades: HashSet::new(),
+                upgrades: HashSet::new(),
+
+                actions: vec![ ],
+                spatial_actions: vec![ ],
+
+                game_data: data,
+            }
+        )
+    }
+    fn step(soma: Soma, interval: u32, data: AgentData)
         -> Result<AgentLobe>
     {
         let mut req = sc2api::Request::new();
@@ -939,7 +995,7 @@ impl Step {
                     interval: interval,
                     transactor: transactor,
 
-                    game_data: game_data,
+                    data: data,
                 }
             )
         )
@@ -950,12 +1006,288 @@ impl Step {
 
         match msg {
             Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.transactor.expect(src, rsp)?;
-
-                Update::next(self.soma, self.interval, self.game_data)
+                self.on_step(src, rsp)
             },
 
             _ => Ok(AgentLobe::Step(self)),
         }
+    }
+
+    fn on_step(self, src: Handle, rsp: ClientResponse) -> Result<AgentLobe> {
+        self.transactor.expect(src, rsp)?;
+
+        Observe::observe(self.soma, self.interval, self.data)
+    }
+}
+
+pub struct Observe {
+    soma:           Soma,
+    interval:       u32,
+    transactor:     Transactor,
+
+    data:           AgentData,
+}
+
+impl Observe {
+    fn observe(soma: Soma, interval: u32, data: AgentData)
+        -> Result<AgentLobe>
+    {
+        let mut req = sc2api::Request::new();
+        req.mut_observation();
+
+        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
+
+        Ok(
+            AgentLobe::Observe(
+                Observe {
+                    soma: soma,
+                    interval: interval,
+                    transactor: transactor,
+
+                    data: data
+                }
+            )
+        )
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                self.on_observe(src, rsp)
+            },
+
+            _ => Ok(AgentLobe::Observe(self)),
+        }
+    }
+
+    fn on_observe(self, src: Handle, rsp: ClientResponse)
+        -> Result<AgentLobe>
+    {
+        let mut rsp = self.transactor.expect(src, rsp)?.response;
+
+        let mut observation = rsp.take_observation().take_observation();
+
+        let mut data = self.data;
+
+        data.previous_step = data.current_step;
+        data.current_step = observation.get_game_loop();
+        let is_new_frame = data.current_step != data.previous_step;
+
+        let player_common = observation.take_player_common();
+        let mut raw = observation.take_raw_data();
+        let mut player_raw = raw.take_player();
+
+        data.previous_units = mem::replace(&mut data.units, HashMap::new());
+        for unit in raw.take_units().into_iter() {
+            match Unit::from_proto(unit) {
+                Ok(mut unit) => {
+                    let tag = unit.tag;
+
+                    unit.last_seen_game_loop = data.current_step;
+
+                    data.units.insert(tag, Rc::from(unit));
+                },
+                _ => ()
+            }
+        }
+
+        data.previous_upgrades = mem::replace(
+            &mut data.upgrades, HashSet::new()
+        );
+
+        for u in player_raw.take_upgrade_ids().into_iter() {
+            data.upgrades.insert(Upgrade::from_proto(u)?);
+        }
+
+        let new_state = GameState {
+            player_id: player_common.get_player_id(),
+            previous_step: data.previous_step,
+            current_step: data.current_step,
+            camera_pos: {
+                let camera = player_raw.get_camera();
+
+                Point2::new(camera.get_x(), camera.get_y())
+            },
+
+            units: data.units.values().map(|u| Rc::clone(u)).collect(),
+            power_sources: {
+                let mut power_sources = vec![ ];
+
+                for p in player_raw.take_power_sources().into_iter() {
+                    power_sources.push(p.into());
+                }
+
+                power_sources
+            },
+            upgrades: data.upgrades.iter().map(|u| *u).collect(),
+            effects: vec![ ],
+
+            minerals: player_common.get_minerals(),
+            vespene: player_common.get_vespene(),
+            food_used: player_common.get_food_used(),
+            food_cap: player_common.get_food_cap(),
+            food_army: player_common.get_food_army(),
+            food_workers: player_common.get_food_workers(),
+            idle_worker_count: player_common.get_idle_worker_count(),
+            army_count: player_common.get_army_count(),
+            warp_gate_count: player_common.get_warp_gate_count(),
+            larva_count: player_common.get_larva_count(),
+
+            score: observation.take_score().into_sc2()?,
+        };
+
+        if is_new_frame {
+            data.actions.clear();
+            data.spatial_actions.clear();
+        }
+
+        for action in rsp.get_observation().get_actions() {
+            if !action.has_action_raw() {
+                continue;
+            }
+
+            let raw = action.get_action_raw();
+            if !raw.has_unit_command() {
+                continue;
+            }
+
+            let cmd = raw.get_unit_command();
+            if !cmd.has_ability_id() {
+                continue;
+            }
+
+            data.actions.push(cmd.clone().into_sc2()?);
+        }
+
+        for action in rsp.get_observation().get_actions() {
+            if !action.has_action_feature_layer() {
+                continue;
+            }
+
+            let fl = action.get_action_feature_layer();
+
+            if fl.has_unit_command() {
+                data.spatial_actions.push(
+                    fl.get_unit_command().clone().into_sc2()?
+                );
+            }
+            else if fl.has_camera_move() {
+                data.spatial_actions.push(
+                    fl.get_camera_move().clone().into_sc2()?
+                );
+            }
+            else if fl.has_unit_selection_point() {
+                data.spatial_actions.push(
+                    fl.get_unit_selection_point().clone().into_sc2()?
+                );
+            }
+            else if fl.has_unit_selection_rect() {
+                data.spatial_actions.push(
+                    fl.get_unit_selection_rect().clone().into_sc2()?
+                );
+            }
+        }
+
+        let mut events = vec![ ];
+
+        if raw.has_event() {
+            let event = raw.get_event();
+
+            for tag in event.get_dead_units() {
+                match data.previous_units.get(tag) {
+                    Some(ref mut unit) => {
+                        events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
+                    },
+                    None => ()
+                }
+            }
+        }
+
+        for ref unit in data.units.values() {
+            match data.previous_units.get(&unit.tag) {
+                Some(ref prev_unit) => {
+                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
+                        events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                    }
+                    else if unit.build_progress >= 1.0
+                        && prev_unit.build_progress < 1.0
+                    {
+                        events.push(
+                            GameEvent::BuildingCompleted(Rc::clone(unit))
+                        );
+                    }
+                },
+                None => {
+                    if unit.alliance == Alliance::Enemy &&
+                        unit.display_type == DisplayType::Visible
+                    {
+                        events.push(GameEvent::UnitDetected(Rc::clone(unit)));
+                    }
+                    else {
+                        events.push(GameEvent::UnitCreated(Rc::clone(unit)));
+                    }
+
+                    events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                }
+            }
+        }
+
+        let prev_upgrades = mem::replace(
+            &mut data.previous_upgrades, HashSet::new()
+        );
+
+        for upgrade in &data.upgrades {
+            match prev_upgrades.get(upgrade) {
+                Some(_) => (),
+                None => {
+                    events.push(GameEvent::UpgradeCompleted(*upgrade));
+                }
+            }
+        }
+
+        data.previous_upgrades = prev_upgrades;
+
+        let mut nukes = 0;
+        let mut nydus_worms = 0;
+
+        for alert in observation.get_alerts() {
+            match *alert {
+                sc2api::Alert::NuclearLaunchDetected => nukes += 1,
+                sc2api::Alert::NydusWormDetected => nydus_worms += 1
+            }
+        }
+
+        if nukes > 0 {
+            events.push(GameEvent::NukesDetected(nukes));
+        }
+
+        if nydus_worms > 0 {
+            events.push(GameEvent::NydusWormsDetected(nydus_worms));
+        }
+
+        let mut map_state = raw.take_map_state();
+
+        let frame = Rc::from(
+            FrameData {
+                state: new_state,
+                data: Rc::clone(&data.game_data),
+                events: events,
+                map: Rc::from(
+                    MapState {
+                        creep: map_state.take_creep().into_sc2()?,
+                        visibility: map_state.take_visibility().into_sc2()?
+                    }
+                )
+            }
+        );
+
+        Update::next(
+            self.soma,
+            self.interval,
+            data,
+            frame,
+        )
     }
 }
