@@ -9,10 +9,19 @@ use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
 
-use super::super::{ Result, ErrorKind };
-use data::{ Rect, PortSet, GamePorts };
-use lobes::{ Message, Soma, Role };
-use lobes::instance::{ Instance, InstanceSettings, InstanceKind };
+use super::{
+    Result,
+    ErrorKind,
+
+    Message,
+    Soma,
+    Role,
+
+    Rect,
+    PortSet,
+    GamePorts,
+};
+use instance::{ Instance, InstanceSettings, InstanceKind };
 
 /// settings used to create a launcher
 pub struct LauncherSettings {

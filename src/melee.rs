@@ -6,11 +6,22 @@ use cortical::{ Lobe, Handle, Protocol, ResultExt, Constraint };
 use url::Url;
 use uuid::Uuid;
 
-use super::super::{ Result };
-use data::{ GameSettings, GamePorts, PortSet, PlayerSetup };
-use lobes::{ Message, Role, Cortex, Soma };
-use lobes::agent::{ AgentLobe };
-use lobes::launcher::{ LauncherLobe, LauncherSettings };
+use super::{
+    Result,
+
+    Message,
+    Role,
+    Cortex,
+    Soma,
+
+    GameSettings,
+    GamePorts,
+    PortSet,
+    PlayerSetup,
+};
+
+use agent::{ AgentLobe };
+use launcher::{ LauncherLobe, LauncherSettings };
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {

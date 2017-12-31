@@ -5,8 +5,7 @@ use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
-use super::super::{ Result };
-use super::{ Message, Soma, Role };
+use super::{ Result, Message, Soma, Role };
 
 /// lobe that stops the cortex upon Ctrl-C
 pub struct CtrlcBreakerLobe {

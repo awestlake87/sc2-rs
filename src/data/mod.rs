@@ -30,6 +30,9 @@ pub use self::score::*;
 pub use self::unit::*;
 pub use self::upgrade::*;
 
+/// color type for debug commands
+pub type Color = (u8, u8, u8);
+
 /// generic structure to represent a 2D rectangle
 #[derive(Debug, Copy, Clone)]
 pub struct Rect<T> {

@@ -18,8 +18,9 @@ use sc2::{
     Vector2,
     Alliance,
     UnitType,
+    PlayerSetup,
+    Race,
 };
-use sc2::data;
 
 const TARGET_SCV_COUNT: usize = 15;
 
@@ -31,7 +32,7 @@ pub enum TerranLobe {
 }
 
 impl TerranLobe {
-    pub fn new() -> Result<Self> {
+    pub fn cortex(interval: u32) -> Result<Self> {
         Ok(
             TerranLobe::Init(
                 Init {
@@ -41,7 +42,8 @@ impl TerranLobe {
                             Constraint::RequireOne(Role::Stepper),
                         ],
                         vec![ ],
-                    )?
+                    )?,
+                    interval: interval,
                 }
             )
         )
@@ -68,6 +70,7 @@ impl Lobe for TerranLobe {
 
 pub struct Init {
     soma:           Soma,
+    interval:       u32,
 }
 
 impl Init {
@@ -75,7 +78,7 @@ impl Init {
         self.soma.update(&msg)?;
 
         match msg {
-            Protocol::Start => Setup::setup(self.soma),
+            Protocol::Start => Setup::setup(self.soma, self.interval),
 
             _ => Ok(TerranLobe::Init(self))
         }
@@ -84,11 +87,12 @@ impl Init {
 
 pub struct Setup {
     soma:           Soma,
+    interval:       u32,
 }
 
 impl Setup {
-    fn setup(soma: Soma) -> Result<TerranLobe> {
-        Ok(TerranLobe::Setup(Setup { soma: soma }))
+    fn setup(soma: Soma, interval: u32) -> Result<TerranLobe> {
+        Ok(TerranLobe::Setup(Setup { soma: soma, interval: interval }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>)-> Result<TerranLobe> {
@@ -99,8 +103,8 @@ impl Setup {
                 self.soma.send_req_input(
                     Role::Agent,
                     Message::PlayerSetup(
-                        data::PlayerSetup::Player {
-                            race: data::Race::Terran
+                        PlayerSetup::Player {
+                            race: Race::Terran
                         }
                     )
                 )?;
@@ -109,14 +113,14 @@ impl Setup {
             },
             Protocol::Message(_, Message::RequestUpdateInterval) => {
                 self.soma.send_req_input(
-                    Role::Stepper, Message::UpdateInterval(1)
+                    Role::Stepper, Message::UpdateInterval(self.interval)
                 )?;
 
                 Ok(TerranLobe::Setup(self))
             },
             Protocol::Message(_, Message::GameStarted) => {
                 InGame::start(self.soma)
-            }
+            },
 
             _ => Ok(TerranLobe::Setup(self))
         }

@@ -18,8 +18,15 @@ use std::path::PathBuf;
 
 use rand::random;
 
-use sc2::{ Result, LauncherSettings };
-use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
+use sc2::{
+    Result,
+    LauncherSettings,
+    Rect2,
+    Point2,
+    TerrainInfo,
+    GameSettings,
+    Map
+};
 
 //pub use marine_micro_bot::{ MarineMicroBot };
 pub use terran_lobe::{ TerranLobe };
@@ -53,7 +60,7 @@ pub struct Args {
     pub flag_wine:                  bool,
     pub flag_version:               bool,
     pub flag_realtime:              bool,
-    pub flag_step_size:             Option<usize>,
+    pub flag_step_size:             Option<u32>,
 }
 
 pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {

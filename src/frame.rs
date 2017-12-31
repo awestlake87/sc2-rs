@@ -2,8 +2,8 @@
 use std::collections::{ HashMap };
 use std::rc::Rc;
 
-use colors::Color;
-use data::{
+use super::{
+    Color,
     PowerSource,
     TerrainInfo,
     Unit,

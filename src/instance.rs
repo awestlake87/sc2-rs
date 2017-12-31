@@ -4,8 +4,12 @@ use std::process;
 
 use url::Url;
 
-use super::super::{ Result, ErrorKind };
-use data::{ Rect, PortSet };
+use super::{
+    Result,
+    ErrorKind,
+    Rect,
+    PortSet
+};
 
 #[derive(Copy, Clone)]
 pub enum InstanceKind {

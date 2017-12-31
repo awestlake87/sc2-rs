@@ -33,11 +33,6 @@ name = "bot-mp"
 crate-type = ["bin"]
 path = "examples/bot-mp/main.rs"
 
-[[example]]
-name = "reactive"
-crate-type = ["bin"]
-path = "examples/reactive/main.rs"
-
 [dev-dependencies]
 docopt = "0.8"
 glutin = "*"

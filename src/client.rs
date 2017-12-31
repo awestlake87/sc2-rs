@@ -17,8 +17,7 @@ use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
-use super::super::{ Result, Error, ErrorKind };
-use super::{ Message, Soma, Role };
+use super::{ Result, Error, ErrorKind, Message, Soma, Role };
 
 pub type TransactionId = Uuid;
 

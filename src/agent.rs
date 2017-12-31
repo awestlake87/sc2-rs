@@ -9,10 +9,18 @@ use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
 use sc2_proto::{ sc2api, common, debug };
 use url::Url;
 
-use super::super::{ Result, FromProto, IntoProto, IntoSc2 };
-use lobes::{ Message, Role, Soma, Cortex };
-use lobes::client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
-use lobes::frame::{
+use client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
+use super::{
+    Result,
+    FromProto,
+    IntoProto,
+    IntoSc2,
+
+    Message,
+    Role,
+    Soma,
+    Cortex,
+
     FrameData,
     Command,
     DebugCommand,
@@ -21,9 +29,7 @@ use lobes::frame::{
     GameState,
     GameEvent,
     MapState,
-};
 
-use data::{
     GameSettings,
     GamePorts,
     PlayerSetup,
