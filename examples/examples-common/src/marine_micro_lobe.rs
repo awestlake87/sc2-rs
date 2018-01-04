@@ -1,5 +1,161 @@
 
-use na::{ distance, distance_squared, normalize };
+use std::rc::Rc;
+
+use cortical;
+use cortical::{ Lobe, Protocol, ResultExt, Constraint };
+use sc2::{
+    Result,
+    Message,
+    Role,
+    Soma,
+    FrameData,
+    PlayerSetup,
+    Race,
+};
+
+pub enum MarineMicroLobe {
+    Init(Init),
+    Setup(Setup),
+
+    InGame(InGame),
+}
+
+impl MarineMicroLobe {
+    pub fn cortex(interval: u32) -> Result<Self> {
+        Ok(
+            MarineMicroLobe::Init(
+                Init {
+                    soma: Soma::new(
+                        vec![
+                            Constraint::RequireOne(Role::Agent),
+                            Constraint::RequireOne(Role::Stepper),
+                        ],
+                        vec![ ],
+                    )?,
+                    interval: interval,
+                }
+            )
+        )
+    }
+}
+
+impl Lobe for MarineMicroLobe {
+    type Message = Message;
+    type Role = Role;
+
+    fn update(self, msg: Protocol<Message, Role>)
+        -> cortical::Result<MarineMicroLobe>
+    {
+        match self {
+            MarineMicroLobe::Init(state) => state.update(msg),
+            MarineMicroLobe::Setup(state) => state.update(msg),
+
+            MarineMicroLobe::InGame(state) => state.update(msg),
+        }.chain_err(
+            || cortical::ErrorKind::LobeError
+        )
+    }
+}
+
+pub struct Init {
+    soma:           Soma,
+    interval:       u32,
+}
+
+impl Init {
+    fn update(mut self, msg: Protocol<Message, Role>)
+        -> Result<MarineMicroLobe>
+    {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Start => Setup::setup(self.soma, self.interval),
+
+            _ => Ok(MarineMicroLobe::Init(self))
+        }
+    }
+}
+
+pub struct Setup {
+    soma:           Soma,
+    interval:       u32,
+}
+
+impl Setup {
+    fn setup(soma: Soma, interval: u32) -> Result<MarineMicroLobe> {
+        Ok(MarineMicroLobe::Setup(Setup { soma: soma, interval: interval }))
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>)-> Result<MarineMicroLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
+                self.soma.send_req_input(
+                    Role::Agent,
+                    Message::PlayerSetup(
+                        PlayerSetup::Player {
+                            race: Race::Terran
+                        }
+                    )
+                )?;
+
+                Ok(MarineMicroLobe::Setup(self))
+            },
+            Protocol::Message(_, Message::RequestUpdateInterval) => {
+                self.soma.send_req_input(
+                    Role::Stepper, Message::UpdateInterval(self.interval)
+                )?;
+
+                Ok(MarineMicroLobe::Setup(self))
+            },
+            Protocol::Message(_, Message::GameStarted) => {
+                InGame::start(self.soma)
+            },
+
+            _ => Ok(MarineMicroLobe::Setup(self))
+        }
+    }
+}
+
+pub struct InGame {
+    soma:           Soma,
+}
+
+impl InGame {
+    fn start(soma: Soma) -> Result<MarineMicroLobe> {
+        Ok(MarineMicroLobe::InGame(InGame { soma: soma }))
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>)
+        -> Result<MarineMicroLobe>
+    {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(_, Message::Update(frame)) => {
+                self.on_frame(frame)
+            },
+
+            _ => Ok(MarineMicroLobe::InGame(self))
+        }
+    }
+
+    fn on_frame(self, frame: Rc<FrameData>) -> Result<MarineMicroLobe> {
+        self.soma.send_req_input(
+            Role::Stepper,
+            Message::UpdateComplete(
+                vec![ ],
+                vec![ ]
+            )
+        )?;
+
+        Ok(MarineMicroLobe::InGame(self))
+    }
+}
+
+
+/*use na::{ distance, distance_squared, normalize };
 use num::Float;
 use sc2::data::{
     Tag, Point2, UnitType, Alliance, Ability, ActionTarget
@@ -155,4 +311,4 @@ fn get_nearest_zergling(frame: &FrameData, from: Point2) -> Option<Tag> {
     }
 
     tag
-}
+}*/

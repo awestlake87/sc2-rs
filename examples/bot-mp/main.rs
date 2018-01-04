@@ -35,8 +35,16 @@ quick_main!(
                 sc2::MeleeSettings {
                     launcher: get_launcher_settings(&args)?,
                     players: (
-                        TerranLobe::cortex(args.flag_step_size.unwrap_or(1))?,
-                        TerranLobe::cortex(args.flag_step_size.unwrap_or(1))?
+                        sc2::AgentLobe::cortex(
+                            TerranLobe::cortex(
+                                args.flag_step_size.unwrap_or(1)
+                            )?
+                        )?,
+                        sc2::AgentLobe::cortex(
+                            TerranLobe::cortex(
+                                args.flag_step_size.unwrap_or(1)
+                            )?
+                        )?,
                     ),
                     suite: sc2::MeleeSuite::OneAndDone(
                         get_game_settings(&args)?

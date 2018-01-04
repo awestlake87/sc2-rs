@@ -28,6 +28,7 @@ extern crate uuid;
 
 mod agent;
 mod client;
+mod computer;
 mod ctrlc_breaker;
 mod data;
 mod frame;
@@ -44,7 +45,10 @@ use futures::sync::mpsc::{ Sender };
 use url::Url;
 use uuid::Uuid;
 
+pub use self::agent::{ AgentLobe };
 pub use self::client::{ ClientRequest, ClientResponse, TransactionId };
+pub use self::computer::{ ComputerLobe };
+pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
 pub use self::data::{
     Color,
     Rect,
@@ -82,8 +86,8 @@ pub use self::data::{
     PlayerSetup,
     GameSettings,
     Race,
+    Difficulty,
 };
-pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
 pub use self::frame::{
     FrameData,
     Command,

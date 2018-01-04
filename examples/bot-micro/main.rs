@@ -1,32 +1,25 @@
 
+#[macro_use]
+extern crate error_chain;
+
+extern crate cortical;
 extern crate docopt;
-#[macro_use] extern crate error_chain;
+extern crate glob;
 extern crate glutin;
 
 extern crate sc2;
 extern crate examples_common;
 
+use cortical::{ Cortex };
 use docopt::Docopt;
-
-use sc2::{ Result, Coordinator, User };
-use sc2::data::{ PlayerSetup, Difficulty, Race };
-
 use examples_common::{
-    USAGE,
-    Args,
-    get_coordinator_settings,
-    get_game_settings,
-    poll_escape,
-    MarineMicroBot
+    USAGE, Args, get_launcher_settings, get_game_settings, MarineMicroLobe
 };
-
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 quick_main!(
-    || -> Result<()> {
-        let mut events = glutin::EventsLoop::new();
-
+    || -> sc2::Result<()> {
         let args: Args = Docopt::new(USAGE)
             .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit())
@@ -37,30 +30,30 @@ quick_main!(
             return Ok(())
         }
 
-        let coordinator_settings = get_coordinator_settings(&args)?;
-        let game_settings = get_game_settings(&args)?;
+        let mut cortex = Cortex::new(
+            sc2::MeleeLobe::cortex(
+                sc2::MeleeSettings {
+                    launcher: get_launcher_settings(&args)?,
+                    players: (
+                        sc2::AgentLobe::cortex(
+                            MarineMicroLobe::cortex(
+                                args.flag_step_size.unwrap_or(1)
+                            )?
+                        )?,
+                        sc2::ComputerLobe::new(
+                            sc2::Race::Zerg, sc2::Difficulty::VeryEasy
+                        )?
+                    ),
+                    suite: sc2::MeleeSuite::OneAndDone(
+                        get_game_settings(&args)?
+                    )
+                }
+            )?
+        );
 
-        let mut coordinator = Coordinator::from_settings(
-            coordinator_settings
-        )?;
+        cortex.add_lobe(sc2::CtrlcBreakerLobe::new()?);
 
-        let marines = PlayerSetup::Player { race: Race::Terran };
-        let zerg = PlayerSetup::Computer {
-            race: Race::Zerg,
-            difficulty: Difficulty::VeryEasy
-        };
-
-        coordinator.launch_starcraft(
-            vec![
-                (marines, Some(User::Agent(Box::from(MarineMicroBot::new())))),
-                (zerg, None)
-            ]
-        )?;
-        coordinator.start_game(game_settings)?;
-
-        while !poll_escape(&mut events) {
-             coordinator.update()?;
-        }
+        cortical::run(cortex)?;
 
         Ok(())
     }

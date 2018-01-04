@@ -12,6 +12,7 @@ extern crate rand;
 
 extern crate sc2;
 
+mod marine_micro_lobe;
 mod terran_lobe;
 
 use std::path::PathBuf;
@@ -28,7 +29,7 @@ use sc2::{
     Map
 };
 
-//pub use marine_micro_bot::{ MarineMicroBot };
+pub use marine_micro_lobe::{ MarineMicroLobe };
 pub use terran_lobe::{ TerranLobe };
 
 pub const USAGE: &'static str = "

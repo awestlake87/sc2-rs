@@ -98,15 +98,15 @@ impl MeleeLobe {
 
         let melee = cortex.get_main_handle();
 
-        let agent1 = cortex.add_lobe(AgentLobe::cortex(settings.players.0)?);
-        let agent2 = cortex.add_lobe(AgentLobe::cortex(settings.players.1)?);
+        let player1 = cortex.add_lobe(settings.players.0);
+        let player2 = cortex.add_lobe(settings.players.1);
 
         cortex.connect(melee, launcher, Role::Launcher);
 
-        cortex.connect(melee, agent1, Role::Controller);
-        cortex.connect(melee, agent2, Role::Controller);
-        cortex.connect(melee, agent1, Role::InstanceProvider);
-        cortex.connect(melee, agent2, Role::InstanceProvider);
+        cortex.connect(melee, player1, Role::Controller);
+        cortex.connect(melee, player2, Role::Controller);
+        cortex.connect(melee, player1, Role::InstanceProvider);
+        cortex.connect(melee, player2, Role::InstanceProvider);
 
         Ok(cortex)
     }
