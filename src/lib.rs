@@ -35,7 +35,6 @@ mod frame;
 mod instance;
 mod launcher;
 mod melee;
-mod observer;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -100,7 +99,6 @@ pub use self::frame::{
 };
 pub use self::launcher::{ LauncherLobe, LauncherSettings };
 pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
-pub use self::observer::{ ObserverLobe };
 
 error_chain! {
     links {
@@ -232,6 +230,8 @@ pub enum Message {
 
     /// game started
     GameStarted,
+    /// game ended
+    GameEnded,
 
     /// handle game update
     Update(Rc<FrameData>),

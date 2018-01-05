@@ -100,6 +100,7 @@ pub enum PlayerSetup {
 }
 
 impl PlayerSetup {
+    /// does the PlayerSetup represent a player
     pub fn is_player(&self) -> bool {
         match self {
             &PlayerSetup::Player { .. } => true,
@@ -107,6 +108,7 @@ impl PlayerSetup {
         }
     }
 
+    /// does the PlayerSetup represent a computer
     pub fn is_computer(&self) -> bool {
         match self {
             &PlayerSetup::Computer { .. } => true,
@@ -114,6 +116,7 @@ impl PlayerSetup {
         }
     }
 
+    /// does the player setup represent an observer
     pub fn is_observer(&self) -> bool {
         match self {
             &PlayerSetup::Observer => true,

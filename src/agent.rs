@@ -182,6 +182,19 @@ impl Setup {
         )
     }
 
+    fn restart(soma: Soma) -> Result<AgentLobe> {
+        soma.send_req_input(Role::Controller, Message::GameEnded)?;
+        soma.send_req_output(Role::Agent, Message::GameEnded)?;
+
+        Ok(
+            AgentLobe::Setup(
+                Setup {
+                    soma: soma,
+                }
+            )
+        )
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         self.soma.update(&msg)?;
 
@@ -1079,6 +1092,10 @@ impl Observe {
         -> Result<AgentLobe>
     {
         let mut rsp = self.transactor.expect(src, rsp)?.response;
+
+        if rsp.get_status() != sc2api::Status::in_game {
+            return Setup::restart(self.soma)
+        }
 
         let mut observation = rsp.take_observation().take_observation();
 

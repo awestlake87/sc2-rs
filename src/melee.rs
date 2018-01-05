@@ -20,7 +20,6 @@ use super::{
     PlayerSetup,
 };
 
-use agent::{ AgentLobe };
 use launcher::{ LauncherLobe, LauncherSettings };
 
 /// suite of games to choose from when pitting bots against each other
@@ -53,6 +52,9 @@ pub enum MeleeLobe {
     PlayerVsPlayer(MeleePlayerVsPlayer),
     /// coordinate one instance for player vs the built-in Sc2 AI
     PlayerVsComputer(MeleePlayerVsComputer),
+
+    /// melee suite is exhausted and cortex is awaiting shutdown
+    Completed(Completed),
 }
 
 impl MeleeLobe {
@@ -125,6 +127,7 @@ impl Lobe for MeleeLobe {
             MeleeLobe::Launch(state) => state.update(msg),
             MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
             MeleeLobe::PlayerVsComputer(state) => state.update(msg),
+            MeleeLobe::Completed(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
@@ -361,6 +364,7 @@ impl MeleeLaunch {
                             players: self.players,
 
                             ready: (false, false),
+                            ended: (false, false),
                         }
                     )
                 )
@@ -425,7 +429,8 @@ pub struct MeleePlayerVsPlayer {
     ports: GamePorts,
     players: (PlayerSetup, PlayerSetup),
 
-    ready: (bool, bool)
+    ready: (bool, bool),
+    ended: (bool, bool),
 }
 
 impl MeleePlayerVsPlayer {
@@ -438,6 +443,9 @@ impl MeleePlayerVsPlayer {
             },
             Protocol::Message(src, Message::GameCreated) => {
                 self.on_game_created(src)
+            },
+            Protocol::Message(src, Message::GameEnded) => {
+                self.on_game_ended(src)
             },
 
             _ => Ok(MeleeLobe::PlayerVsPlayer(self))
@@ -481,6 +489,20 @@ impl MeleePlayerVsPlayer {
 
         Ok(MeleeLobe::PlayerVsPlayer(self))
     }
+
+    fn on_game_ended(mut self, src: Handle) -> Result<MeleeLobe> {
+        if src == self.agents.0 {
+            self.ended.0 = true;
+        }
+        else if src == self.agents.1 {
+            self.ended.1 = true;
+        }
+        else {
+            bail!("expected src of GameEnded to be an agent")
+        }
+
+        Completed::complete(self.soma)
+    }
 }
 
 /// MeleeLobe state that pits players against the built-in AI
@@ -506,6 +528,9 @@ impl MeleePlayerVsComputer {
             Protocol::Message(src, Message::GameCreated) => {
                 self.on_game_created(src)
             },
+            Protocol::Message(src, Message::GameEnded) => {
+                self.on_game_ended(src)
+            }
 
             _ => Ok(MeleeLobe::PlayerVsComputer(self))
         }
@@ -538,5 +563,32 @@ impl MeleePlayerVsComputer {
         );
 
         Ok(MeleeLobe::PlayerVsComputer(self))
+    }
+
+    fn on_game_ended(self, src: Handle) -> Result<MeleeLobe> {
+        if src != self.player {
+            bail!("expected source of GameEnded to be an agent")
+        }
+
+        Completed::complete(self.soma)
+    }
+}
+
+pub struct Completed {
+    soma:               Soma,
+}
+
+impl Completed {
+    fn complete(soma: Soma) -> Result<MeleeLobe> {
+        soma.effector()?.stop();
+
+        Ok(
+            MeleeLobe::Completed(Completed { soma: soma })
+        )
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
+        Ok(MeleeLobe::Completed(self))
     }
 }
