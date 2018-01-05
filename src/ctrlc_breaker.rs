@@ -1,24 +1,25 @@
 
 use cortical;
-use cortical::{ Lobe, Protocol };
+use cortical::{ Lobe, Protocol, Effector, };
 use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
-use super::{ Result, Message, Soma, Role };
+use super::{ Result, Message, Role };
 
 /// lobe that stops the cortex upon Ctrl-C
 pub struct CtrlcBreakerLobe {
-    soma:           Soma,
 }
 
 impl CtrlcBreakerLobe {
     /// create a new Ctrl-C breaker lobe
     pub fn new() -> Result<Self> {
-        Ok(Self { soma: Soma::new(vec![ ], vec![ ])? })
+        Ok(Self { })
     }
 
-    fn init(self) -> cortical::Result<Self> {
+    fn init(self, effector: Effector<Message, Role>)
+        -> cortical::Result<Self>
+    {
         let (tx, rx) = mpsc::channel(1);
 
         ctrlc::set_handler(
@@ -31,9 +32,9 @@ impl CtrlcBreakerLobe {
             }
         ).unwrap();
 
-        let ctrlc_effector = self.soma.effector()?.clone();
+        let ctrlc_effector = effector.clone();
 
-        self.soma.effector()?.spawn(
+        effector.spawn(
             rx.for_each(
                 move |_| {
                     ctrlc_effector.stop();
@@ -53,10 +54,8 @@ impl Lobe for CtrlcBreakerLobe {
     fn update(mut self, msg: Protocol<Message, Role>)
         -> cortical::Result<Self>
     {
-        self.soma.update(&msg)?;
-
         match msg {
-            Protocol::Init(_) => self.init(),
+            Protocol::Init(effector) => self.init(effector),
 
             _ => Ok(self),
         }

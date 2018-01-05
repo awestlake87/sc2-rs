@@ -66,12 +66,15 @@ impl Init {
     fn update(mut self, msg: Protocol<Message, Role>)
         -> Result<MarineMicroLobe>
     {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Setup::setup(self.soma, self.interval),
 
-        match msg {
-            Protocol::Start => Setup::setup(self.soma, self.interval),
-
-            _ => Ok(MarineMicroLobe::Init(self))
+                _ => bail!("unexpected message")
+            }
+        }
+        else {
+            Ok(MarineMicroLobe::Init(self))
         }
     }
 }
@@ -87,33 +90,36 @@ impl Setup {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>)-> Result<MarineMicroLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
+                    self.soma.send_req_input(
+                        Role::Agent,
+                        Message::PlayerSetup(
+                            PlayerSetup::Player {
+                                race: Race::Terran
+                            }
+                        )
+                    )?;
 
-        match msg {
-            Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
-                self.soma.send_req_input(
-                    Role::Agent,
-                    Message::PlayerSetup(
-                        PlayerSetup::Player {
-                            race: Race::Terran
-                        }
-                    )
-                )?;
+                    Ok(MarineMicroLobe::Setup(self))
+                },
+                Protocol::Message(_, Message::RequestUpdateInterval) => {
+                    self.soma.send_req_input(
+                        Role::Stepper, Message::UpdateInterval(self.interval)
+                    )?;
 
-                Ok(MarineMicroLobe::Setup(self))
-            },
-            Protocol::Message(_, Message::RequestUpdateInterval) => {
-                self.soma.send_req_input(
-                    Role::Stepper, Message::UpdateInterval(self.interval)
-                )?;
+                    Ok(MarineMicroLobe::Setup(self))
+                },
+                Protocol::Message(_, Message::GameStarted) => {
+                    InGame::start(self.soma)
+                },
 
-                Ok(MarineMicroLobe::Setup(self))
-            },
-            Protocol::Message(_, Message::GameStarted) => {
-                InGame::start(self.soma)
-            },
-
-            _ => Ok(MarineMicroLobe::Setup(self))
+                _ => bail!("unexpected message"),
+            }
+        }
+        else {
+            Ok(MarineMicroLobe::Setup(self))
         }
     }
 }
@@ -130,14 +136,17 @@ impl InGame {
     fn update(mut self, msg: Protocol<Message, Role>)
         -> Result<MarineMicroLobe>
     {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::Update(frame)) => {
+                    self.on_frame(frame)
+                },
 
-        match msg {
-            Protocol::Message(_, Message::Update(frame)) => {
-                self.on_frame(frame)
-            },
-
-            _ => Ok(MarineMicroLobe::InGame(self))
+                _ => bail!("unexpected message")
+            }
+        }
+        else {
+            Ok(MarineMicroLobe::InGame(self))
         }
     }
 

@@ -177,6 +177,7 @@ trait IntoProto<T> {
 }
 
 /// the messages that can be sent between Sc2 capable
+#[derive(Debug)]
 pub enum Message {
     /// launch an instance
     LaunchInstance,

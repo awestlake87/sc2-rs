@@ -141,12 +141,15 @@ pub struct MeleeInit {
 
 impl MeleeInit {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => self.start(),
 
-        match msg {
-            Protocol::Start => self.start(),
-
-            _ => Ok(MeleeLobe::Init(self)),
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(MeleeLobe::Init(self))
         }
     }
 
@@ -201,14 +204,17 @@ pub struct MeleeSetup {
 
 impl MeleeSetup {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::PlayerSetup(setup)) => {
+                    self.on_player_setup(src, setup)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::PlayerSetup(setup)) => {
-                self.on_player_setup(src, setup)
-            },
-
-            _ => Ok(MeleeLobe::Setup(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(MeleeLobe::Setup(self))
         }
     }
 
@@ -294,17 +300,20 @@ pub struct MeleeLaunch {
 
 impl MeleeLaunch {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::InstancePool(instances)) => {
+                    self.on_instance_pool(src, instances)
+                },
+                Protocol::Message(src, Message::PortsPool(ports)) => {
+                    self.on_ports_pool(src, ports)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::InstancePool(instances)) => {
-                self.on_instance_pool(src, instances)
-            },
-            Protocol::Message(src, Message::PortsPool(ports)) => {
-                self.on_ports_pool(src, ports)
-            },
-
-            _ => Ok(MeleeLobe::Launch(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(MeleeLobe::Launch(self))
         }
     }
 
@@ -435,20 +444,23 @@ pub struct MeleePlayerVsPlayer {
 
 impl MeleePlayerVsPlayer {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::Ready) => {
+                    self.on_agent_ready(src)
+                },
+                Protocol::Message(src, Message::GameCreated) => {
+                    self.on_game_created(src)
+                },
+                Protocol::Message(src, Message::GameEnded) => {
+                    self.on_game_ended(src)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::Ready) => {
-                self.on_agent_ready(src)
-            },
-            Protocol::Message(src, Message::GameCreated) => {
-                self.on_game_created(src)
-            },
-            Protocol::Message(src, Message::GameEnded) => {
-                self.on_game_ended(src)
-            },
-
-            _ => Ok(MeleeLobe::PlayerVsPlayer(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(MeleeLobe::PlayerVsPlayer(self))
         }
     }
 
@@ -519,20 +531,23 @@ pub struct MeleePlayerVsComputer {
 
 impl MeleePlayerVsComputer {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::Ready) => {
+                    self.on_agent_ready(src)
+                },
+                Protocol::Message(src, Message::GameCreated) => {
+                    self.on_game_created(src)
+                },
+                Protocol::Message(src, Message::GameEnded) => {
+                    self.on_game_ended(src)
+                }
 
-        match msg {
-            Protocol::Message(src, Message::Ready) => {
-                self.on_agent_ready(src)
-            },
-            Protocol::Message(src, Message::GameCreated) => {
-                self.on_game_created(src)
-            },
-            Protocol::Message(src, Message::GameEnded) => {
-                self.on_game_ended(src)
+                _ => bail!("unexpected protocol message")
             }
-
-            _ => Ok(MeleeLobe::PlayerVsComputer(self))
+        }
+        else {
+            Ok(MeleeLobe::PlayerVsComputer(self))
         }
     }
 
@@ -588,7 +603,11 @@ impl Completed {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        self.soma.update(&msg)?;
-        Ok(MeleeLobe::Completed(self))
+        if let Some(_) = self.soma.update(msg)? {
+            bail!("unexpected protocol message")
+        }
+        else {
+            Ok(MeleeLobe::Completed(self))
+        }
     }
 }

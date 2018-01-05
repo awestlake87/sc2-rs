@@ -157,12 +157,15 @@ pub struct Init {
 
 impl Init {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Setup::setup(self.soma),
 
-        match msg {
-            Protocol::Start => Setup::setup(self.soma),
-
-            _ => Ok(AgentLobe::Init(self)),
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(AgentLobe::Init(self))
         }
     }
 }
@@ -196,33 +199,40 @@ impl Setup {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::Ready) => {
+                    self.on_ready(src)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::Ready) => {
-                self.on_ready(src)
-            },
+                Protocol::Message(
+                    src, Message::RequestPlayerSetup(settings)
+                ) => {
+                    self.on_req_player_setup(src, settings)
+                },
+                Protocol::Message(src, Message::PlayerSetup(setup)) => {
+                    self.on_player_setup(src, setup)
+                },
 
-            Protocol::Message(src, Message::RequestPlayerSetup(settings)) => {
-                self.on_req_player_setup(src, settings)
-            },
-            Protocol::Message(src, Message::PlayerSetup(setup)) => {
-                self.on_player_setup(src, setup)
-            },
+                Protocol::Message(
+                    src, Message::ProvideInstance(instance, url)
+                ) => {
+                    self.provide_instance(src, instance, url)
+                }
+                Protocol::Message(
+                    src, Message::CreateGame(settings, players)
+                ) => {
+                    self.create_game(src, settings, players)
+                },
+                Protocol::Message(_, Message::GameReady(setup, ports)) => {
+                    self.on_game_ready(setup, ports)
+                },
 
-            Protocol::Message(
-                src, Message::ProvideInstance(instance, url)
-            ) => {
-                self.provide_instance(src, instance, url)
+                _ => bail!("unexpected protocol message")
             }
-            Protocol::Message(src, Message::CreateGame(settings, players)) => {
-                self.create_game(src, settings, players)
-            },
-            Protocol::Message(_, Message::GameReady(setup, ports)) => {
-                self.on_game_ready(setup, ports)
-            },
-
-            _ => Ok(AgentLobe::Setup(self))
+        }
+        else {
+            Ok(AgentLobe::Setup(self))
         }
     }
 
@@ -355,16 +365,19 @@ pub struct CreateGame {
 
 impl CreateGame {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.transactor.expect(src, rsp)?;
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.transactor.expect(src, rsp)?;
+                    GameCreated::game_created(self.soma)
+                },
 
-                GameCreated::game_created(self.soma)
-            },
-
-            _ => Ok(AgentLobe::CreateGame(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(AgentLobe::CreateGame(self))
         }
     }
 }
@@ -389,14 +402,17 @@ impl GameCreated {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::GameReady(setup, ports)) => {
+                    JoinGame::join_game(self.soma, setup, ports)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::GameReady(setup, ports)) => {
-                JoinGame::join_game(self.soma, setup, ports)
-            },
-
-            _ => Ok(AgentLobe::GameCreated(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(AgentLobe::GameCreated(self))
         }
     }
 }
@@ -469,13 +485,16 @@ impl JoinGame {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
-
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_join_game(src, rsp)
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.on_join_game(src, rsp)
+                }
+                _ => bail!("unexpected protocol message")
             }
-            _ => Ok(AgentLobe::JoinGame(self))
+        }
+        else {
+            Ok(AgentLobe::JoinGame(self))
         }
     }
 
@@ -513,13 +532,16 @@ impl FetchGameData {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
-
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_game_data(src, rsp)
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.on_game_data(src, rsp)
+                }
+                _ => bail!("unexpected protocol message")
             }
-            _ => Ok(AgentLobe::FetchGameData(self))
+        }
+        else {
+            Ok(AgentLobe::FetchGameData(self))
         }
     }
 
@@ -608,14 +630,17 @@ impl FetchTerrainData {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.on_terrain_info(src, rsp)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_terrain_info(src, rsp)
-            },
-
-            _ => Ok(AgentLobe::FetchTerrainData(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(AgentLobe::FetchTerrainData(self))
         }
     }
 
@@ -663,14 +688,17 @@ impl StepperSetup {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::UpdateInterval(interval)) => {
+                    self.on_update_interval(src, interval)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::UpdateInterval(interval)) => {
-                self.on_update_interval(src, interval)
-            },
-
-            _ => Ok(AgentLobe::StepperSetup(self))
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(AgentLobe::StepperSetup(self))
         }
     }
 
@@ -729,21 +757,24 @@ impl Update {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
-
-        match msg {
-            Protocol::Message(
-                _, Message::UpdateComplete(commands, debug_commands)
-            ) => {
-                SendActions::send_actions(
-                    self.soma,
-                    self.interval,
-                    self.data,
-                    commands,
-                    debug_commands
-                )
-            },
-            _ => Ok(AgentLobe::Update(self))
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(
+                    _, Message::UpdateComplete(commands, debug_commands)
+                ) => {
+                    SendActions::send_actions(
+                        self.soma,
+                        self.interval,
+                        self.data,
+                        commands,
+                        debug_commands
+                    )
+                },
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(AgentLobe::Update(self))
         }
     }
 }
@@ -819,20 +850,23 @@ impl SendActions {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    let rsp = self.transactor.expect(src, rsp)?;
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                let rsp = self.transactor.expect(src, rsp)?;
-
-                SendDebug::send_debug(
-                    self.soma,
-                    self.interval,
-                    self.data,
-                    self.debug_commands
-                )
+                    SendDebug::send_debug(
+                        self.soma,
+                        self.interval,
+                        self.data,
+                        self.debug_commands
+                    )
+                },
+                _ => bail!("unexpected protocol message"),
             }
-            _ => Ok(AgentLobe::SendActions(self))
+        }
+        else {
+            Ok(AgentLobe::SendActions(self))
         }
     }
 }
@@ -959,15 +993,19 @@ impl SendDebug {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    let rsp = self.transactor.expect(src, rsp)?;
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                let rsp = self.transactor.expect(src, rsp)?;
+                    Step::step(self.soma, self.interval, self.data)
+                },
 
-                Step::step(self.soma, self.interval, self.data)
+                _ => bail!("unexpected protocol message")
             }
-            _ => Ok(AgentLobe::SendDebug(self))
+        }
+        else {
+            Ok(AgentLobe::SendDebug(self))
         }
     }
 }
@@ -1028,14 +1066,17 @@ impl Step {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.on_step(src, rsp)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_step(src, rsp)
-            },
-
-            _ => Ok(AgentLobe::Step(self)),
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(AgentLobe::Step(self))
         }
     }
 
@@ -1077,14 +1118,17 @@ impl Observe {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.on_observe(src, rsp)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                self.on_observe(src, rsp)
-            },
-
-            _ => Ok(AgentLobe::Observe(self)),
+                _ => bail!("unexpected protocol message"),
+            }
+        }
+        else {
+            Ok(AgentLobe::Observe(self))
         }
     }
 

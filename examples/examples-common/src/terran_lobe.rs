@@ -75,12 +75,15 @@ pub struct Init {
 
 impl Init {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Setup::setup(self.soma, self.interval),
 
-        match msg {
-            Protocol::Start => Setup::setup(self.soma, self.interval),
-
-            _ => Ok(TerranLobe::Init(self))
+                _ => bail!("unexpected message"),
+            }
+        }
+        else {
+            Ok(TerranLobe::Init(self))
         }
     }
 }
@@ -96,33 +99,36 @@ impl Setup {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>)-> Result<TerranLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
+                    self.soma.send_req_input(
+                        Role::Agent,
+                        Message::PlayerSetup(
+                            PlayerSetup::Player {
+                                race: Race::Terran
+                            }
+                        )
+                    )?;
 
-        match msg {
-            Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
-                self.soma.send_req_input(
-                    Role::Agent,
-                    Message::PlayerSetup(
-                        PlayerSetup::Player {
-                            race: Race::Terran
-                        }
-                    )
-                )?;
+                    Ok(TerranLobe::Setup(self))
+                },
+                Protocol::Message(_, Message::RequestUpdateInterval) => {
+                    self.soma.send_req_input(
+                        Role::Stepper, Message::UpdateInterval(self.interval)
+                    )?;
 
-                Ok(TerranLobe::Setup(self))
-            },
-            Protocol::Message(_, Message::RequestUpdateInterval) => {
-                self.soma.send_req_input(
-                    Role::Stepper, Message::UpdateInterval(self.interval)
-                )?;
+                    Ok(TerranLobe::Setup(self))
+                },
+                Protocol::Message(_, Message::GameStarted) => {
+                    InGame::start(self.soma)
+                },
 
-                Ok(TerranLobe::Setup(self))
-            },
-            Protocol::Message(_, Message::GameStarted) => {
-                InGame::start(self.soma)
-            },
-
-            _ => Ok(TerranLobe::Setup(self))
+                _ => bail!("unexpected message"),
+            }
+        }
+        else {
+            Ok(TerranLobe::Setup(self))
         }
     }
 }
@@ -137,14 +143,21 @@ impl InGame {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::Update(frame)) => {
+                    self.on_frame(frame)
+                },
 
-        match msg {
-            Protocol::Message(_, Message::Update(frame)) => {
-                self.on_frame(frame)
-            },
+                Protocol::Message(_, Message::GameEnded) => {
+                    Ok(TerranLobe::InGame(self))
+                },
 
-            _ => Ok(TerranLobe::InGame(self))
+                _ => bail!("unexpected message"),
+            }
+        }
+        else {
+            Ok(TerranLobe::InGame(self))
         }
     }
 

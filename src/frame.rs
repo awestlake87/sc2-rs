@@ -52,6 +52,7 @@ pub enum Command {
 }
 
 /// a debug command for the game
+#[derive(Debug, Clone)]
 pub enum DebugCommand {
     /// shows debug text in the game instance
     DebugText {
@@ -193,6 +194,7 @@ pub struct GameState {
 }
 
 impl GameState {
+    /// filter all units based on a custom condition
     pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
         where F: Fn(&Unit) -> bool
     {

@@ -176,17 +176,25 @@ impl Lobe for LauncherLobe {
     fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
         -> cortical::Result<Self>
     {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Ok(self),
 
-        match msg {
-            Protocol::Message(src, Message::LaunchInstance) => {
-                self.launch(src)
-            },
+                Protocol::Message(src, Message::LaunchInstance) => {
+                    self.launch(src)
+                },
 
-            _ => Ok(self)
-        }.chain_err(
-            || cortical::ErrorKind::LobeError
-        )
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message")
+            }.chain_err(
+                || cortical::ErrorKind::LobeError
+            )
+        }
+        else {
+            Ok(self)
+        }
     }
 }
 

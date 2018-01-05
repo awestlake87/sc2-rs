@@ -99,6 +99,7 @@ pub enum ClientMessageKind {
     Debug
 }
 
+#[derive(Debug)]
 pub struct ClientRequest {
     pub transaction: TransactionId,
     pub request: Request,
@@ -191,6 +192,7 @@ impl ClientRequest {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientResponse {
     pub transaction: TransactionId,
     pub response: Response,
@@ -328,12 +330,15 @@ pub struct ClientInit {
 
 impl ClientInit {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => self.start(),
 
-        match msg {
-            Protocol::Start => self.start(),
-
-            _ => Ok(ClientLobe::Init(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(ClientLobe::Init(self))
         }
     }
 
@@ -348,16 +353,19 @@ pub struct ClientAwaitInstance {
 
 impl ClientAwaitInstance {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(
+                    src, Message::ProvideInstance(instance, url)
+                ) => {
+                    self.assign_instance(src, instance, url)
+                },
 
-        match msg {
-            Protocol::Message(
-                src, Message::ProvideInstance(instance, url)
-            ) => {
-                self.assign_instance(src, instance, url)
-            },
-
-            _ => Ok(ClientLobe::AwaitInstance(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(ClientLobe::AwaitInstance(self))
         }
     }
 
@@ -393,17 +401,20 @@ pub struct ClientConnect {
 
 impl ClientConnect {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::AttemptConnect(url)) => {
+                    self.attempt_connect(src, url)
+                },
+                Protocol::Message(src, Message::Connected(sender)) => {
+                    self.on_connected(src, sender)
+                },
 
-        match msg {
-            Protocol::Message(src, Message::AttemptConnect(url)) => {
-                self.attempt_connect(src, url)
-            },
-            Protocol::Message(src, Message::Connected(sender)) => {
-                self.on_connected(src, sender)
-            },
-
-            _ => Ok(ClientLobe::Connect(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(ClientLobe::Connect(self))
         }
     }
 
@@ -554,25 +565,30 @@ pub struct ClientOpen {
 
 impl ClientOpen {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        self.soma.update(&msg)?;
-
-        match msg {
-            Protocol::Message(src, Message::ClientRequest(req)) => {
-                self.send(src, req)
-            },
-            Protocol::Message(src, Message::ClientReceive(msg)) => {
-                self.recv(src, msg)
-            },
-            Protocol::Message(src, Message::ClientTimeout(transaction)) => {
-                self.on_timeout(src, transaction)
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientRequest(req)) => {
+                    self.send(src, req)
+                },
+                Protocol::Message(src, Message::ClientReceive(msg)) => {
+                    self.recv(src, msg)
+                },
+                Protocol::Message(
+                    src, Message::ClientTimeout(transaction)
+                ) => {
+                    self.on_timeout(src, transaction)
+                }
+                Protocol::Message(src, Message::ClientClosed) => {
+                    self.on_close(src)
+                },
+                Protocol::Message(src, Message::ClientError(e)) => {
+                    self.on_error(src, e)
+                }
+                _ => bail!("unexpected protocol message")
             }
-            Protocol::Message(src, Message::ClientClosed) => {
-                self.on_close(src)
-            },
-            Protocol::Message(src, Message::ClientError(e)) => {
-                self.on_error(src, e)
-            }
-            _ => Ok(ClientLobe::Open(self))
+        }
+        else {
+            Ok(ClientLobe::Open(self))
         }
     }
 
@@ -693,8 +709,11 @@ pub struct ClientClosed {
 
 impl ClientClosed {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        self.soma.update(&msg)?;
-
-        Ok(ClientLobe::Closed(self))
+        if let Some(_) = self.soma.update(msg)? {
+            bail!("unexpected protocol message")
+        }
+        else {
+            Ok(ClientLobe::Closed(self))
+        }
     }
 }

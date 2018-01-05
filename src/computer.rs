@@ -54,12 +54,15 @@ pub struct Init {
 
 impl Init {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Setup::setup(self.soma, self.setup),
 
-        match msg {
-            Protocol::Start => Setup::setup(self.soma, self.setup),
-
-            _ => Ok(ComputerLobe::Init(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(ComputerLobe::Init(self))
         }
     }
 }
@@ -76,18 +79,21 @@ impl Setup {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerLobe> {
-        self.soma.update(&msg)?;
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
+                    self.soma.send_req_input(
+                        Role::Controller, Message::PlayerSetup(self.setup)
+                    )?;
 
-        match msg {
-            Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
-                self.soma.send_req_input(
-                    Role::Controller, Message::PlayerSetup(self.setup)
-                )?;
+                    Ok(ComputerLobe::Setup(self))
+                },
 
-                Ok(ComputerLobe::Setup(self))
-            },
-
-            _ => Ok(ComputerLobe::Setup(self))
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(ComputerLobe::Setup(self))
         }
     }
 }
