@@ -224,24 +224,19 @@ impl MeleeSetup {
 
         match self.players {
             (Some(setup1), Some(setup2)) => {
-                let is_pvp = match setup1 {
-                    PlayerSetup::Player { .. } => match setup2 {
-                        PlayerSetup::Player { .. } => true,
-                        PlayerSetup::Computer { .. } => false,
-                        _ => bail!(
-                            "melee lobe cannot do player vs observer"
-                        )
-                    },
-                    PlayerSetup::Computer { .. } => match setup2 {
-                        PlayerSetup::Player { .. } => false,
-                        PlayerSetup::Computer { .. } => bail!(
-                            "melee lobe cannot do computer vs computer"
-                        ),
-                        _ => bail!(
-                            "melee lobe cannot do computer vs observer"
-                        )
-                    },
-                    _ => bail!("melee lobe cannot use observer")
+                let is_pvp = {
+                    if setup1.is_player() && setup2.is_computer() {
+                        false
+                    }
+                    else if setup1.is_computer() && setup2.is_player() {
+                        false
+                    }
+                    else if setup1.is_player() && setup2.is_player() {
+                        true
+                    }
+                    else {
+                        bail!("invalid player setups")
+                    }
                 };
 
                 let launcher = self.soma.req_output(Role::Launcher)?;
@@ -374,17 +369,49 @@ impl MeleeLaunch {
                 Ok(MeleeLobe::Launch(self))
             }
         }
-        else {
-            if self.instances.len() >= 1 {
-                Ok(
-                    MeleeLobe::PlayerVsComputer(
-                        MeleePlayerVsComputer { }
+        else if self.instances.len() >= 1 {
+            let (id, &(ref url, ref ports)) = self.instances.iter()
+                .nth(0).unwrap()
+            ;
+
+            let ((player, player_setup), (computer, computer_setup)) = {
+                if self.players.0.is_player() {
+                    (
+                        (self.agents.0, self.players.0),
+                        (self.agents.1, self.players.1),
                     )
+                }
+                else {
+                    assert!(self.players.1.is_player());
+
+                    (
+                        (self.agents.1, self.players.1),
+                        (self.agents.0, self.players.0),
+                    )
+                }
+            };
+
+            self.soma.effector()?.send(
+                player, Message::ProvideInstance(*id, url.clone())
+            );
+
+            Ok(
+                MeleeLobe::PlayerVsComputer(
+                    MeleePlayerVsComputer {
+                        soma: self.soma,
+
+                        game: self.game,
+                        player_setup: player_setup,
+                        computer_setup: computer_setup,
+
+                        player: player,
+                        computer: computer,
+                    }
                 )
-            }
-            else {
-                Ok(MeleeLobe::Launch(self))
-            }
+            )
+        }
+        else {
+            Ok(MeleeLobe::Launch(self))
         }
     }
 }
@@ -445,11 +472,11 @@ impl MeleePlayerVsPlayer {
 
         self.soma.effector()?.send(
             self.agents.0,
-            Message::GameReady(self.players.0, self.ports.clone())
+            Message::GameReady(self.players.0, Some(self.ports.clone()))
         );
         self.soma.effector()?.send(
             self.agents.1,
-            Message::GameReady(self.players.1, self.ports.clone())
+            Message::GameReady(self.players.1, Some(self.ports.clone()))
         );
 
         Ok(MeleeLobe::PlayerVsPlayer(self))
@@ -458,10 +485,58 @@ impl MeleePlayerVsPlayer {
 
 /// MeleeLobe state that pits players against the built-in AI
 pub struct MeleePlayerVsComputer {
+    soma:               Soma,
+
+    game:               GameSettings,
+    player_setup:       PlayerSetup,
+    computer_setup:     PlayerSetup,
+
+    player:             Handle,
+    computer:           Handle,
 }
 
 impl MeleePlayerVsComputer {
-    fn update(self, _msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        unimplemented!()
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+        self.soma.update(&msg)?;
+
+        match msg {
+            Protocol::Message(src, Message::Ready) => {
+                self.on_agent_ready(src)
+            },
+            Protocol::Message(src, Message::GameCreated) => {
+                self.on_game_created(src)
+            },
+
+            _ => Ok(MeleeLobe::PlayerVsComputer(self))
+        }
+    }
+
+    fn on_agent_ready(self, src: Handle) -> Result<MeleeLobe> {
+        if src != self.player {
+            bail!("expected source of Ready to be the agent")
+        }
+
+        self.soma.effector()?.send(
+            self.player,
+            Message::CreateGame(
+                self.game.clone(),
+                vec![ self.player_setup, self.computer_setup ]
+            )
+        );
+
+        Ok(MeleeLobe::PlayerVsComputer(self))
+    }
+
+    fn on_game_created(self, src: Handle) -> Result<MeleeLobe> {
+        if src != self.player {
+            bail!("expected source of GameCreated to be the agent")
+        }
+
+        self.soma.effector()?.send(
+            self.player,
+            Message::GameReady(self.player_setup, None)
+        );
+
+        Ok(MeleeLobe::PlayerVsComputer(self))
     }
 }

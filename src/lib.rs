@@ -221,7 +221,7 @@ pub enum Message {
     /// game was created with the given settings
     GameCreated,
     /// notify agents that game is ready to join with the given player setup
-    GameReady(PlayerSetup, GamePorts),
+    GameReady(PlayerSetup, Option<GamePorts>),
     /// join an existing game
     JoinGame(GamePorts),
 

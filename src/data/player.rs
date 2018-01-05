@@ -95,6 +95,29 @@ pub enum PlayerSetup {
         /// race of the player
         race:           Race
     },
-    /// add a replay observer (these are separate from the other two)
-    Observer
+
+    Observer,
+}
+
+impl PlayerSetup {
+    pub fn is_player(&self) -> bool {
+        match self {
+            &PlayerSetup::Player { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_computer(&self) -> bool {
+        match self {
+            &PlayerSetup::Computer { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_observer(&self) -> bool {
+        match self {
+            &PlayerSetup::Observer => true,
+            _ => false,
+        }
+    }
 }

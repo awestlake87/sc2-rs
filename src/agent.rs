@@ -322,7 +322,7 @@ impl Setup {
         )
     }
 
-    fn on_game_ready(self, setup: PlayerSetup, ports: GamePorts)
+    fn on_game_ready(self, setup: PlayerSetup, ports: Option<GamePorts>)
         -> Result<AgentLobe>
     {
         let this_lobe = self.soma.effector()?.this_lobe();
@@ -394,7 +394,7 @@ pub struct JoinGame {
 }
 
 impl JoinGame {
-    fn join_game(soma: Soma, setup: PlayerSetup, ports: GamePorts)
+    fn join_game(soma: Soma, setup: PlayerSetup, ports: Option<GamePorts>)
         -> Result<AgentLobe>
     {
         let mut req = sc2api::Request::new();
@@ -409,25 +409,27 @@ impl JoinGame {
             _ => req.mut_join_game().set_race(common::Race::NoRace)
         };
 
-        req.mut_join_game().set_shared_port(ports.shared_port as i32);
+        if let Some(ports) = ports {
+            req.mut_join_game().set_shared_port(ports.shared_port as i32);
 
-        {
-            let s = req.mut_join_game().mut_server_ports();
+            {
+                let s = req.mut_join_game().mut_server_ports();
 
-            s.set_game_port(ports.server_ports.game_port as i32);
-            s.set_base_port(ports.server_ports.base_port as i32);
-        }
+                s.set_game_port(ports.server_ports.game_port as i32);
+                s.set_base_port(ports.server_ports.base_port as i32);
+            }
 
-        {
-            let client_ports = req.mut_join_game().mut_client_ports();
+            {
+                let client_ports = req.mut_join_game().mut_client_ports();
 
-            for c in &ports.client_ports {
-                let mut p = sc2api::PortSet::new();
+                for c in &ports.client_ports {
+                    let mut p = sc2api::PortSet::new();
 
-                p.set_game_port(c.game_port as i32);
-                p.set_base_port(c.base_port as i32);
+                    p.set_game_port(c.game_port as i32);
+                    p.set_base_port(c.base_port as i32);
 
-                client_ports.push(p);
+                    client_ports.push(p);
+                }
             }
         }
 
