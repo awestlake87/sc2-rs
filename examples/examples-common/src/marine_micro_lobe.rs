@@ -28,7 +28,6 @@ impl MarineMicroLobe {
                     soma: Soma::new(
                         vec![
                             Constraint::RequireOne(Role::Agent),
-                            Constraint::RequireOne(Role::Stepper),
                         ],
                         vec![ ],
                     )?,
@@ -106,7 +105,7 @@ impl Setup {
                 },
                 Protocol::Message(_, Message::RequestUpdateInterval) => {
                     self.soma.send_req_input(
-                        Role::Stepper, Message::UpdateInterval(self.interval)
+                        Role::Agent, Message::UpdateInterval(self.interval)
                     )?;
 
                     Ok(MarineMicroLobe::Setup(self))
@@ -150,14 +149,8 @@ impl InGame {
         }
     }
 
-    fn on_frame(self, frame: Rc<FrameData>) -> Result<MarineMicroLobe> {
-        self.soma.send_req_input(
-            Role::Stepper,
-            Message::UpdateComplete(
-                vec![ ],
-                vec![ ]
-            )
-        )?;
+    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroLobe> {
+        self.soma.send_req_input(Role::Agent, Message::UpdateComplete)?;
 
         Ok(MarineMicroLobe::InGame(self))
     }

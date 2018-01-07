@@ -603,8 +603,13 @@ impl Completed {
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
-        if let Some(_) = self.soma.update(msg)? {
-            bail!("unexpected protocol message")
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message"),
+            }
         }
         else {
             Ok(MeleeLobe::Completed(self))

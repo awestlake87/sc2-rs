@@ -85,7 +85,6 @@ impl AgentLobe {
                             Constraint::RequireOne(Role::Client),
                             Constraint::RequireOne(Role::Agent),
                             Constraint::RequireOne(Role::InstanceProvider),
-                            Constraint::RequireOne(Role::Stepper),
                         ],
                     )?,
                 }
@@ -115,7 +114,6 @@ impl AgentLobe {
         cortex.connect(agent, client, Role::InstanceProvider);
         cortex.connect(agent, client, Role::Client);
         cortex.connect(agent, player, Role::Agent);
-        cortex.connect(agent, player, Role::Stepper);
 
         Ok(cortex)
     }
@@ -672,7 +670,7 @@ pub struct StepperSetup {
 
 impl StepperSetup {
     fn setup(soma: Soma, game_data: Rc<GameData>) -> Result<AgentLobe> {
-        let stepper = soma.req_output(Role::Stepper)?;
+        let stepper = soma.req_output(Role::Agent)?;
 
         soma.effector()?.send(stepper, Message::RequestUpdateInterval);
 
@@ -734,6 +732,8 @@ pub struct Update {
     interval:           u32,
     data:               AgentData,
     frame:              Rc<FrameData>,
+    commands:           Vec<Command>,
+    debug_commands:     Vec<DebugCommand>,
 }
 
 impl Update {
@@ -741,7 +741,7 @@ impl Update {
         -> Result<AgentLobe>
     {
         soma.send_req_output(
-            Role::Stepper, Message::Update(Rc::clone(&frame))
+            Role::Agent, Message::Update(Rc::clone(&frame))
         )?;
 
         Ok(
@@ -751,6 +751,8 @@ impl Update {
                     interval: interval,
                     data: data,
                     frame: frame,
+                    commands: vec![ ],
+                    debug_commands: vec![ ],
                 }
             )
         )
@@ -759,16 +761,17 @@ impl Update {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(
-                    _, Message::UpdateComplete(commands, debug_commands)
-                ) => {
-                    SendActions::send_actions(
-                        self.soma,
-                        self.interval,
-                        self.data,
-                        commands,
-                        debug_commands
-                    )
+                Protocol::Message(_, Message::Command(cmd)) => {
+                    self.commands.push(cmd);
+                    Ok(AgentLobe::Update(self))
+                },
+                Protocol::Message(_, Message::DebugCommand(cmd)) => {
+                    self.debug_commands.push(cmd);
+                    Ok(AgentLobe::Update(self))
+                },
+
+                Protocol::Message(_, Message::UpdateComplete) => {
+                    self.on_update_complete()
                 },
                 _ => bail!("unexpected protocol message"),
             }
@@ -776,6 +779,16 @@ impl Update {
         else {
             Ok(AgentLobe::Update(self))
         }
+    }
+
+    fn on_update_complete(self) -> Result<AgentLobe> {
+        SendActions::send_actions(
+            self.soma,
+            self.interval,
+            self.data,
+            self.commands,
+            self.debug_commands
+        )
     }
 }
 

@@ -226,7 +226,7 @@ pub enum Message {
 
     /// request update interval from player
     RequestUpdateInterval,
-    /// respond with preferred update interval in game steps
+    /// respond with update interval in game steps
     UpdateInterval(u32),
 
     /// game started
@@ -236,8 +236,12 @@ pub enum Message {
 
     /// handle game update
     Update(Rc<FrameData>),
+    /// issue a command to the game instance
+    Command(Command),
+    /// issue a debug command to the game instance
+    DebugCommand(DebugCommand),
     /// notify the stepper that the lobe is done updating
-    UpdateComplete(Vec<Command>, Vec<DebugCommand>),
+    UpdateComplete,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
@@ -258,9 +262,6 @@ pub enum Role {
     Client,
     /// observes game state
     Observer,
-
-    /// provides periodic updates from other lobes to agent
-    Stepper,
 }
 
 /// type alias for an Sc2 Cortex

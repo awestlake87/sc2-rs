@@ -39,7 +39,6 @@ impl TerranLobe {
                     soma: Soma::new(
                         vec![
                             Constraint::RequireOne(Role::Agent),
-                            Constraint::RequireOne(Role::Stepper),
                         ],
                         vec![ ],
                     )?,
@@ -115,7 +114,7 @@ impl Setup {
                 },
                 Protocol::Message(_, Message::RequestUpdateInterval) => {
                     self.soma.send_req_input(
-                        Role::Stepper, Message::UpdateInterval(self.interval)
+                        Role::Agent, Message::UpdateInterval(self.interval)
                     )?;
 
                     Ok(TerranLobe::Setup(self))
@@ -162,13 +161,18 @@ impl InGame {
     }
 
     fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranLobe> {
-        self.soma.send_req_input(
-            Role::Stepper,
-            Message::UpdateComplete(
-                self.create_commands(&*frame)?,
-                vec![ ]
-            )
-        )?;
+        let commands = self.create_commands(&*frame)?;
+
+        let agent = self.soma.req_input(Role::Agent)?;
+
+        let mut messages: Vec<Message> = commands.into_iter()
+            .map(|cmd| Message::Command(cmd))
+            .collect()
+        ;
+
+        messages.push(Message::UpdateComplete);
+
+        self.soma.effector()?.send_in_order(agent, messages);
 
         Ok(TerranLobe::InGame(self))
     }
