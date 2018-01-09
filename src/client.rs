@@ -5,7 +5,9 @@ use std::time;
 
 use bytes::{ Buf, BufMut };
 use cortical;
-use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
+use cortical::{
+    ResultExt, Handle, Lobe, Protocol, Constraint
+};
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
 use protobuf;
@@ -280,20 +282,20 @@ impl ClientResponse {
 const NUM_RETRIES: u32 = 10;
 
 pub enum ClientLobe {
-    Init(ClientInit),
-    AwaitInstance(ClientAwaitInstance),
-    Connect(ClientConnect),
+    Init(Init),
+    AwaitInstance(AwaitInstance),
+    Connect(Connect),
 
-    Open(ClientOpen),
+    Open(Open),
 
-    Closed(ClientClosed),
+    Disconnect(Disconnect),
 }
 
 impl ClientLobe {
     pub fn new() -> Result<Self> {
         Ok(
             ClientLobe::Init(
-                ClientInit {
+                Init {
                     soma: Soma::new(
                         vec![
                             Constraint::RequireOne(Role::InstanceProvider),
@@ -317,18 +319,18 @@ impl Lobe for ClientLobe {
             ClientLobe::AwaitInstance(state) => state.update(msg),
             ClientLobe::Connect(state) => state.update(msg),
             ClientLobe::Open(state) => state.update(msg),
-            ClientLobe::Closed(state) => state.update(msg),
+            ClientLobe::Disconnect(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
     }
 }
 
-pub struct ClientInit {
+pub struct Init {
     soma:               Soma
 }
 
-impl ClientInit {
+impl Init {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -343,15 +345,35 @@ impl ClientInit {
     }
 
     fn start(self) -> Result<ClientLobe> {
-        Ok(ClientLobe::AwaitInstance(ClientAwaitInstance { soma: self.soma }))
+        AwaitInstance::await(self.soma)
     }
 }
 
-pub struct ClientAwaitInstance {
+pub struct AwaitInstance {
     soma:               Soma,
 }
 
-impl ClientAwaitInstance {
+impl AwaitInstance {
+    fn await(soma: Soma) -> Result<ClientLobe> {
+        Ok(ClientLobe::AwaitInstance(AwaitInstance { soma: soma }))
+    }
+
+    fn reset(soma: Soma) -> Result<ClientLobe> {
+        soma.send_req_input(Role::Client, Message::ClientClosed)?;
+
+        Self::await(soma)
+    }
+
+    fn reset_error(soma: Soma, e: Error) -> Result<ClientLobe> {
+        let client = soma.req_input(Role::Client)?;
+
+        soma.effector()?.send_in_order(
+            client, vec![ Message::ClientError(e), Message::ClientClosed ]
+        );
+
+        Self::await(soma)
+    }
+
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -374,15 +396,28 @@ impl ClientAwaitInstance {
     {
         assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
 
-        let this_lobe = self.soma.effector()?.this_lobe();
-        self.soma.effector()?.send(
-            this_lobe, Message::AttemptConnect(url)
+        Connect::connect(self.soma, url)
+    }
+}
+
+pub struct Connect {
+    soma:               Soma,
+
+    timer:              Timer,
+    retries:            u32,
+}
+
+impl Connect {
+    fn connect(soma: Soma, url: Url) -> Result<ClientLobe> {
+        let this_lobe = soma.effector()?.this_lobe();
+        soma.effector()?.send(
+            this_lobe, Message::ClientAttemptConnect(url)
         );
 
         Ok(
             ClientLobe::Connect(
-                ClientConnect {
-                    soma: self.soma,
+                Connect {
+                    soma: soma,
 
                     timer: Timer::default(),
                     retries: NUM_RETRIES,
@@ -390,23 +425,14 @@ impl ClientAwaitInstance {
             )
         )
     }
-}
 
-pub struct ClientConnect {
-    soma:               Soma,
-
-    timer:              Timer,
-    retries:            u32,
-}
-
-impl ClientConnect {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::AttemptConnect(url)) => {
+                Protocol::Message(src, Message::ClientAttemptConnect(url)) => {
                     self.attempt_connect(src, url)
                 },
-                Protocol::Message(src, Message::Connected(sender)) => {
+                Protocol::Message(src, Message::ClientConnected(sender)) => {
                     self.on_connected(src, sender)
                 },
 
@@ -499,7 +525,7 @@ impl ClientConnect {
                         );
                         connected_effector.send(
                             this_lobe,
-                            Message::Connected(send_tx)
+                            Message::ClientConnected(send_tx)
                         );
 
                         Ok(())
@@ -508,7 +534,7 @@ impl ClientConnect {
                         let this_lobe = retry_effector.this_lobe();
                         retry_effector.send(
                             this_lobe,
-                            Message::AttemptConnect(retry_url)
+                            Message::ClientAttemptConnect(retry_url)
                         );
 
                         Ok(())
@@ -537,33 +563,41 @@ impl ClientConnect {
     {
         assert_eq!(src, self.soma.effector()?.this_lobe());
 
-        self.soma.send_req_input(Role::Client, Message::Ready)?;
+        Open::open(self.soma, sender, self.timer)
+    }
+}
+
+pub struct Open {
+    soma:           Soma,
+    sender:         mpsc::Sender<tungstenite::Message>,
+    timer:          Timer,
+
+    transactions:   VecDeque<
+                        (TransactionId, oneshot::Sender<()>)
+                    >,
+}
+
+impl Open {
+    fn open(
+        soma: Soma, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
+    )
+        -> Result<ClientLobe>
+    {
+        soma.send_req_input(Role::Client, Message::Ready)?;
 
         Ok(
             ClientLobe::Open(
-                ClientOpen {
-                    soma: self.soma,
+                Open {
+                    soma: soma,
                     sender: sender,
-                    timer: self.timer,
+                    timer: timer,
 
                     transactions: VecDeque::new(),
                 }
             )
         )
     }
-}
 
-pub struct ClientOpen {
-    soma:           Soma,
-    sender:         mpsc::Sender<tungstenite::Message>,
-    timer:          Timer,
-
-    transactions:   VecDeque<
-        (TransactionId, oneshot::Sender<()>)
-    >,
-}
-
-impl ClientOpen {
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -577,7 +611,10 @@ impl ClientOpen {
                     src, Message::ClientTimeout(transaction)
                 ) => {
                     self.on_timeout(src, transaction)
-                }
+                },
+                Protocol::Message(_, Message::ClientDisconnect) => {
+                    Disconnect::disconnect(self.soma)
+                },
                 Protocol::Message(src, Message::ClientClosed) => {
                     self.on_close(src)
                 },
@@ -688,32 +725,42 @@ impl ClientOpen {
     fn on_close(self, src: Handle) -> Result<ClientLobe> {
         assert_eq!(src, self.soma.effector()?.this_lobe());
 
-        self.soma.send_req_input(Role::Client, Message::ClientClosed)?;
-
-        Ok(ClientLobe::Closed(ClientClosed { soma: self.soma }))
+        AwaitInstance::reset(self.soma)
     }
 
     fn on_error(self, src: Handle, e: Error) -> Result<ClientLobe> {
         assert_eq!(src, self.soma.effector()?.this_lobe());
 
-        self.soma.send_req_input(Role::Client, Message::ClientError(e))?;
-        self.soma.send_req_input(Role::Client, Message::ClientClosed)?;
-
-        Ok(ClientLobe::Closed(ClientClosed { soma: self.soma }))
+        AwaitInstance::reset_error(self.soma, e)
     }
 }
 
-pub struct ClientClosed {
+pub struct Disconnect {
     soma:           Soma,
 }
 
-impl ClientClosed {
+impl Disconnect {
+    fn disconnect(soma: Soma) -> Result<ClientLobe> {
+        Ok(ClientLobe::Disconnect(Disconnect { soma: soma }))
+    }
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
-        if let Some(_) = self.soma.update(msg)? {
-            bail!("unexpected protocol message")
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientClosed) => {
+                    AwaitInstance::reset(self.soma)
+                },
+                Protocol::Message(src, Message::ClientError(e)) => {
+                    AwaitInstance::reset_error(self.soma, e)
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected msg {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message")
+            }
         }
         else {
-            Ok(ClientLobe::Closed(self))
+            Ok(ClientLobe::Disconnect(self))
         }
     }
 }

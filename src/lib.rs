@@ -136,6 +136,11 @@ error_chain! {
             description("unable to receive message from game instance")
             display("client recv failed")
         }
+        /// client failed to initiate close handshake
+        ClientCloseFailed {
+            description("unable to initiate close handshake")
+            display("client close failed")
+        }
 
         /// errors received from game instance
         GameErrors(errors: Vec<String>) {
@@ -188,24 +193,25 @@ pub enum Message {
 
     /// allow a lobe to take complete control of an instance
     ProvideInstance(Uuid, Url),
-    /// attempt to connect to instance
-    AttemptConnect(Url),
 
+    /// attempt to connect to instance
+    ClientAttemptConnect(Url),
+    /// internal-use client successfully connected to instance
+    ClientConnected(Sender<tungstenite::Message>),
+    /// internal-use client received a message
+    ClientReceive(tungstenite::Message),
     /// send some request to the game instance
     ClientRequest(ClientRequest),
     /// game instance responded within the expected timeframe
     ClientResponse(ClientResponse),
     /// game instance timed out on request
     ClientTimeout(TransactionId),
+    /// disconnect from the instance
+    ClientDisconnect,
     /// client has closed
     ClientClosed,
     /// client encountered a websocket error
     ClientError(Error),
-
-    /// internal-use client successfully connected to instance
-    Connected(Sender<tungstenite::Message>),
-    /// internal-use client received a message
-    ClientReceive(tungstenite::Message),
 
     /// agent is ready for a game to begin
     Ready,

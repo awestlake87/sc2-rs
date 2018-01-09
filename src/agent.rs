@@ -68,7 +68,9 @@ pub enum AgentLobe {
     SendActions(SendActions),
     SendDebug(SendDebug),
     Step(Step),
-    Observe(Observe)
+    Observe(Observe),
+
+    Reset(Reset),
 }
 
 impl AgentLobe {
@@ -143,6 +145,8 @@ impl Lobe for AgentLobe {
             AgentLobe::SendDebug(state) => state.update(msg),
             AgentLobe::Step(state) => state.update(msg),
             AgentLobe::Observe(state) => state.update(msg),
+
+            AgentLobe::Reset(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
         )
@@ -174,26 +178,7 @@ pub struct Setup {
 
 impl Setup {
     fn setup(soma: Soma) -> Result<AgentLobe> {
-        Ok(
-            AgentLobe::Setup(
-                Setup {
-                    soma: soma,
-                }
-            )
-        )
-    }
-
-    fn restart(soma: Soma) -> Result<AgentLobe> {
-        soma.send_req_input(Role::Controller, Message::GameEnded)?;
-        soma.send_req_output(Role::Agent, Message::GameEnded)?;
-
-        Ok(
-            AgentLobe::Setup(
-                Setup {
-                    soma: soma,
-                }
-            )
-        )
+        Ok(AgentLobe::Setup(Setup { soma: soma, }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
@@ -226,6 +211,9 @@ impl Setup {
                     self.on_game_ready(setup, ports)
                 },
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -1151,7 +1139,7 @@ impl Observe {
         let mut rsp = self.transactor.expect(src, rsp)?.response;
 
         if rsp.get_status() != sc2api::Status::in_game {
-            return Setup::restart(self.soma)
+            return Reset::reset(self.soma)
         }
 
         let mut observation = rsp.take_observation().take_observation();
@@ -1376,5 +1364,49 @@ impl Observe {
             data,
             frame,
         )
+    }
+}
+
+pub struct Reset {
+    soma:           Soma,
+}
+
+impl Reset {
+    fn reset(soma: Soma) -> Result<AgentLobe> {
+        soma.send_req_output(Role::Client, Message::ClientDisconnect)?;
+
+        Ok(AgentLobe::Reset(Reset { soma: soma, }))
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::ClientError(_)) => {
+                    // client does not close cleanly anyway right now, so just
+                    // ignore the error and wait for ClientClosed.
+                    Ok(AgentLobe::Reset(self))
+                }
+                Protocol::Message(_, Message::ClientClosed) => {
+                    self.soma.send_req_input(
+                        Role::Controller, Message::GameEnded
+                    )?;
+                    self.soma.send_req_output(
+                        Role::Agent, Message::GameEnded
+                    )?;
+
+                    Setup::setup(self.soma)
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => {
+                    bail!("unexpected protocol message")
+                }
+            }
+        }
+        else {
+            Ok(AgentLobe::Reset(self))
+        }
     }
 }
