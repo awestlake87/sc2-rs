@@ -70,6 +70,7 @@ pub enum AgentLobe {
     Step(Step),
     Observe(Observe),
 
+    LeaveGame(LeaveGame),
     Reset(Reset),
 }
 
@@ -146,6 +147,7 @@ impl Lobe for AgentLobe {
             AgentLobe::Step(state) => state.update(msg),
             AgentLobe::Observe(state) => state.update(msg),
 
+            AgentLobe::LeaveGame(state) => state.update(msg),
             AgentLobe::Reset(state) => state.update(msg),
         }.chain_err(
             || cortical::ErrorKind::LobeError
@@ -163,6 +165,9 @@ impl Init {
             match msg {
                 Protocol::Start => Setup::setup(self.soma),
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message"),
             }
         }
@@ -359,6 +364,10 @@ impl CreateGame {
                     GameCreated::game_created(self.soma)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -394,6 +403,10 @@ impl GameCreated {
                     JoinGame::join_game(self.soma, setup, ports)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -476,6 +489,10 @@ impl JoinGame {
                 Protocol::Message(src, Message::ClientResponse(rsp)) => {
                     self.on_join_game(src, rsp)
                 }
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -523,6 +540,10 @@ impl FetchGameData {
                 Protocol::Message(src, Message::ClientResponse(rsp)) => {
                     self.on_game_data(src, rsp)
                 }
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -622,6 +643,10 @@ impl FetchTerrainData {
                     self.on_terrain_info(src, rsp)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -680,6 +705,10 @@ impl StepperSetup {
                     self.on_update_interval(src, interval)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message"),
             }
         }
@@ -760,6 +789,10 @@ impl Update {
 
                 Protocol::Message(_, Message::UpdateComplete) => {
                     self.on_update_complete()
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message"),
             }
@@ -862,6 +895,10 @@ impl SendActions {
                         self.data,
                         self.debug_commands
                     )
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message"),
             }
@@ -1002,6 +1039,10 @@ impl SendDebug {
                     Step::step(self.soma, self.interval, self.data)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -1073,6 +1114,10 @@ impl Step {
                     self.on_step(src, rsp)
                 },
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message"),
             }
         }
@@ -1125,6 +1170,9 @@ impl Observe {
                     self.on_observe(src, rsp)
                 },
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message"),
             }
         }
@@ -1139,7 +1187,7 @@ impl Observe {
         let mut rsp = self.transactor.expect(src, rsp)?.response;
 
         if rsp.get_status() != sc2api::Status::in_game {
-            return Reset::reset(self.soma)
+            return LeaveGame::leave(self.soma)
         }
 
         let mut observation = rsp.take_observation().take_observation();
@@ -1364,6 +1412,47 @@ impl Observe {
             data,
             frame,
         )
+    }
+}
+
+pub struct LeaveGame {
+    soma:           Soma,
+    transactor:     Transactor,
+}
+
+impl LeaveGame {
+    fn leave(soma: Soma) -> Result<AgentLobe> {
+        let mut req = sc2api::Request::new();
+
+        req.mut_leave_game();
+
+        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
+
+        Ok(
+            AgentLobe::LeaveGame(
+                LeaveGame { soma: soma, transactor: transactor }
+            )
+        )
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                    self.transactor.expect(src, rsp)?;
+
+                    Reset::reset(self.soma)
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message")
+            }
+        }
+        else {
+            Ok(AgentLobe::LeaveGame(self))
+        }
     }
 }
 

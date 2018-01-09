@@ -78,7 +78,10 @@ impl Init {
             match msg {
                 Protocol::Start => Setup::setup(self.soma, self.interval),
 
-                _ => bail!("unexpected message"),
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message"),
             }
         }
         else {
@@ -120,10 +123,13 @@ impl Setup {
                     Ok(TerranLobe::Setup(self))
                 },
                 Protocol::Message(_, Message::GameStarted) => {
-                    InGame::start(self.soma)
+                    InGame::start(self.soma, self.interval)
                 },
 
-                _ => bail!("unexpected message"),
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message"),
             }
         }
         else {
@@ -134,11 +140,12 @@ impl Setup {
 
 pub struct InGame {
     soma:           Soma,
+    interval:       u32,
 }
 
 impl InGame {
-    fn start(soma: Soma) -> Result<TerranLobe> {
-        Ok(TerranLobe::InGame(InGame { soma: soma }))
+    fn start(soma: Soma, interval: u32) -> Result<TerranLobe> {
+        Ok(TerranLobe::InGame(InGame { soma: soma, interval: interval }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranLobe> {
@@ -149,10 +156,13 @@ impl InGame {
                 },
 
                 Protocol::Message(_, Message::GameEnded) => {
-                    Ok(TerranLobe::InGame(self))
+                    Setup::setup(self.soma, self.interval)
                 },
 
-                _ => bail!("unexpected message"),
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message")
             }
         }
         else {

@@ -184,6 +184,10 @@ trait IntoProto<T> {
 /// the messages that can be sent between Sc2 capable
 #[derive(Debug)]
 pub enum Message {
+    /// get instances pool
+    GetInstancePool,
+    /// get the ports pool
+    GetPortsPool,
     /// launch an instance
     LaunchInstance,
     /// the pool of instances to choose from

@@ -336,6 +336,9 @@ impl Init {
             match msg {
                 Protocol::Start => self.start(),
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -383,6 +386,9 @@ impl AwaitInstance {
                     self.assign_instance(src, instance, url)
                 },
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -436,6 +442,9 @@ impl Connect {
                     self.on_connected(src, sender)
                 },
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -620,7 +629,11 @@ impl Open {
                 },
                 Protocol::Message(src, Message::ClientError(e)) => {
                     self.on_error(src, e)
-                }
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }

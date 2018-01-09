@@ -124,29 +124,13 @@ impl LauncherLobe {
         let hdl = Uuid::new_v4();
         self.instances.insert(hdl, instance);
 
-        self.soma.effector()?.send(
-            controller,
-            Message::InstancePool({
-                let mut instances = HashMap::new();
-
-                for (uuid, instance) in self.instances.iter() {
-                    instances.insert(
-                        *uuid, (instance.get_url()?, instance.ports)
-                    );
-                }
-
-                instances
-            })
-        );
+        self.send_instance_pool(controller)?;
 
         if self.instances.len() / 2 > self.ports.len() {
             let game_ports = self.create_game_ports();
             self.ports.push(game_ports);
 
-            self.soma.effector()?.send(
-                controller,
-                Message::PortsPool(self.ports.clone())
-            );
+            self.send_ports_pool(controller)?;
         }
 
         Ok(self)
@@ -167,6 +151,43 @@ impl LauncherLobe {
 
         ports
     }
+
+    fn get_instance_pool(self, src: Handle) -> Result<Self> {
+        self.send_instance_pool(src)?;
+        Ok(self)
+    }
+
+    fn send_instance_pool(&self, dest: Handle) -> Result<()> {
+        self.soma.effector()?.send(
+            dest,
+            Message::InstancePool({
+                let mut instances = HashMap::new();
+
+                for (uuid, instance) in self.instances.iter() {
+                    instances.insert(
+                        *uuid, (instance.get_url()?, instance.ports)
+                    );
+                }
+
+                instances
+            })
+        );
+
+        Ok(())
+    }
+
+    fn get_ports_pool(self, src: Handle) -> Result<Self> {
+        self.send_ports_pool(src)?;
+        Ok(self)
+    }
+
+    fn send_ports_pool(&self, dest: Handle) -> Result<()> {
+        self.soma.effector()?.send(
+            dest, Message::PortsPool(self.ports.clone())
+        );
+
+        Ok(())
+    }
 }
 
 impl Lobe for LauncherLobe {
@@ -180,6 +201,12 @@ impl Lobe for LauncherLobe {
             match msg {
                 Protocol::Start => Ok(self),
 
+                Protocol::Message(src, Message::GetInstancePool) => {
+                    self.get_instance_pool(src)
+                },
+                Protocol::Message(src, Message::GetPortsPool) => {
+                    self.get_ports_pool(src)
+                },
                 Protocol::Message(src, Message::LaunchInstance) => {
                     self.launch(src)
                 },

@@ -58,6 +58,10 @@ impl Init {
             match msg {
                 Protocol::Start => Setup::setup(self.soma, self.setup),
 
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }
@@ -89,6 +93,9 @@ impl Setup {
                     Ok(ComputerLobe::Setup(self))
                 },
 
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
                 _ => bail!("unexpected protocol message")
             }
         }

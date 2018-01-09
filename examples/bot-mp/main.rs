@@ -46,7 +46,7 @@ quick_main!(
                             )?
                         )?,
                     ),
-                    suite: sc2::MeleeSuite::OneAndDone(
+                    suite: sc2::MeleeSuite::EndlessRepeat(
                         get_game_settings(&args)?
                     )
                 }
