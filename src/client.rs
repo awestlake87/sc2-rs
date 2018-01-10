@@ -1,6 +1,7 @@
 
 use std::collections::VecDeque;
 use std::io;
+use std::rc::Rc;
 use std::time;
 
 use bytes::{ Buf, BufMut };
@@ -299,7 +300,7 @@ impl ClientLobe {
                     soma: Soma::new(
                         vec![
                             Constraint::RequireOne(Role::InstanceProvider),
-                            Constraint::RequireOne(Role::Client)
+                            Constraint::Variadic(Role::Client)
                         ],
                         vec![ ]
                     )?,
@@ -362,17 +363,23 @@ impl AwaitInstance {
     }
 
     fn reset(soma: Soma) -> Result<ClientLobe> {
-        soma.send_req_input(Role::Client, Message::ClientClosed)?;
+        for c in soma.var_input(Role::Client)? {
+            soma.effector()?.send(*c, Message::ClientClosed);
+        }
 
         Self::await(soma)
     }
 
-    fn reset_error(soma: Soma, e: Error) -> Result<ClientLobe> {
-        let client = soma.req_input(Role::Client)?;
-
-        soma.effector()?.send_in_order(
-            client, vec![ Message::ClientError(e), Message::ClientClosed ]
-        );
+    fn reset_error(soma: Soma, e: Rc<Error>) -> Result<ClientLobe> {
+        for c in soma.var_input(Role::Client)? {
+            soma.effector()?.send_in_order(
+                *c,
+                vec![
+                    Message::ClientError(Rc::clone(&e)),
+                    Message::ClientClosed
+                ]
+            );
+        }
 
         Self::await(soma)
     }
@@ -522,9 +529,11 @@ impl Connect {
                                     error_eff.send(
                                         this_lobe,
                                         Message::ClientError(
-                                            Error::with_chain(
-                                                e,
-                                                ErrorKind::ClientRecvFailed
+                                            Rc::from(
+                                                Error::with_chain(
+                                                    e,
+                                                    ErrorKind::ClientRecvFailed
+                                                )
                                             )
                                         )
                                     );
@@ -582,7 +591,7 @@ pub struct Open {
     timer:          Timer,
 
     transactions:   VecDeque<
-                        (TransactionId, oneshot::Sender<()>)
+                        (TransactionId, Handle, oneshot::Sender<()>)
                     >,
 }
 
@@ -592,7 +601,9 @@ impl Open {
     )
         -> Result<ClientLobe>
     {
-        soma.send_req_input(Role::Client, Message::Ready)?;
+        for c in soma.var_input(Role::Client)? {
+            soma.effector()?.send(*c, Message::Ready);
+        }
 
         Ok(
             ClientLobe::Open(
@@ -643,8 +654,6 @@ impl Open {
     }
 
     fn send(mut self, src: Handle, req: ClientRequest) -> Result<ClientLobe> {
-        assert_eq!(src, self.soma.req_input(Role::Client)?);
-
         let buf = Vec::new();
         let mut writer = buf.writer();
 
@@ -652,7 +661,7 @@ impl Open {
         let (tx, rx) = oneshot::channel();
         let transaction = req.transaction;
 
-        self.transactions.push_back((transaction, tx));
+        self.transactions.push_back((transaction, src, tx));
 
         {
             let mut cos = protobuf::CodedOutputStream::new(&mut writer);
@@ -701,7 +710,7 @@ impl Open {
             _ => bail!("unexpected non-binary message"),
         };
 
-        let (transaction, tx) = match self.transactions.pop_front() {
+        let (transaction, dest, tx) = match self.transactions.pop_front() {
             Some(transaction) => transaction,
             None => bail!("no pending transactions for this response"),
         };
@@ -710,10 +719,10 @@ impl Open {
             // rx must be closed
         }
 
-        self.soma.send_req_input(
-            Role::Client,
+        self.soma.effector()?.send(
+            dest,
             Message::ClientResponse(ClientResponse::new(transaction, rsp))
-        )?;
+        );
 
         Ok(ClientLobe::Open(self))
     }
@@ -724,12 +733,14 @@ impl Open {
         assert_eq!(src, self.soma.effector()?.this_lobe());
 
         if let Some(i) = self.transactions.iter()
-            .position(|&(ref t, _)| *t == transaction)
+            .position(|&(ref t, _, _)| *t == transaction)
         {
+            let dest = self.transactions[i].1;
+
             self.transactions.remove(i);
-            self.soma.send_req_input(
-                Role::Client, Message::ClientTimeout(transaction)
-            )?;
+            self.soma.effector()?.send(
+                dest, Message::ClientTimeout(transaction)
+            );
         }
 
         Ok(ClientLobe::Open(self))
@@ -741,7 +752,7 @@ impl Open {
         AwaitInstance::reset(self.soma)
     }
 
-    fn on_error(self, src: Handle, e: Error) -> Result<ClientLobe> {
+    fn on_error(self, src: Handle, e: Rc<Error>) -> Result<ClientLobe> {
         assert_eq!(src, self.soma.effector()?.this_lobe());
 
         AwaitInstance::reset_error(self.soma, e)

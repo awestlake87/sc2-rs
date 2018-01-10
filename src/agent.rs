@@ -1,6 +1,4 @@
 
-use std::collections::{ HashMap, HashSet };
-use std::mem;
 use std::rc::Rc;
 use std::time;
 
@@ -9,12 +7,9 @@ use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
 use sc2_proto::{ sc2api, common, debug };
 use url::Url;
 
-use client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
 use super::{
     Result,
-    FromProto,
     IntoProto,
-    IntoSc2,
 
     Message,
     Role,
@@ -25,32 +20,15 @@ use super::{
     Command,
     DebugCommand,
     DebugTextTarget,
-    GameData,
-    GameState,
-    GameEvent,
-    MapState,
 
     GameSettings,
     GamePorts,
     PlayerSetup,
     Map,
     ActionTarget,
-    Buff,
-    BuffData,
-    Upgrade,
-    UpgradeData,
-    Ability,
-    AbilityData,
-    UnitType,
-    UnitTypeData,
-    Action,
-    SpatialAction,
-    Unit,
-    Tag,
-    Alliance,
-    Point2,
-    DisplayType,
 };
+use client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
+use observer::{ ObserverLobe };
 
 pub enum AgentLobe {
     Init(Init),
@@ -60,9 +38,8 @@ pub enum AgentLobe {
     GameCreated(GameCreated),
     JoinGame(JoinGame),
 
-    StepperSetup(StepperSetup),
     FetchGameData(FetchGameData),
-    FetchTerrainData(FetchTerrainData),
+    StepperSetup(StepperSetup),
 
     Update(Update),
     SendActions(SendActions),
@@ -88,6 +65,7 @@ impl AgentLobe {
                             Constraint::RequireOne(Role::Client),
                             Constraint::RequireOne(Role::Agent),
                             Constraint::RequireOne(Role::InstanceProvider),
+                            Constraint::RequireOne(Role::Observer),
                         ],
                     )?,
                 }
@@ -113,9 +91,13 @@ impl AgentLobe {
         // possible that it's a bug in the rust type system because it will
         // work when the function is generic across two lobe types, but not one
         let client = cortex.add_lobe::<ClientLobe>(ClientLobe::new()?);
+        let observer = cortex.add_lobe::<ObserverLobe>(ObserverLobe::new()?);
 
         cortex.connect(agent, client, Role::InstanceProvider);
         cortex.connect(agent, client, Role::Client);
+        cortex.connect(observer, client, Role::Client);
+
+        cortex.connect(agent, observer, Role::Observer);
         cortex.connect(agent, player, Role::Agent);
 
         Ok(cortex)
@@ -139,7 +121,6 @@ impl Lobe for AgentLobe {
 
             AgentLobe::StepperSetup(state) => state.update(msg),
             AgentLobe::FetchGameData(state) => state.update(msg),
-            AgentLobe::FetchTerrainData(state) => state.update(msg),
 
             AgentLobe::Update(state) => state.update(msg),
             AgentLobe::SendActions(state) => state.update(msg),
@@ -512,177 +493,40 @@ impl JoinGame {
 
 pub struct FetchGameData {
     soma:           Soma,
-    transactor:     Transactor,
 }
 
 impl FetchGameData {
     fn fetch(soma: Soma) -> Result<AgentLobe> {
-        let mut req = sc2api::Request::new();
-        req.mut_data().set_unit_type_id(true);
+        soma.send_req_output(Role::Observer, Message::FetchGameData)?;
 
-        let transactor = Transactor::send(
-            &soma, ClientRequest::new(req)
-        )?;
-
-        Ok(
-            AgentLobe::FetchGameData(
-                FetchGameData {
-                    soma: soma,
-                    transactor: transactor
-                }
-            )
-        )
+        Ok(AgentLobe::FetchGameData(FetchGameData { soma: soma }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_game_data(src, rsp)
-                }
-
+                Protocol::Message(_, Message::GameDataReady) => {
+                    StepperSetup::setup(self.soma)
+                },
                 Protocol::Message(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
-                _ => bail!("unexpected protocol message")
+                _ => bail!("unexpected protocol message"),
             }
         }
         else {
             Ok(AgentLobe::FetchGameData(self))
         }
     }
-
-    fn on_game_data(self, src: Handle, rsp: ClientResponse)
-        -> Result<AgentLobe>
-    {
-        let mut rsp = self.transactor.expect(src, rsp)?;
-
-        let mut unit_type_data = HashMap::new();
-        let mut ability_data = HashMap::new();
-        let mut upgrade_data = HashMap::new();
-        let mut buff_data = HashMap::new();
-
-        for data in rsp.response.mut_data().take_units().into_iter() {
-            let u = UnitTypeData::from_proto(data)?;
-
-            let unit_type = u.unit_type;
-            unit_type_data.insert(unit_type, u);
-        }
-
-        for data in rsp.response.mut_data().take_abilities().into_iter() {
-            let a = AbilityData::from_proto(data)?;
-
-            let ability = a.ability;
-            ability_data.insert(ability, a);
-        }
-
-        for data in rsp.response.mut_data().take_upgrades().into_iter() {
-            let u = UpgradeData::from_proto(data)?;
-
-            let upgrade = u.upgrade;
-            upgrade_data.insert(upgrade, u);
-        }
-
-        for data in rsp.response.mut_data().take_buffs().into_iter() {
-            let b = BuffData::from_proto(data)?;
-
-            let buff = b.buff;
-            buff_data.insert(buff, b);
-        }
-
-        FetchTerrainData::fetch(
-            self.soma, unit_type_data, ability_data, upgrade_data, buff_data
-        )
-    }
-}
-
-pub struct FetchTerrainData {
-    soma:                   Soma,
-    transactor:             Transactor,
-
-    unit_type_data:         HashMap<UnitType, UnitTypeData>,
-    ability_data:           HashMap<Ability, AbilityData>,
-    upgrade_data:           HashMap<Upgrade, UpgradeData>,
-    buff_data:              HashMap<Buff, BuffData>,
-}
-
-impl FetchTerrainData {
-    fn fetch(
-        soma: Soma,
-        unit_type_data: HashMap<UnitType, UnitTypeData>,
-        ability_data: HashMap<Ability, AbilityData>,
-        upgrade_data: HashMap<Upgrade, UpgradeData>,
-        buff_data: HashMap<Buff, BuffData>
-    )
-        -> Result<AgentLobe>
-    {
-        let mut req = sc2api::Request::new();
-        req.mut_game_info();
-
-        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
-
-        Ok(
-            AgentLobe::FetchTerrainData(
-                FetchTerrainData {
-                    soma: soma,
-                    transactor: transactor,
-
-                    unit_type_data: unit_type_data,
-                    ability_data: ability_data,
-                    upgrade_data: upgrade_data,
-                    buff_data: buff_data,
-                }
-            )
-        )
-    }
-
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_terrain_info(src, rsp)
-                },
-
-
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(AgentLobe::FetchTerrainData(self))
-        }
-    }
-
-    fn on_terrain_info(self, src: Handle, rsp: ClientResponse)
-        -> Result<AgentLobe>
-    {
-        let mut rsp = self.transactor.expect(src, rsp)?;
-
-        let game_data = Rc::from(
-            GameData {
-                unit_type_data: self.unit_type_data,
-                ability_data: self.ability_data,
-                upgrade_data: self.upgrade_data,
-                buff_data: self.buff_data,
-
-                terrain_info: rsp.response.take_game_info().into_sc2()?
-            }
-        );
-
-        StepperSetup::setup(self.soma, game_data)
-    }
 }
 
 pub struct StepperSetup {
     soma:           Soma,
     stepper:        Handle,
-    game_data:      Rc<GameData>,
 }
 
 impl StepperSetup {
-    fn setup(soma: Soma, game_data: Rc<GameData>) -> Result<AgentLobe> {
+    fn setup(soma: Soma) -> Result<AgentLobe> {
         let stepper = soma.req_output(Role::Agent)?;
 
         soma.effector()?.send(stepper, Message::RequestUpdateInterval);
@@ -692,7 +536,6 @@ impl StepperSetup {
                 StepperSetup {
                     soma: soma,
                     stepper: stepper,
-                    game_data: game_data,
                 }
             )
         )
@@ -721,7 +564,7 @@ impl StepperSetup {
         -> Result<AgentLobe>
     {
         if src == self.stepper {
-            Step::first(self.soma, interval, self.game_data)
+            Step::first(self.soma, interval)
         }
         else {
             bail!("unexpected source of update interval: {}", src)
@@ -729,36 +572,19 @@ impl StepperSetup {
     }
 }
 
-struct AgentData {
-    previous_step:      u32,
-    current_step:       u32,
-    previous_units:     HashMap<Tag, Rc<Unit>>,
-    units:              HashMap<Tag, Rc<Unit>>,
-
-    previous_upgrades:  HashSet<Upgrade>,
-    upgrades:           HashSet<Upgrade>,
-
-    actions:            Vec<Action>,
-    spatial_actions:    Vec<SpatialAction>,
-
-    game_data:          Rc<GameData>,
-}
-
 pub struct Update {
     soma:               Soma,
     interval:           u32,
-    data:               AgentData,
-    frame:              Rc<FrameData>,
     commands:           Vec<Command>,
     debug_commands:     Vec<DebugCommand>,
 }
 
 impl Update {
-    fn next(soma: Soma, interval: u32, data: AgentData, frame: Rc<FrameData>)
+    fn next(soma: Soma, interval: u32, frame: Rc<FrameData>)
         -> Result<AgentLobe>
     {
         soma.send_req_output(
-            Role::Agent, Message::Update(Rc::clone(&frame))
+            Role::Agent, Message::Observation(frame)
         )?;
 
         Ok(
@@ -766,8 +592,6 @@ impl Update {
                 Update {
                     soma: soma,
                     interval: interval,
-                    data: data,
-                    frame: frame,
                     commands: vec![ ],
                     debug_commands: vec![ ],
                 }
@@ -806,7 +630,6 @@ impl Update {
         SendActions::send_actions(
             self.soma,
             self.interval,
-            self.data,
             self.commands,
             self.debug_commands
         )
@@ -818,7 +641,6 @@ pub struct SendActions {
     interval:           u32,
     transactor:         Transactor,
 
-    data:               AgentData,
     debug_commands:     Vec<DebugCommand>,
 }
 
@@ -826,7 +648,6 @@ impl SendActions {
     fn send_actions(
         soma: Soma,
         interval: u32,
-        data: AgentData,
         commands: Vec<Command>,
         debug_commands: Vec<DebugCommand>
     )
@@ -876,7 +697,6 @@ impl SendActions {
                     interval: interval,
                     transactor: transactor,
 
-                    data: data,
                     debug_commands: debug_commands,
                 }
             )
@@ -892,7 +712,6 @@ impl SendActions {
                     SendDebug::send_debug(
                         self.soma,
                         self.interval,
-                        self.data,
                         self.debug_commands
                     )
                 },
@@ -913,15 +732,12 @@ pub struct SendDebug {
     soma:           Soma,
     interval:       u32,
     transactor:     Transactor,
-
-    data:           AgentData,
 }
 
 impl SendDebug {
     fn send_debug(
         soma: Soma,
         interval: u32,
-        data: AgentData,
         commands: Vec<DebugCommand>
     )
         -> Result<AgentLobe>
@@ -1023,8 +839,6 @@ impl SendDebug {
                     soma: soma,
                     interval: interval,
                     transactor: transactor,
-
-                    data: data,
                 }
             )
         )
@@ -1036,7 +850,7 @@ impl SendDebug {
                 Protocol::Message(src, Message::ClientResponse(rsp)) => {
                     let rsp = self.transactor.expect(src, rsp)?;
 
-                    Step::step(self.soma, self.interval, self.data)
+                    Step::step(self.soma, self.interval)
                 },
 
 
@@ -1056,36 +870,18 @@ pub struct Step {
     soma:           Soma,
     interval:       u32,
     transactor:     Transactor,
-
-    data:           AgentData,
 }
 
 impl Step {
-    fn first(soma: Soma, interval: u32, data: Rc<GameData>)
-        -> Result<AgentLobe>
-    {
+    fn first(soma: Soma, interval: u32) -> Result<AgentLobe> {
         soma.send_req_output(Role::Agent, Message::GameStarted)?;
 
         Step::step(
             soma,
             interval,
-            AgentData {
-                previous_step: 0,
-                current_step: 0,
-                previous_units: HashMap::new(),
-                units: HashMap::new(),
-
-                previous_upgrades: HashSet::new(),
-                upgrades: HashSet::new(),
-
-                actions: vec![ ],
-                spatial_actions: vec![ ],
-
-                game_data: data,
-            }
         )
     }
-    fn step(soma: Soma, interval: u32, data: AgentData)
+    fn step(soma: Soma, interval: u32)
         -> Result<AgentLobe>
     {
         let mut req = sc2api::Request::new();
@@ -1100,8 +896,6 @@ impl Step {
                     soma: soma,
                     interval: interval,
                     transactor: transactor,
-
-                    data: data,
                 }
             )
         )
@@ -1129,46 +923,31 @@ impl Step {
     fn on_step(self, src: Handle, rsp: ClientResponse) -> Result<AgentLobe> {
         self.transactor.expect(src, rsp)?;
 
-        Observe::observe(self.soma, self.interval, self.data)
+        Observe::observe(self.soma, self.interval)
     }
 }
 
 pub struct Observe {
     soma:           Soma,
     interval:       u32,
-    transactor:     Transactor,
-
-    data:           AgentData,
 }
 
 impl Observe {
-    fn observe(soma: Soma, interval: u32, data: AgentData)
-        -> Result<AgentLobe>
-    {
-        let mut req = sc2api::Request::new();
-        req.mut_observation();
+    fn observe(soma: Soma, interval: u32) -> Result<AgentLobe> {
+        soma.send_req_output(Role::Observer, Message::Observe)?;
 
-        let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
-
-        Ok(
-            AgentLobe::Observe(
-                Observe {
-                    soma: soma,
-                    interval: interval,
-                    transactor: transactor,
-
-                    data: data
-                }
-            )
-        )
+        Ok(AgentLobe::Observe(Observe { soma: soma, interval: interval }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_observe(src, rsp)
+                Protocol::Message(_, Message::Observation(frame)) => {
+                    Update::next(self.soma, self.interval, frame)
                 },
+                Protocol::Message(_, Message::GameEnded) => {
+                    LeaveGame::leave(self.soma)
+                }
 
                 Protocol::Message(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
@@ -1179,239 +958,6 @@ impl Observe {
         else {
             Ok(AgentLobe::Observe(self))
         }
-    }
-
-    fn on_observe(self, src: Handle, rsp: ClientResponse)
-        -> Result<AgentLobe>
-    {
-        let mut rsp = self.transactor.expect(src, rsp)?.response;
-
-        if rsp.get_status() != sc2api::Status::in_game {
-            return LeaveGame::leave(self.soma)
-        }
-
-        let mut observation = rsp.take_observation().take_observation();
-
-        let mut data = self.data;
-
-        data.previous_step = data.current_step;
-        data.current_step = observation.get_game_loop();
-        let is_new_frame = data.current_step != data.previous_step;
-
-        let player_common = observation.take_player_common();
-        let mut raw = observation.take_raw_data();
-        let mut player_raw = raw.take_player();
-
-        data.previous_units = mem::replace(&mut data.units, HashMap::new());
-        for unit in raw.take_units().into_iter() {
-            match Unit::from_proto(unit) {
-                Ok(mut unit) => {
-                    let tag = unit.tag;
-
-                    unit.last_seen_game_loop = data.current_step;
-
-                    data.units.insert(tag, Rc::from(unit));
-                },
-                _ => ()
-            }
-        }
-
-        data.previous_upgrades = mem::replace(
-            &mut data.upgrades, HashSet::new()
-        );
-
-        for u in player_raw.take_upgrade_ids().into_iter() {
-            data.upgrades.insert(Upgrade::from_proto(u)?);
-        }
-
-        let new_state = GameState {
-            player_id: player_common.get_player_id(),
-            previous_step: data.previous_step,
-            current_step: data.current_step,
-            camera_pos: {
-                let camera = player_raw.get_camera();
-
-                Point2::new(camera.get_x(), camera.get_y())
-            },
-
-            units: data.units.values().map(|u| Rc::clone(u)).collect(),
-            power_sources: {
-                let mut power_sources = vec![ ];
-
-                for p in player_raw.take_power_sources().into_iter() {
-                    power_sources.push(p.into());
-                }
-
-                power_sources
-            },
-            upgrades: data.upgrades.iter().map(|u| *u).collect(),
-            effects: vec![ ],
-
-            minerals: player_common.get_minerals(),
-            vespene: player_common.get_vespene(),
-            food_used: player_common.get_food_used(),
-            food_cap: player_common.get_food_cap(),
-            food_army: player_common.get_food_army(),
-            food_workers: player_common.get_food_workers(),
-            idle_worker_count: player_common.get_idle_worker_count(),
-            army_count: player_common.get_army_count(),
-            warp_gate_count: player_common.get_warp_gate_count(),
-            larva_count: player_common.get_larva_count(),
-
-            score: observation.take_score().into_sc2()?,
-        };
-
-        if is_new_frame {
-            data.actions.clear();
-            data.spatial_actions.clear();
-        }
-
-        for action in rsp.get_observation().get_actions() {
-            if !action.has_action_raw() {
-                continue;
-            }
-
-            let raw = action.get_action_raw();
-            if !raw.has_unit_command() {
-                continue;
-            }
-
-            let cmd = raw.get_unit_command();
-            if !cmd.has_ability_id() {
-                continue;
-            }
-
-            data.actions.push(cmd.clone().into_sc2()?);
-        }
-
-        for action in rsp.get_observation().get_actions() {
-            if !action.has_action_feature_layer() {
-                continue;
-            }
-
-            let fl = action.get_action_feature_layer();
-
-            if fl.has_unit_command() {
-                data.spatial_actions.push(
-                    fl.get_unit_command().clone().into_sc2()?
-                );
-            }
-            else if fl.has_camera_move() {
-                data.spatial_actions.push(
-                    fl.get_camera_move().clone().into_sc2()?
-                );
-            }
-            else if fl.has_unit_selection_point() {
-                data.spatial_actions.push(
-                    fl.get_unit_selection_point().clone().into_sc2()?
-                );
-            }
-            else if fl.has_unit_selection_rect() {
-                data.spatial_actions.push(
-                    fl.get_unit_selection_rect().clone().into_sc2()?
-                );
-            }
-        }
-
-        let mut events = vec![ ];
-
-        if raw.has_event() {
-            let event = raw.get_event();
-
-            for tag in event.get_dead_units() {
-                match data.previous_units.get(tag) {
-                    Some(ref mut unit) => {
-                        events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
-                    },
-                    None => ()
-                }
-            }
-        }
-
-        for ref unit in data.units.values() {
-            match data.previous_units.get(&unit.tag) {
-                Some(ref prev_unit) => {
-                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
-                        events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                    }
-                    else if unit.build_progress >= 1.0
-                        && prev_unit.build_progress < 1.0
-                    {
-                        events.push(
-                            GameEvent::BuildingCompleted(Rc::clone(unit))
-                        );
-                    }
-                },
-                None => {
-                    if unit.alliance == Alliance::Enemy &&
-                        unit.display_type == DisplayType::Visible
-                    {
-                        events.push(GameEvent::UnitDetected(Rc::clone(unit)));
-                    }
-                    else {
-                        events.push(GameEvent::UnitCreated(Rc::clone(unit)));
-                    }
-
-                    events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                }
-            }
-        }
-
-        let prev_upgrades = mem::replace(
-            &mut data.previous_upgrades, HashSet::new()
-        );
-
-        for upgrade in &data.upgrades {
-            match prev_upgrades.get(upgrade) {
-                Some(_) => (),
-                None => {
-                    events.push(GameEvent::UpgradeCompleted(*upgrade));
-                }
-            }
-        }
-
-        data.previous_upgrades = prev_upgrades;
-
-        let mut nukes = 0;
-        let mut nydus_worms = 0;
-
-        for alert in observation.get_alerts() {
-            match *alert {
-                sc2api::Alert::NuclearLaunchDetected => nukes += 1,
-                sc2api::Alert::NydusWormDetected => nydus_worms += 1
-            }
-        }
-
-        if nukes > 0 {
-            events.push(GameEvent::NukesDetected(nukes));
-        }
-
-        if nydus_worms > 0 {
-            events.push(GameEvent::NydusWormsDetected(nydus_worms));
-        }
-
-        let mut map_state = raw.take_map_state();
-
-        let frame = Rc::from(
-            FrameData {
-                state: new_state,
-                data: Rc::clone(&data.game_data),
-                events: events,
-                map: Rc::from(
-                    MapState {
-                        creep: map_state.take_creep().into_sc2()?,
-                        visibility: map_state.take_visibility().into_sc2()?
-                    }
-                )
-            }
-        );
-
-        Update::next(
-            self.soma,
-            self.interval,
-            data,
-            frame,
-        )
     }
 }
 

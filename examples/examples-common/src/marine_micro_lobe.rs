@@ -137,7 +137,7 @@ impl InGame {
     {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(_, Message::Update(frame)) => {
+                Protocol::Message(_, Message::Observation(frame)) => {
                     self.on_frame(frame)
                 },
 

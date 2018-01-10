@@ -35,6 +35,7 @@ mod frame;
 mod instance;
 mod launcher;
 mod melee;
+mod observer;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -215,7 +216,7 @@ pub enum Message {
     /// client has closed
     ClientClosed,
     /// client encountered a websocket error
-    ClientError(Error),
+    ClientError(Rc<Error>),
 
     /// agent is ready for a game to begin
     Ready,
@@ -233,25 +234,30 @@ pub enum Message {
     GameReady(PlayerSetup, Option<GamePorts>),
     /// join an existing game
     JoinGame(GamePorts),
-
+    /// fetch the game data
+    FetchGameData,
+    /// game data ready
+    GameDataReady,
     /// request update interval from player
     RequestUpdateInterval,
     /// respond with update interval in game steps
     UpdateInterval(u32),
-
     /// game started
     GameStarted,
-    /// game ended
-    GameEnded,
 
-    /// handle game update
-    Update(Rc<FrameData>),
+    /// observe the game state
+    Observe,
+    /// current game state
+    Observation(Rc<FrameData>),
     /// issue a command to the game instance
     Command(Command),
     /// issue a debug command to the game instance
     DebugCommand(DebugCommand),
     /// notify the stepper that the lobe is done updating
     UpdateComplete,
+
+    /// game ended
+    GameEnded,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
