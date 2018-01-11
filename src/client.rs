@@ -6,9 +6,7 @@ use std::time;
 
 use bytes::{ Buf, BufMut };
 use organelle;
-use organelle::{
-    ResultExt, Handle, Cell, Protocol, Constraint
-};
+use organelle::{ ResultExt, Handle, Protocol, Constraint, Nucleus };
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
 use protobuf;
@@ -20,7 +18,7 @@ use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
-use super::{ Result, Error, ErrorKind, Message, Soma, Role };
+use super::{ Result, Error, ErrorKind, Message, Soma, Role, Eukaryote };
 
 /// keeps a record of a req/rsp transaction between the game instance
 pub struct Transactor {
@@ -321,84 +319,76 @@ pub enum ClientCell {
 }
 
 impl ClientCell {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Eukaryote<ClientCell>> {
         Ok(
-            ClientCell::Init(
-                Init {
-                    soma: Soma::new(
-                        vec![
-                            Constraint::RequireOne(Role::InstanceProvider),
-                            Constraint::Variadic(Role::Client)
-                        ],
-                        vec![ ]
-                    )?,
-                }
-            )
+            Eukaryote::new(
+                ClientCell::Init(Init { }),
+                vec![
+                    Constraint::RequireOne(Role::InstanceProvider),
+                    Constraint::Variadic(Role::Client)
+                ],
+                vec![ ],
+            )?
         )
     }
 }
 
-impl Cell for ClientCell {
+impl Nucleus for ClientCell {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>) -> organelle::Result<Self> {
+    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
+        -> organelle::Result<Self>
+    {
         match self {
-            ClientCell::Init(state) => state.update(msg),
-            ClientCell::AwaitInstance(state) => state.update(msg),
-            ClientCell::Connect(state) => state.update(msg),
-            ClientCell::Open(state) => state.update(msg),
-            ClientCell::Disconnect(state) => state.update(msg),
+            ClientCell::Init(state) => state.update(soma, msg),
+            ClientCell::AwaitInstance(state) => state.update(soma, msg),
+            ClientCell::Connect(state) => state.update(soma, msg),
+            ClientCell::Open(state) => state.update(soma, msg),
+            ClientCell::Disconnect(state) => state.update(soma, msg),
         }.chain_err(
             || organelle::ErrorKind::CellError
         )
     }
 }
 
-pub struct Init {
-    soma:               Soma
-}
+pub struct Init { }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Start => self.start(),
+    fn update(self, _: &Soma, msg: Protocol<Message, Role>)
+        -> Result<ClientCell>
+    {
+        match msg {
+            Protocol::Start => self.start(),
 
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ClientCell::Init(self))
+            Protocol::Message(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
     fn start(self) -> Result<ClientCell> {
-        AwaitInstance::await(self.soma)
+        AwaitInstance::await()
     }
 }
 
-pub struct AwaitInstance {
-    soma:               Soma,
-}
+pub struct AwaitInstance { }
 
 impl AwaitInstance {
-    fn await(soma: Soma) -> Result<ClientCell> {
-        Ok(ClientCell::AwaitInstance(AwaitInstance { soma: soma }))
+    fn await() -> Result<ClientCell> {
+        Ok(ClientCell::AwaitInstance(AwaitInstance { }))
     }
 
-    fn reset(soma: Soma) -> Result<ClientCell> {
+    fn reset(soma: &Soma) -> Result<ClientCell> {
         for c in soma.var_input(Role::Client)? {
             soma.effector()?.send(*c, Message::ClientClosed);
         }
 
-        Self::await(soma)
+        Self::await()
     }
 
-    fn reset_error(soma: Soma, e: Rc<Error>) -> Result<ClientCell> {
+    fn reset_error(soma: &Soma, e: Rc<Error>) -> Result<ClientCell> {
         for c in soma.var_input(Role::Client)? {
             soma.effector()?.send_in_order(
                 *c,
@@ -409,47 +399,42 @@ impl AwaitInstance {
             );
         }
 
-        Self::await(soma)
+        Self::await()
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Message(
-                    src, Message::ProvideInstance(instance, url)
-                ) => {
-                    self.assign_instance(src, instance, url)
-                },
-
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ClientCell::AwaitInstance(self))
-        }
-    }
-
-    fn assign_instance(self, src: Handle, _: Uuid, url: Url)
+    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
         -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
+        match msg {
+            Protocol::Message(
+                src, Message::ProvideInstance(instance, url)
+            ) => {
+                self.assign_instance(soma, src, instance, url)
+            },
 
-        Connect::connect(self.soma, url)
+            Protocol::Message(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
+        }
+    }
+
+    fn assign_instance(self, soma: &Soma, src: Handle, _: Uuid, url: Url)
+        -> Result<ClientCell>
+    {
+        assert_eq!(src, soma.req_input(Role::InstanceProvider)?);
+
+        Connect::connect(soma, url)
     }
 }
 
 pub struct Connect {
-    soma:               Soma,
-
     timer:              Timer,
     retries:            u32,
 }
 
 impl Connect {
-    fn connect(soma: Soma, url: Url) -> Result<ClientCell> {
+    fn connect(soma: &Soma, url: Url) -> Result<ClientCell> {
         let this_cell = soma.effector()?.this_cell();
         soma.effector()?.send(
             this_cell, Message::ClientAttemptConnect(url)
@@ -458,8 +443,6 @@ impl Connect {
         Ok(
             ClientCell::Connect(
                 Connect {
-                    soma: soma,
-
                     timer: Timer::default(),
                     retries: NUM_RETRIES,
                 }
@@ -467,35 +450,34 @@ impl Connect {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Message(src, Message::ClientAttemptConnect(url)) => {
-                    self.attempt_connect(src, url)
-                },
-                Protocol::Message(src, Message::ClientConnected(sender)) => {
-                    self.on_connected(src, sender)
-                },
+    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
+        -> Result<ClientCell>
+    {
+        match msg {
+            Protocol::Message(src, Message::ClientAttemptConnect(url)) => {
+                self.attempt_connect(soma, src, url)
+            },
+            Protocol::Message(src, Message::ClientConnected(sender)) => {
+                self.on_connected(soma, src, sender)
+            },
 
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ClientCell::Connect(self))
+            Protocol::Message(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn attempt_connect(mut self, src: Handle, url: Url) -> Result<ClientCell> {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+    fn attempt_connect(mut self, soma: &Soma, src: Handle, url: Url)
+        -> Result<ClientCell>
+    {
+        assert_eq!(src, soma.effector()?.this_cell());
 
-        let connected_effector = self.soma.effector()?.clone();
-        let retry_effector = self.soma.effector()?.clone();
-        let timer_effector = self.soma.effector()?.clone();
+        let connected_effector = soma.effector()?.clone();
+        let retry_effector = soma.effector()?.clone();
+        let timer_effector = soma.effector()?.clone();
 
-        let client_remote = self.soma.effector()?.remote();
+        let client_remote = soma.effector()?.remote();
 
         if self.retries == 0 {
             bail!("unable to connect to instance")
@@ -512,7 +494,7 @@ impl Connect {
 
         let retry_url = url.clone();
 
-        self.soma.effector()?.spawn(
+        soma.effector()?.spawn(
             self.timer.sleep(time::Duration::from_secs(5))
                 .and_then(move |_| connect_async(url, client_remote)
                     .and_then(move |(ws_stream, _)| {
@@ -602,19 +584,19 @@ impl Connect {
 
     fn on_connected(
         self,
+        soma: &Soma,
         src: Handle,
         sender: mpsc::Sender<tungstenite::Message>
     )
         -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+        assert_eq!(src, soma.effector()?.this_cell());
 
-        Open::open(self.soma, sender, self.timer)
+        Open::open(soma, sender, self.timer)
     }
 }
 
 pub struct Open {
-    soma:           Soma,
     sender:         mpsc::Sender<tungstenite::Message>,
     timer:          Timer,
 
@@ -625,7 +607,7 @@ pub struct Open {
 
 impl Open {
     fn open(
-        soma: Soma, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
+        soma: &Soma, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
     )
         -> Result<ClientCell>
     {
@@ -636,7 +618,6 @@ impl Open {
         Ok(
             ClientCell::Open(
                 Open {
-                    soma: soma,
                     sender: sender,
                     timer: timer,
 
@@ -646,45 +627,43 @@ impl Open {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Message(src, Message::ClientRequest(req)) => {
-                    self.send(src, req)
-                },
-                Protocol::Message(src, Message::ClientReceive(msg)) => {
-                    self.recv(src, msg)
-                },
-                Protocol::Message(
-                    src, Message::ClientTimeout(transaction)
-                ) => {
-                    self.on_timeout(src, transaction)
-                },
-                Protocol::Message(_, Message::ClientDisconnect) => {
-                    Disconnect::disconnect(self.soma)
-                },
-                Protocol::Message(src, Message::ClientClosed) => {
-                    self.on_close(src)
-                },
-                Protocol::Message(src, Message::ClientError(e)) => {
-                    self.on_error(src, e)
-                },
+    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
+        -> Result<ClientCell>
+    {
+        match msg {
+            Protocol::Message(src, Message::ClientRequest(req)) => {
+                self.send(soma, src, req)
+            },
+            Protocol::Message(src, Message::ClientReceive(msg)) => {
+                self.recv(soma, src, msg)
+            },
+            Protocol::Message(
+                src, Message::ClientTimeout(transaction)
+            ) => {
+                self.on_timeout(soma, src, transaction)
+            },
+            Protocol::Message(_, Message::ClientDisconnect) => {
+                Disconnect::disconnect()
+            },
+            Protocol::Message(src, Message::ClientClosed) => {
+                self.on_close(soma, src)
+            },
+            Protocol::Message(src, Message::ClientError(e)) => {
+                self.on_error(soma, src, e)
+            },
 
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ClientCell::Open(self))
+            Protocol::Message(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn send(mut self, src: Handle, req: ClientRequest) -> Result<ClientCell> {
+    fn send(mut self, soma: &Soma, src: Handle, req: ClientRequest)
+        -> Result<ClientCell>
+    {
         let buf = Vec::new();
         let mut writer = buf.writer();
-
 
         let (tx, rx) = oneshot::channel();
         let transaction = req.transaction;
@@ -698,9 +677,9 @@ impl Open {
             cos.flush()?;
         }
 
-        let timeout_effector = self.soma.effector()?.clone();
+        let timeout_effector = soma.effector()?.clone();
 
-        self.soma.effector()?.spawn(
+        soma.effector()?.spawn(
             self.timer.timeout(
                 self.sender.clone().send(
                     tungstenite::Message::Binary(writer.into_inner())
@@ -724,10 +703,10 @@ impl Open {
         Ok(ClientCell::Open(self))
     }
 
-    fn recv(mut self, src: Handle, msg: tungstenite::Message)
+    fn recv(mut self, soma: &Soma, src: Handle, msg: tungstenite::Message)
         -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+        assert_eq!(src, soma.effector()?.this_cell());
 
         let rsp = match msg {
             tungstenite::Message::Binary(buf) => {
@@ -747,7 +726,7 @@ impl Open {
             // rx must be closed
         }
 
-        self.soma.effector()?.send(
+        soma.effector()?.send(
             dest,
             Message::ClientResult(ClientResult::success(transaction, rsp))
         );
@@ -755,10 +734,10 @@ impl Open {
         Ok(ClientCell::Open(self))
     }
 
-    fn on_timeout(mut self, src: Handle, transaction: Uuid)
+    fn on_timeout(mut self, soma: &Soma, src: Handle, transaction: Uuid)
         -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+        assert_eq!(src, soma.effector()?.this_cell());
 
         if let Some(i) = self.transactions.iter()
             .position(|&(ref t, _, _)| *t == transaction)
@@ -766,7 +745,7 @@ impl Open {
             let dest = self.transactions[i].1;
 
             self.transactions.remove(i);
-            self.soma.effector()?.send(
+            soma.effector()?.send(
                 dest, Message::ClientTimeout(transaction)
             );
         }
@@ -774,45 +753,40 @@ impl Open {
         Ok(ClientCell::Open(self))
     }
 
-    fn on_close(self, src: Handle) -> Result<ClientCell> {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+    fn on_close(self, soma: &Soma, src: Handle) -> Result<ClientCell> {
+        assert_eq!(src, soma.effector()?.this_cell());
 
-        AwaitInstance::reset(self.soma)
+        AwaitInstance::reset(soma)
     }
 
-    fn on_error(self, src: Handle, e: Rc<Error>) -> Result<ClientCell> {
-        assert_eq!(src, self.soma.effector()?.this_cell());
+    fn on_error(self, soma: &Soma, src: Handle, e: Rc<Error>) -> Result<ClientCell> {
+        assert_eq!(src, soma.effector()?.this_cell());
 
-        AwaitInstance::reset_error(self.soma, e)
+        AwaitInstance::reset_error(soma, e)
     }
 }
 
-pub struct Disconnect {
-    soma:           Soma,
-}
+pub struct Disconnect { }
 
 impl Disconnect {
-    fn disconnect(soma: Soma) -> Result<ClientCell> {
-        Ok(ClientCell::Disconnect(Disconnect { soma: soma }))
+    fn disconnect() -> Result<ClientCell> {
+        Ok(ClientCell::Disconnect(Disconnect { }))
     }
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
-        if let Some(msg) = self.soma.update(msg)? {
-            match msg {
-                Protocol::Message(_, Message::ClientClosed) => {
-                    AwaitInstance::reset(self.soma)
-                },
-                Protocol::Message(_, Message::ClientError(e)) => {
-                    AwaitInstance::reset_error(self.soma, e)
-                },
+    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
+        -> Result<ClientCell>
+    {
+        match msg {
+            Protocol::Message(_, Message::ClientClosed) => {
+                AwaitInstance::reset(soma)
+            },
+            Protocol::Message(_, Message::ClientError(e)) => {
+                AwaitInstance::reset_error(soma, e)
+            },
 
-                Protocol::Message(_, msg) => {
-                    bail!("unexpected msg {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ClientCell::Disconnect(self))
+            Protocol::Message(_, msg) => {
+                bail!("unexpected msg {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }

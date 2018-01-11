@@ -10,7 +10,7 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
-use organelle::{ Organelle };
+use organelle::{ Organelle, Cell };
 use docopt::Docopt;
 use examples_common::{
     USAGE, Args, get_launcher_settings, get_game_settings, TerranCell
@@ -55,7 +55,7 @@ quick_main!(
 
         organelle.add_cell(sc2::CtrlcBreakerCell::new()?);
 
-        organelle::run(organelle)?;
+        organelle.run()?;
 
         Ok(())
     }

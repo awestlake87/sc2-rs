@@ -15,6 +15,7 @@ use super::{
     Role,
     Soma,
     Organelle,
+    Eukaryote,
 
     FrameData,
     Command,
@@ -106,7 +107,9 @@ impl AgentCell {
         // TODO: find out why these explicit annotation is needed. it's
         // possible that it's a bug in the rust type system because it will
         // work when the function is generic across two cell types, but not one
-        let client = organelle.add_cell::<ClientCell>(ClientCell::new()?);
+        let client = organelle.add_cell::<Eukaryote<ClientCell>>(
+            ClientCell::new()?
+        );
         let observer = organelle.add_cell::<ObserverCell>(ObserverCell::new()?);
 
         organelle.connect(agent, client, Role::InstanceProvider);

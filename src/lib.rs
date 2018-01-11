@@ -284,3 +284,5 @@ pub enum Role {
 pub type Organelle = organelle::Organelle<Message, Role>;
 /// type alias for an Sc2 Soma
 pub type Soma = organelle::Soma<Message, Role>;
+/// type alias for an Sc2 Eukaryote
+pub type Eukaryote<T> = organelle::Eukaryote<Message, Role, T>;
