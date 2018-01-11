@@ -5,9 +5,9 @@ use std::rc::Rc;
 use std::time;
 
 use bytes::{ Buf, BufMut };
-use cortical;
-use cortical::{
-    ResultExt, Handle, Lobe, Protocol, Constraint
+use organelle;
+use organelle::{
+    ResultExt, Handle, Cell, Protocol, Constraint
 };
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
@@ -22,15 +22,15 @@ use uuid::Uuid;
 
 use super::{ Result, Error, ErrorKind, Message, Soma, Role };
 
-pub type TransactionId = Uuid;
-
+/// keeps a record of a req/rsp transaction between the game instance
 pub struct Transactor {
     client:         Handle,
-    transaction:    TransactionId,
+    transaction:    Uuid,
     kind:           ClientMessageKind,
 }
 
 impl Transactor {
+    /// send a client request to the client cell
     pub fn send(soma: &Soma, req: ClientRequest) -> Result<Self> {
         let transaction = req.transaction;
         let kind = req.kind;
@@ -48,37 +48,50 @@ impl Transactor {
         )
     }
 
-    pub fn expect(self, src: Handle, rsp: ClientResponse)
-        -> Result<ClientResponse>
+    /// expect the result to contain the response expected by this transactor
+    pub fn expect(self, src: Handle, result: ClientResult)
+        -> Result<Response>
     {
-        if self.client != src {
-            bail!("unexpected source for client response")
-        }
+        match result {
+            ClientResult::Success(rsp) => {
+                if self.client != src {
+                    bail!("unexpected source for client response")
+                }
 
-        if self.transaction != rsp.transaction {
-            bail!("transaction id mismatch")
-        }
+                if self.transaction != rsp.transaction {
+                    bail!("transaction id mismatch")
+                }
 
-        if self.kind != rsp.kind {
-            bail!("expected {:?} message, got {:?}", self.kind, rsp.kind)
-        }
+                if self.kind != rsp.kind {
+                    bail!("expected {:?} message, got {:?}", self.kind, rsp.kind)
+                }
 
-        if rsp.response.get_error().len() != 0 {
-            bail!(
-                ErrorKind::GameErrors(
-                    rsp.response.get_error().iter()
-                        .map(|e| e.clone())
-                        .collect()
-                )
-            )
-        }
+                if rsp.response.get_error().len() != 0 {
+                    bail!(
+                        ErrorKind::GameErrors(
+                            rsp.response.get_error().iter()
+                                .map(|e| e.clone())
+                                .collect()
+                        )
+                    )
+                }
 
-        Ok(rsp)
+                Ok(rsp.response)
+            },
+            ClientResult::Timeout(transaction) => {
+                if self.transaction != transaction {
+                    bail!("transaction id mismatch")
+                }
+                else {
+                    bail!("transaction timed out")
+                }
+            }
+        }
     }
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
-pub enum ClientMessageKind {
+enum ClientMessageKind {
     Unknown,
     CreateGame,
     JoinGame,
@@ -102,19 +115,22 @@ pub enum ClientMessageKind {
     Debug
 }
 
+/// a request to send to the game instance
 #[derive(Debug)]
 pub struct ClientRequest {
-    pub transaction: TransactionId,
-    pub request: Request,
-    pub timeout: time::Duration,
-    pub kind: ClientMessageKind,
+    transaction: Uuid,
+    request: Request,
+    timeout: time::Duration,
+    kind: ClientMessageKind,
 }
 
 impl ClientRequest {
+    /// create a new request with the default timeout
     pub fn new(request: Request) -> Self {
         Self::with_timeout(request, time::Duration::from_secs(5))
     }
 
+    /// create a new request with a custom timeout
     pub fn with_timeout(request: Request, timeout: time::Duration)
         -> Self
     {
@@ -195,22 +211,34 @@ impl ClientRequest {
     }
 }
 
+/// a successful response from the game instance
 #[derive(Debug)]
 pub struct ClientResponse {
-    pub transaction: TransactionId,
-    pub response: Response,
-    pub kind: ClientMessageKind,
+    transaction: Uuid,
+    response: Response,
+    kind: ClientMessageKind,
 }
 
-impl ClientResponse {
-    fn new(transaction: TransactionId, response: Response) -> Self {
+/// the result of a transaction with the game instance
+#[derive(Debug)]
+pub enum ClientResult {
+    /// transaction succeeded
+    Success(ClientResponse),
+    /// transaction timed out
+    Timeout(Uuid),
+}
+
+impl ClientResult {
+    fn success(transaction: Uuid, response: Response) -> Self {
         let kind = Self::get_kind(&response);
 
-        Self {
-            transaction: transaction,
-            response: response,
-            kind: kind,
-        }
+        ClientResult::Success(
+            ClientResponse {
+                transaction: transaction,
+                response: response,
+                kind: kind,
+            }
+        )
     }
 
     fn get_kind(rsp: &Response) -> ClientMessageKind {
@@ -282,7 +310,7 @@ impl ClientResponse {
 
 const NUM_RETRIES: u32 = 10;
 
-pub enum ClientLobe {
+pub enum ClientCell {
     Init(Init),
     AwaitInstance(AwaitInstance),
     Connect(Connect),
@@ -292,10 +320,10 @@ pub enum ClientLobe {
     Disconnect(Disconnect),
 }
 
-impl ClientLobe {
+impl ClientCell {
     pub fn new() -> Result<Self> {
         Ok(
-            ClientLobe::Init(
+            ClientCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -310,19 +338,19 @@ impl ClientLobe {
     }
 }
 
-impl Lobe for ClientLobe {
+impl Cell for ClientCell {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>) -> cortical::Result<Self> {
+    fn update(self, msg: Protocol<Message, Role>) -> organelle::Result<Self> {
         match self {
-            ClientLobe::Init(state) => state.update(msg),
-            ClientLobe::AwaitInstance(state) => state.update(msg),
-            ClientLobe::Connect(state) => state.update(msg),
-            ClientLobe::Open(state) => state.update(msg),
-            ClientLobe::Disconnect(state) => state.update(msg),
+            ClientCell::Init(state) => state.update(msg),
+            ClientCell::AwaitInstance(state) => state.update(msg),
+            ClientCell::Connect(state) => state.update(msg),
+            ClientCell::Open(state) => state.update(msg),
+            ClientCell::Disconnect(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -332,7 +360,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => self.start(),
@@ -344,11 +372,11 @@ impl Init {
             }
         }
         else {
-            Ok(ClientLobe::Init(self))
+            Ok(ClientCell::Init(self))
         }
     }
 
-    fn start(self) -> Result<ClientLobe> {
+    fn start(self) -> Result<ClientCell> {
         AwaitInstance::await(self.soma)
     }
 }
@@ -358,11 +386,11 @@ pub struct AwaitInstance {
 }
 
 impl AwaitInstance {
-    fn await(soma: Soma) -> Result<ClientLobe> {
-        Ok(ClientLobe::AwaitInstance(AwaitInstance { soma: soma }))
+    fn await(soma: Soma) -> Result<ClientCell> {
+        Ok(ClientCell::AwaitInstance(AwaitInstance { soma: soma }))
     }
 
-    fn reset(soma: Soma) -> Result<ClientLobe> {
+    fn reset(soma: Soma) -> Result<ClientCell> {
         for c in soma.var_input(Role::Client)? {
             soma.effector()?.send(*c, Message::ClientClosed);
         }
@@ -370,7 +398,7 @@ impl AwaitInstance {
         Self::await(soma)
     }
 
-    fn reset_error(soma: Soma, e: Rc<Error>) -> Result<ClientLobe> {
+    fn reset_error(soma: Soma, e: Rc<Error>) -> Result<ClientCell> {
         for c in soma.var_input(Role::Client)? {
             soma.effector()?.send_in_order(
                 *c,
@@ -384,7 +412,7 @@ impl AwaitInstance {
         Self::await(soma)
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(
@@ -400,12 +428,12 @@ impl AwaitInstance {
             }
         }
         else {
-            Ok(ClientLobe::AwaitInstance(self))
+            Ok(ClientCell::AwaitInstance(self))
         }
     }
 
     fn assign_instance(self, src: Handle, _: Uuid, url: Url)
-        -> Result<ClientLobe>
+        -> Result<ClientCell>
     {
         assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
 
@@ -421,14 +449,14 @@ pub struct Connect {
 }
 
 impl Connect {
-    fn connect(soma: Soma, url: Url) -> Result<ClientLobe> {
-        let this_lobe = soma.effector()?.this_lobe();
+    fn connect(soma: Soma, url: Url) -> Result<ClientCell> {
+        let this_cell = soma.effector()?.this_cell();
         soma.effector()?.send(
-            this_lobe, Message::ClientAttemptConnect(url)
+            this_cell, Message::ClientAttemptConnect(url)
         );
 
         Ok(
-            ClientLobe::Connect(
+            ClientCell::Connect(
                 Connect {
                     soma: soma,
 
@@ -439,7 +467,7 @@ impl Connect {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::ClientAttemptConnect(url)) => {
@@ -456,12 +484,12 @@ impl Connect {
             }
         }
         else {
-            Ok(ClientLobe::Connect(self))
+            Ok(ClientCell::Connect(self))
         }
     }
 
-    fn attempt_connect(mut self, src: Handle, url: Url) -> Result<ClientLobe> {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+    fn attempt_connect(mut self, src: Handle, url: Url) -> Result<ClientCell> {
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         let connected_effector = self.soma.effector()?.clone();
         let retry_effector = self.soma.effector()?.clone();
@@ -488,7 +516,7 @@ impl Connect {
             self.timer.sleep(time::Duration::from_secs(5))
                 .and_then(move |_| connect_async(url, client_remote)
                     .and_then(move |(ws_stream, _)| {
-                        let this_lobe = connected_effector.this_lobe();
+                        let this_cell = connected_effector.this_cell();
 
                         let (send_tx, send_rx) = mpsc::channel(10);
 
@@ -513,21 +541,21 @@ impl Connect {
                         connected_effector.spawn(
                             stream.for_each(move |msg| {
                                 recv_eff.send(
-                                    this_lobe, Message::ClientReceive(msg)
+                                    this_cell, Message::ClientReceive(msg)
                                 );
 
                                 Ok(())
                             })
                                 .and_then(move |_| {
                                     close_eff.send(
-                                        this_lobe, Message::ClientClosed
+                                        this_cell, Message::ClientClosed
                                     );
 
                                     Ok(())
                                 })
                                 .or_else(move |e| {
                                     error_eff.send(
-                                        this_lobe,
+                                        this_cell,
                                         Message::ClientError(
                                             Rc::from(
                                                 Error::with_chain(
@@ -542,16 +570,16 @@ impl Connect {
                                 })
                         );
                         connected_effector.send(
-                            this_lobe,
+                            this_cell,
                             Message::ClientConnected(send_tx)
                         );
 
                         Ok(())
                     })
                     .or_else(move |_| {
-                        let this_lobe = retry_effector.this_lobe();
+                        let this_cell = retry_effector.this_cell();
                         retry_effector.send(
-                            this_lobe,
+                            this_cell,
                             Message::ClientAttemptConnect(retry_url)
                         );
 
@@ -560,8 +588,8 @@ impl Connect {
                 )
                 .or_else(move |e| {
                     timer_effector.error(
-                        cortical::Error::with_chain(
-                            e, cortical::ErrorKind::LobeError
+                        organelle::Error::with_chain(
+                            e, organelle::ErrorKind::CellError
                         )
                     );
 
@@ -569,7 +597,7 @@ impl Connect {
                 })
         );
 
-        Ok(ClientLobe::Connect(self))
+        Ok(ClientCell::Connect(self))
     }
 
     fn on_connected(
@@ -577,9 +605,9 @@ impl Connect {
         src: Handle,
         sender: mpsc::Sender<tungstenite::Message>
     )
-        -> Result<ClientLobe>
+        -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         Open::open(self.soma, sender, self.timer)
     }
@@ -591,7 +619,7 @@ pub struct Open {
     timer:          Timer,
 
     transactions:   VecDeque<
-                        (TransactionId, Handle, oneshot::Sender<()>)
+                        (Uuid, Handle, oneshot::Sender<()>)
                     >,
 }
 
@@ -599,14 +627,14 @@ impl Open {
     fn open(
         soma: Soma, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
     )
-        -> Result<ClientLobe>
+        -> Result<ClientCell>
     {
         for c in soma.var_input(Role::Client)? {
             soma.effector()?.send(*c, Message::Ready);
         }
 
         Ok(
-            ClientLobe::Open(
+            ClientCell::Open(
                 Open {
                     soma: soma,
                     sender: sender,
@@ -618,7 +646,7 @@ impl Open {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::ClientRequest(req)) => {
@@ -649,11 +677,11 @@ impl Open {
             }
         }
         else {
-            Ok(ClientLobe::Open(self))
+            Ok(ClientCell::Open(self))
         }
     }
 
-    fn send(mut self, src: Handle, req: ClientRequest) -> Result<ClientLobe> {
+    fn send(mut self, src: Handle, req: ClientRequest) -> Result<ClientCell> {
         let buf = Vec::new();
         let mut writer = buf.writer();
 
@@ -683,23 +711,23 @@ impl Open {
             )
             .and_then(|_| Ok(()))
             .or_else(move |_| {
-                let this_lobe = timeout_effector.this_lobe();
+                let this_cell = timeout_effector.this_cell();
 
                 timeout_effector.send(
-                    this_lobe, Message::ClientTimeout(transaction)
+                    this_cell, Message::ClientTimeout(transaction)
                 );
 
                 Ok(())
             })
         );
 
-        Ok(ClientLobe::Open(self))
+        Ok(ClientCell::Open(self))
     }
 
     fn recv(mut self, src: Handle, msg: tungstenite::Message)
-        -> Result<ClientLobe>
+        -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         let rsp = match msg {
             tungstenite::Message::Binary(buf) => {
@@ -721,16 +749,16 @@ impl Open {
 
         self.soma.effector()?.send(
             dest,
-            Message::ClientResponse(ClientResponse::new(transaction, rsp))
+            Message::ClientResult(ClientResult::success(transaction, rsp))
         );
 
-        Ok(ClientLobe::Open(self))
+        Ok(ClientCell::Open(self))
     }
 
-    fn on_timeout(mut self, src: Handle, transaction: TransactionId)
-        -> Result<ClientLobe>
+    fn on_timeout(mut self, src: Handle, transaction: Uuid)
+        -> Result<ClientCell>
     {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         if let Some(i) = self.transactions.iter()
             .position(|&(ref t, _, _)| *t == transaction)
@@ -743,17 +771,17 @@ impl Open {
             );
         }
 
-        Ok(ClientLobe::Open(self))
+        Ok(ClientCell::Open(self))
     }
 
-    fn on_close(self, src: Handle) -> Result<ClientLobe> {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+    fn on_close(self, src: Handle) -> Result<ClientCell> {
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         AwaitInstance::reset(self.soma)
     }
 
-    fn on_error(self, src: Handle, e: Rc<Error>) -> Result<ClientLobe> {
-        assert_eq!(src, self.soma.effector()?.this_lobe());
+    fn on_error(self, src: Handle, e: Rc<Error>) -> Result<ClientCell> {
+        assert_eq!(src, self.soma.effector()?.this_cell());
 
         AwaitInstance::reset_error(self.soma, e)
     }
@@ -764,16 +792,16 @@ pub struct Disconnect {
 }
 
 impl Disconnect {
-    fn disconnect(soma: Soma) -> Result<ClientLobe> {
-        Ok(ClientLobe::Disconnect(Disconnect { soma: soma }))
+    fn disconnect(soma: Soma) -> Result<ClientCell> {
+        Ok(ClientCell::Disconnect(Disconnect { soma: soma }))
     }
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ClientCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientClosed) => {
+                Protocol::Message(_, Message::ClientClosed) => {
                     AwaitInstance::reset(self.soma)
                 },
-                Protocol::Message(src, Message::ClientError(e)) => {
+                Protocol::Message(_, Message::ClientError(e)) => {
                     AwaitInstance::reset_error(self.soma, e)
                 },
 
@@ -784,7 +812,7 @@ impl Disconnect {
             }
         }
         else {
-            Ok(ClientLobe::Disconnect(self))
+            Ok(ClientCell::Disconnect(self))
         }
     }
 }

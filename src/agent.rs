@@ -2,9 +2,9 @@
 use std::rc::Rc;
 use std::time;
 
-use cortical;
-use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
-use sc2_proto::{ sc2api, common, debug };
+use organelle;
+use organelle::{ ResultExt, Handle, Cell, Protocol, Constraint };
+use sc2_proto::{ sc2api, debug };
 use url::Url;
 
 use super::{
@@ -14,7 +14,7 @@ use super::{
     Message,
     Role,
     Soma,
-    Cortex,
+    Organelle,
 
     FrameData,
     Command,
@@ -27,34 +27,49 @@ use super::{
     Map,
     ActionTarget,
 };
-use client::{ ClientLobe, Transactor, ClientRequest, ClientResponse };
-use observer::{ ObserverLobe };
+use client::{ ClientCell, Transactor, ClientRequest, ClientResult };
+use observer::{ ObserverCell };
 
-pub enum AgentLobe {
+/// mediates interactions between the player and the game instance
+pub enum AgentCell {
+    /// initialize the soma
     Init(Init),
+    /// perform setup queries
     Setup(Setup),
 
+    /// order the game instance to create a game
     CreateGame(CreateGame),
+    /// game has been created
     GameCreated(GameCreated),
+    /// join an existing game
     JoinGame(JoinGame),
 
+    /// order the observer to fetch game data
     FetchGameData(FetchGameData),
+    /// query the request interval from the player cell
     StepperSetup(StepperSetup),
 
+    /// broadcast game updates to the player cell
     Update(Update),
+    /// send any actions for this step to the game instance
     SendActions(SendActions),
+    /// send any debug actions for this step to the game instance
     SendDebug(SendDebug),
+    /// step the game instance
     Step(Step),
+    /// order the observer to observe the game state
     Observe(Observe),
 
+    /// leave the current game
     LeaveGame(LeaveGame),
+    /// reset the client and re-enter setup state
     Reset(Reset),
 }
 
-impl AgentLobe {
+impl AgentCell {
     fn new() -> Result<Self> {
         Ok(
-            AgentLobe::Init(
+            AgentCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -73,8 +88,9 @@ impl AgentLobe {
         )
     }
 
-    pub fn cortex<L>(lobe: L) -> Result<Cortex> where
-        L: Lobe + 'static,
+    /// compose an agent organelle to interact with a controller cell
+    pub fn organelle<L>(cell: L) -> Result<Organelle> where
+        L: Cell + 'static,
 
         L::Message: From<Message>,
         L::Role: From<Role>,
@@ -82,56 +98,56 @@ impl AgentLobe {
         Message: From<L::Message>,
         Role: From<L::Role>,
     {
-        let mut cortex = Cortex::new(AgentLobe::new()?);
+        let mut organelle = Organelle::new(AgentCell::new()?);
 
-        let agent = cortex.get_main_handle();
-        let player = cortex.add_lobe(lobe);
+        let agent = organelle.get_main_handle();
+        let player = organelle.add_cell(cell);
 
         // TODO: find out why these explicit annotation is needed. it's
         // possible that it's a bug in the rust type system because it will
-        // work when the function is generic across two lobe types, but not one
-        let client = cortex.add_lobe::<ClientLobe>(ClientLobe::new()?);
-        let observer = cortex.add_lobe::<ObserverLobe>(ObserverLobe::new()?);
+        // work when the function is generic across two cell types, but not one
+        let client = organelle.add_cell::<ClientCell>(ClientCell::new()?);
+        let observer = organelle.add_cell::<ObserverCell>(ObserverCell::new()?);
 
-        cortex.connect(agent, client, Role::InstanceProvider);
-        cortex.connect(agent, client, Role::Client);
-        cortex.connect(observer, client, Role::Client);
+        organelle.connect(agent, client, Role::InstanceProvider);
+        organelle.connect(agent, client, Role::Client);
+        organelle.connect(observer, client, Role::Client);
 
-        cortex.connect(agent, observer, Role::Observer);
-        cortex.connect(agent, player, Role::Agent);
+        organelle.connect(agent, observer, Role::Observer);
+        organelle.connect(agent, player, Role::Agent);
 
-        Ok(cortex)
+        Ok(organelle)
     }
 }
 
-impl Lobe for AgentLobe {
+impl Cell for AgentCell {
     type Message = Message;
     type Role = Role;
 
     fn update(self, msg: Protocol<Message, Role>)
-        -> cortical::Result<Self>
+        -> organelle::Result<Self>
     {
         match self {
-            AgentLobe::Init(state) => state.update(msg),
-            AgentLobe::Setup(state) => state.update(msg),
+            AgentCell::Init(state) => state.update(msg),
+            AgentCell::Setup(state) => state.update(msg),
 
-            AgentLobe::CreateGame(state) => state.update(msg),
-            AgentLobe::GameCreated(state) => state.update(msg),
-            AgentLobe::JoinGame(state) => state.update(msg),
+            AgentCell::CreateGame(state) => state.update(msg),
+            AgentCell::GameCreated(state) => state.update(msg),
+            AgentCell::JoinGame(state) => state.update(msg),
 
-            AgentLobe::StepperSetup(state) => state.update(msg),
-            AgentLobe::FetchGameData(state) => state.update(msg),
+            AgentCell::StepperSetup(state) => state.update(msg),
+            AgentCell::FetchGameData(state) => state.update(msg),
 
-            AgentLobe::Update(state) => state.update(msg),
-            AgentLobe::SendActions(state) => state.update(msg),
-            AgentLobe::SendDebug(state) => state.update(msg),
-            AgentLobe::Step(state) => state.update(msg),
-            AgentLobe::Observe(state) => state.update(msg),
+            AgentCell::Update(state) => state.update(msg),
+            AgentCell::SendActions(state) => state.update(msg),
+            AgentCell::SendDebug(state) => state.update(msg),
+            AgentCell::Step(state) => state.update(msg),
+            AgentCell::Observe(state) => state.update(msg),
 
-            AgentLobe::LeaveGame(state) => state.update(msg),
-            AgentLobe::Reset(state) => state.update(msg),
+            AgentCell::LeaveGame(state) => state.update(msg),
+            AgentCell::Reset(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -141,7 +157,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => Setup::setup(self.soma),
@@ -153,7 +169,7 @@ impl Init {
             }
         }
         else {
-            Ok(AgentLobe::Init(self))
+            Ok(AgentCell::Init(self))
         }
     }
 }
@@ -163,11 +179,11 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(soma: Soma) -> Result<AgentLobe> {
-        Ok(AgentLobe::Setup(Setup { soma: soma, }))
+    fn setup(soma: Soma) -> Result<AgentCell> {
+        Ok(AgentCell::Setup(Setup { soma: soma, }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::Ready) => {
@@ -204,20 +220,20 @@ impl Setup {
             }
         }
         else {
-            Ok(AgentLobe::Setup(self))
+            Ok(AgentCell::Setup(self))
         }
     }
 
-    fn on_ready(self, src: Handle) -> Result<AgentLobe> {
+    fn on_ready(self, src: Handle) -> Result<AgentCell> {
         assert_eq!(src, self.soma.req_output(Role::Client)?);
 
         self.soma.send_req_input(Role::Controller, Message::Ready)?;
 
-        Ok(AgentLobe::Setup(self))
+        Ok(AgentCell::Setup(self))
     }
 
     fn on_req_player_setup(self, src: Handle, settings: GameSettings)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
@@ -225,11 +241,11 @@ impl Setup {
             Role::Agent, Message::RequestPlayerSetup(settings)
         )?;
 
-        Ok(AgentLobe::Setup(self))
+        Ok(AgentCell::Setup(self))
     }
 
     fn on_player_setup(self, src: Handle, setup: PlayerSetup)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         assert_eq!(src, self.soma.req_output(Role::Agent)?);
 
@@ -237,11 +253,11 @@ impl Setup {
             Role::Controller, Message::PlayerSetup(setup)
         )?;
 
-        Ok(AgentLobe::Setup(self))
+        Ok(AgentCell::Setup(self))
     }
 
     fn provide_instance(self, src: Handle, instance: Handle, url: Url)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         assert_eq!(src, self.soma.req_input(Role::InstanceProvider)?);
 
@@ -249,7 +265,7 @@ impl Setup {
             Role::InstanceProvider, Message::ProvideInstance(instance, url)
         )?;
 
-        Ok(AgentLobe::Setup(self))
+        Ok(AgentCell::Setup(self))
     }
 
     fn create_game(
@@ -258,7 +274,7 @@ impl Setup {
         settings: GameSettings,
         players: Vec<PlayerSetup>
     )
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         assert_eq!(src, self.soma.req_input(Role::Controller)?);
 
@@ -293,9 +309,9 @@ impl Setup {
 
                     setup.set_race(race.into_proto()?);
                 },
-                PlayerSetup::Observer => {
+                /*PlayerSetup::Observer => {
                     setup.set_field_type(sc2api::PlayerType::Observer);
-                }
+                }*/
             }
 
             req.mut_create_game().mut_player_setup().push(setup);
@@ -308,7 +324,7 @@ impl Setup {
         )?;
 
         Ok(
-            AgentLobe::CreateGame(
+            AgentCell::CreateGame(
                 CreateGame {
                     soma: self.soma,
                     transactor: transactor,
@@ -318,15 +334,15 @@ impl Setup {
     }
 
     fn on_game_ready(self, setup: PlayerSetup, ports: Option<GamePorts>)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
-        let this_lobe = self.soma.effector()?.this_lobe();
+        let this_cell = self.soma.effector()?.this_cell();
 
         self.soma.effector()?.send(
-            this_lobe, Message::GameReady(setup, ports)
+            this_cell, Message::GameReady(setup, ports)
         );
 
-        Ok(AgentLobe::GameCreated(GameCreated { soma: self.soma }))
+        Ok(AgentCell::GameCreated(GameCreated { soma: self.soma }))
     }
 }
 
@@ -336,11 +352,11 @@ pub struct CreateGame {
 }
 
 impl CreateGame {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.transactor.expect(src, rsp)?;
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.transactor.expect(src, result)?;
 
                     GameCreated::game_created(self.soma)
                 },
@@ -353,7 +369,7 @@ impl CreateGame {
             }
         }
         else {
-            Ok(AgentLobe::CreateGame(self))
+            Ok(AgentCell::CreateGame(self))
         }
     }
 }
@@ -363,13 +379,13 @@ pub struct GameCreated {
 }
 
 impl GameCreated {
-    fn game_created(soma: Soma) -> Result<AgentLobe> {
+    fn game_created(soma: Soma) -> Result<AgentCell> {
         soma.send_req_input(
             Role::Controller, Message::GameCreated
         )?;
 
         Ok(
-            AgentLobe::GameCreated(
+            AgentCell::GameCreated(
                 GameCreated {
                     soma: soma,
                 }
@@ -377,10 +393,10 @@ impl GameCreated {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::GameReady(setup, ports)) => {
+                Protocol::Message(_, Message::GameReady(setup, ports)) => {
                     JoinGame::join_game(self.soma, setup, ports)
                 },
 
@@ -392,7 +408,7 @@ impl GameCreated {
             }
         }
         else {
-            Ok(AgentLobe::GameCreated(self))
+            Ok(AgentCell::GameCreated(self))
         }
     }
 }
@@ -404,7 +420,7 @@ pub struct JoinGame {
 
 impl JoinGame {
     fn join_game(soma: Soma, setup: PlayerSetup, ports: Option<GamePorts>)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         let mut req = sc2api::Request::new();
 
@@ -415,7 +431,7 @@ impl JoinGame {
             PlayerSetup::Player { race, .. } => {
                 req.mut_join_game().set_race(race.into_proto()?);
             },
-            _ => req.mut_join_game().set_race(common::Race::NoRace)
+            //_ => req.mut_join_game().set_race(common::Race::NoRace)
         };
 
         if let Some(ports) = ports {
@@ -455,7 +471,7 @@ impl JoinGame {
         )?;
 
         Ok(
-            AgentLobe::JoinGame(
+            AgentCell::JoinGame(
                 JoinGame {
                     soma: soma,
                     transactor: transactor,
@@ -464,11 +480,11 @@ impl JoinGame {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_join_game(src, rsp)
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.on_join_game(src, result)
                 }
 
                 Protocol::Message(_, msg) => {
@@ -478,14 +494,14 @@ impl JoinGame {
             }
         }
         else {
-            Ok(AgentLobe::JoinGame(self))
+            Ok(AgentCell::JoinGame(self))
         }
     }
 
-    fn on_join_game(self, src: Handle, rsp: ClientResponse)
-        -> Result<AgentLobe>
+    fn on_join_game(self, src: Handle, result: ClientResult)
+        -> Result<AgentCell>
     {
-        self.transactor.expect(src, rsp)?;
+        self.transactor.expect(src, result)?;
 
         FetchGameData::fetch(self.soma)
     }
@@ -496,13 +512,13 @@ pub struct FetchGameData {
 }
 
 impl FetchGameData {
-    fn fetch(soma: Soma) -> Result<AgentLobe> {
+    fn fetch(soma: Soma) -> Result<AgentCell> {
         soma.send_req_output(Role::Observer, Message::FetchGameData)?;
 
-        Ok(AgentLobe::FetchGameData(FetchGameData { soma: soma }))
+        Ok(AgentCell::FetchGameData(FetchGameData { soma: soma }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::GameDataReady) => {
@@ -515,7 +531,7 @@ impl FetchGameData {
             }
         }
         else {
-            Ok(AgentLobe::FetchGameData(self))
+            Ok(AgentCell::FetchGameData(self))
         }
     }
 }
@@ -526,13 +542,13 @@ pub struct StepperSetup {
 }
 
 impl StepperSetup {
-    fn setup(soma: Soma) -> Result<AgentLobe> {
+    fn setup(soma: Soma) -> Result<AgentCell> {
         let stepper = soma.req_output(Role::Agent)?;
 
         soma.effector()?.send(stepper, Message::RequestUpdateInterval);
 
         Ok(
-            AgentLobe::StepperSetup(
+            AgentCell::StepperSetup(
                 StepperSetup {
                     soma: soma,
                     stepper: stepper,
@@ -541,7 +557,7 @@ impl StepperSetup {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::UpdateInterval(interval)) => {
@@ -556,12 +572,12 @@ impl StepperSetup {
             }
         }
         else {
-            Ok(AgentLobe::StepperSetup(self))
+            Ok(AgentCell::StepperSetup(self))
         }
     }
 
     fn on_update_interval(self, src: Handle, interval: u32)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         if src == self.stepper {
             Step::first(self.soma, interval)
@@ -581,14 +597,14 @@ pub struct Update {
 
 impl Update {
     fn next(soma: Soma, interval: u32, frame: Rc<FrameData>)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         soma.send_req_output(
             Role::Agent, Message::Observation(frame)
         )?;
 
         Ok(
-            AgentLobe::Update(
+            AgentCell::Update(
                 Update {
                     soma: soma,
                     interval: interval,
@@ -599,16 +615,16 @@ impl Update {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::Command(cmd)) => {
                     self.commands.push(cmd);
-                    Ok(AgentLobe::Update(self))
+                    Ok(AgentCell::Update(self))
                 },
                 Protocol::Message(_, Message::DebugCommand(cmd)) => {
                     self.debug_commands.push(cmd);
-                    Ok(AgentLobe::Update(self))
+                    Ok(AgentCell::Update(self))
                 },
 
                 Protocol::Message(_, Message::UpdateComplete) => {
@@ -622,11 +638,11 @@ impl Update {
             }
         }
         else {
-            Ok(AgentLobe::Update(self))
+            Ok(AgentCell::Update(self))
         }
     }
 
-    fn on_update_complete(self) -> Result<AgentLobe> {
+    fn on_update_complete(self) -> Result<AgentCell> {
         SendActions::send_actions(
             self.soma,
             self.interval,
@@ -651,7 +667,7 @@ impl SendActions {
         commands: Vec<Command>,
         debug_commands: Vec<DebugCommand>
     )
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         let mut req = sc2api::Request::new();
         req.mut_action().mut_actions();
@@ -691,7 +707,7 @@ impl SendActions {
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            AgentLobe::SendActions(
+            AgentCell::SendActions(
                 SendActions {
                     soma: soma,
                     interval: interval,
@@ -703,11 +719,11 @@ impl SendActions {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    let rsp = self.transactor.expect(src, rsp)?;
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.transactor.expect(src, result)?;
 
                     SendDebug::send_debug(
                         self.soma,
@@ -723,7 +739,7 @@ impl SendActions {
             }
         }
         else {
-            Ok(AgentLobe::SendActions(self))
+            Ok(AgentCell::SendActions(self))
         }
     }
 }
@@ -740,7 +756,7 @@ impl SendDebug {
         interval: u32,
         commands: Vec<DebugCommand>
     )
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         let mut req = sc2api::Request::new();
         req.mut_debug().mut_debug();
@@ -834,7 +850,7 @@ impl SendDebug {
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            AgentLobe::SendDebug(
+            AgentCell::SendDebug(
                 SendDebug {
                     soma: soma,
                     interval: interval,
@@ -844,11 +860,11 @@ impl SendDebug {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    let rsp = self.transactor.expect(src, rsp)?;
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.transactor.expect(src, result)?;
 
                     Step::step(self.soma, self.interval)
                 },
@@ -861,7 +877,7 @@ impl SendDebug {
             }
         }
         else {
-            Ok(AgentLobe::SendDebug(self))
+            Ok(AgentCell::SendDebug(self))
         }
     }
 }
@@ -873,7 +889,7 @@ pub struct Step {
 }
 
 impl Step {
-    fn first(soma: Soma, interval: u32) -> Result<AgentLobe> {
+    fn first(soma: Soma, interval: u32) -> Result<AgentCell> {
         soma.send_req_output(Role::Agent, Message::GameStarted)?;
 
         Step::step(
@@ -882,7 +898,7 @@ impl Step {
         )
     }
     fn step(soma: Soma, interval: u32)
-        -> Result<AgentLobe>
+        -> Result<AgentCell>
     {
         let mut req = sc2api::Request::new();
 
@@ -891,7 +907,7 @@ impl Step {
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            AgentLobe::Step(
+            AgentCell::Step(
                 Step {
                     soma: soma,
                     interval: interval,
@@ -901,11 +917,11 @@ impl Step {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_step(src, rsp)
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.on_step(src, result)
                 },
 
 
@@ -916,12 +932,12 @@ impl Step {
             }
         }
         else {
-            Ok(AgentLobe::Step(self))
+            Ok(AgentCell::Step(self))
         }
     }
 
-    fn on_step(self, src: Handle, rsp: ClientResponse) -> Result<AgentLobe> {
-        self.transactor.expect(src, rsp)?;
+    fn on_step(self, src: Handle, result: ClientResult) -> Result<AgentCell> {
+        self.transactor.expect(src, result)?;
 
         Observe::observe(self.soma, self.interval)
     }
@@ -933,13 +949,13 @@ pub struct Observe {
 }
 
 impl Observe {
-    fn observe(soma: Soma, interval: u32) -> Result<AgentLobe> {
+    fn observe(soma: Soma, interval: u32) -> Result<AgentCell> {
         soma.send_req_output(Role::Observer, Message::Observe)?;
 
-        Ok(AgentLobe::Observe(Observe { soma: soma, interval: interval }))
+        Ok(AgentCell::Observe(Observe { soma: soma, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::Observation(frame)) => {
@@ -956,7 +972,7 @@ impl Observe {
             }
         }
         else {
-            Ok(AgentLobe::Observe(self))
+            Ok(AgentCell::Observe(self))
         }
     }
 }
@@ -967,7 +983,7 @@ pub struct LeaveGame {
 }
 
 impl LeaveGame {
-    fn leave(soma: Soma) -> Result<AgentLobe> {
+    fn leave(soma: Soma) -> Result<AgentCell> {
         let mut req = sc2api::Request::new();
 
         req.mut_leave_game();
@@ -975,17 +991,17 @@ impl LeaveGame {
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            AgentLobe::LeaveGame(
+            AgentCell::LeaveGame(
                 LeaveGame { soma: soma, transactor: transactor }
             )
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.transactor.expect(src, rsp)?;
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.transactor.expect(src, result)?;
 
                     Reset::reset(self.soma)
                 },
@@ -997,7 +1013,7 @@ impl LeaveGame {
             }
         }
         else {
-            Ok(AgentLobe::LeaveGame(self))
+            Ok(AgentCell::LeaveGame(self))
         }
     }
 }
@@ -1007,19 +1023,19 @@ pub struct Reset {
 }
 
 impl Reset {
-    fn reset(soma: Soma) -> Result<AgentLobe> {
+    fn reset(soma: Soma) -> Result<AgentCell> {
         soma.send_req_output(Role::Client, Message::ClientDisconnect)?;
 
-        Ok(AgentLobe::Reset(Reset { soma: soma, }))
+        Ok(AgentCell::Reset(Reset { soma: soma, }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<AgentCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::ClientError(_)) => {
                     // client does not close cleanly anyway right now, so just
                     // ignore the error and wait for ClientClosed.
-                    Ok(AgentLobe::Reset(self))
+                    Ok(AgentCell::Reset(self))
                 }
                 Protocol::Message(_, Message::ClientClosed) => {
                     self.soma.send_req_input(
@@ -1041,7 +1057,7 @@ impl Reset {
             }
         }
         else {
-            Ok(AgentLobe::Reset(self))
+            Ok(AgentCell::Reset(self))
         }
     }
 }

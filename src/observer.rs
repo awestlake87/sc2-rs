@@ -4,8 +4,8 @@ use std::collections::{ HashMap, HashSet };
 use std::mem;
 use std::rc::Rc;
 
-use cortical;
-use cortical::{ ResultExt, Handle, Lobe, Protocol, Constraint };
+use organelle;
+use organelle::{ ResultExt, Handle, Cell, Protocol, Constraint };
 use sc2_proto::{ sc2api };
 
 use super::{
@@ -39,9 +39,9 @@ use super::{
     Point2,
     DisplayType,
 };
-use client::{ ClientRequest, ClientResponse, Transactor };
+use client::{ ClientRequest, ClientResult, Transactor };
 
-pub enum ObserverLobe {
+pub enum ObserverCell {
     Init(Init),
 
     Started(Started),
@@ -54,10 +54,10 @@ pub enum ObserverLobe {
     Observe(Observe),
 }
 
-impl ObserverLobe {
+impl ObserverCell {
     pub fn new() -> Result<Self> {
         Ok(
-            ObserverLobe::Init(
+            ObserverCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -73,26 +73,26 @@ impl ObserverLobe {
     }
 }
 
-impl Lobe for ObserverLobe {
+impl Cell for ObserverCell {
     type Message = Message;
     type Role = Role;
 
     fn update(self, msg: Protocol<Message, Role>)
-        -> cortical::Result<Self>
+        -> organelle::Result<Self>
     {
         match self {
-            ObserverLobe::Init(state) => state.update(msg),
+            ObserverCell::Init(state) => state.update(msg),
 
-            ObserverLobe::Started(state) => state.update(msg),
+            ObserverCell::Started(state) => state.update(msg),
 
-            ObserverLobe::FetchGameData(state) => state.update(msg),
-            ObserverLobe::FetchTerrainData(state) => state.update(msg),
+            ObserverCell::FetchGameData(state) => state.update(msg),
+            ObserverCell::FetchTerrainData(state) => state.update(msg),
 
-            ObserverLobe::GameDataReady(state) => state.update(msg),
+            ObserverCell::GameDataReady(state) => state.update(msg),
 
-            ObserverLobe::Observe(state) => state.update(msg),
+            ObserverCell::Observe(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -102,7 +102,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => Started::start(self.soma),
@@ -114,7 +114,7 @@ impl Init {
             }
         }
         else {
-            Ok(ObserverLobe::Init(self))
+            Ok(ObserverCell::Init(self))
         }
     }
 }
@@ -124,23 +124,23 @@ pub struct Started {
 }
 
 impl Started {
-    fn start(soma: Soma) -> Result<ObserverLobe> {
-        Ok(ObserverLobe::Started(Started { soma: soma }))
+    fn start(soma: Soma) -> Result<ObserverCell> {
+        Ok(ObserverCell::Started(Started { soma: soma }))
     }
 
-    fn restart(soma: Soma) -> Result<ObserverLobe> {
+    fn restart(soma: Soma) -> Result<ObserverCell> {
         soma.send_req_input(Role::Observer, Message::GameEnded)?;
 
-        Ok(ObserverLobe::Started(Started { soma: soma }))
+        Ok(ObserverCell::Started(Started { soma: soma }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::Ready)
                 | Protocol::Message(_, Message::ClientClosed)
                 | Protocol::Message(_, Message::ClientError(_)) => {
-                    Ok(ObserverLobe::Started(self))
+                    Ok(ObserverCell::Started(self))
                 },
                 Protocol::Message(src, Message::FetchGameData) => {
                     self.on_fetch_game_data(src)
@@ -153,11 +153,11 @@ impl Started {
             }
         }
         else {
-            Ok(ObserverLobe::Started(self))
+            Ok(ObserverCell::Started(self))
         }
     }
 
-    fn on_fetch_game_data(self, src: Handle) -> Result<ObserverLobe> {
+    fn on_fetch_game_data(self, src: Handle) -> Result<ObserverCell> {
         assert_eq!(src, self.soma.req_input(Role::Observer)?);
 
         FetchGameData::fetch(self.soma)
@@ -170,14 +170,14 @@ pub struct FetchGameData {
 }
 
 impl FetchGameData {
-    fn fetch(soma: Soma) -> Result<ObserverLobe> {
+    fn fetch(soma: Soma) -> Result<ObserverCell> {
         let mut req = sc2api::Request::new();
         req.mut_data().set_unit_type_id(true);
 
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            ObserverLobe::FetchGameData(
+            ObserverCell::FetchGameData(
                 FetchGameData {
                     soma: soma,
                     transactor: transactor
@@ -186,11 +186,11 @@ impl FetchGameData {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_game_data(src, rsp)
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.on_game_data(src, result)
                 }
 
                 Protocol::Message(_, msg) => {
@@ -200,42 +200,42 @@ impl FetchGameData {
             }
         }
         else {
-            Ok(ObserverLobe::FetchGameData(self))
+            Ok(ObserverCell::FetchGameData(self))
         }
     }
 
-    fn on_game_data(self, src: Handle, rsp: ClientResponse)
-        -> Result<ObserverLobe>
+    fn on_game_data(self, src: Handle, result: ClientResult)
+        -> Result<ObserverCell>
     {
-        let mut rsp = self.transactor.expect(src, rsp)?;
+        let mut rsp = self.transactor.expect(src, result)?;
 
         let mut unit_type_data = HashMap::new();
         let mut ability_data = HashMap::new();
         let mut upgrade_data = HashMap::new();
         let mut buff_data = HashMap::new();
 
-        for data in rsp.response.mut_data().take_units().into_iter() {
+        for data in rsp.mut_data().take_units().into_iter() {
             let u = UnitTypeData::from_proto(data)?;
 
             let unit_type = u.unit_type;
             unit_type_data.insert(unit_type, u);
         }
 
-        for data in rsp.response.mut_data().take_abilities().into_iter() {
+        for data in rsp.mut_data().take_abilities().into_iter() {
             let a = AbilityData::from_proto(data)?;
 
             let ability = a.ability;
             ability_data.insert(ability, a);
         }
 
-        for data in rsp.response.mut_data().take_upgrades().into_iter() {
+        for data in rsp.mut_data().take_upgrades().into_iter() {
             let u = UpgradeData::from_proto(data)?;
 
             let upgrade = u.upgrade;
             upgrade_data.insert(upgrade, u);
         }
 
-        for data in rsp.response.mut_data().take_buffs().into_iter() {
+        for data in rsp.mut_data().take_buffs().into_iter() {
             let b = BuffData::from_proto(data)?;
 
             let buff = b.buff;
@@ -266,7 +266,7 @@ impl FetchTerrainData {
         upgrade_data: HashMap<Upgrade, UpgradeData>,
         buff_data: HashMap<Buff, BuffData>
     )
-        -> Result<ObserverLobe>
+        -> Result<ObserverCell>
     {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
@@ -274,7 +274,7 @@ impl FetchTerrainData {
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            ObserverLobe::FetchTerrainData(
+            ObserverCell::FetchTerrainData(
                 FetchTerrainData {
                     soma: soma,
                     transactor: transactor,
@@ -288,10 +288,10 @@ impl FetchTerrainData {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
+                Protocol::Message(src, Message::ClientResult(rsp)) => {
                     self.on_terrain_info(src, rsp)
                 },
 
@@ -303,14 +303,14 @@ impl FetchTerrainData {
             }
         }
         else {
-            Ok(ObserverLobe::FetchTerrainData(self))
+            Ok(ObserverCell::FetchTerrainData(self))
         }
     }
 
-    fn on_terrain_info(self, src: Handle, rsp: ClientResponse)
-        -> Result<ObserverLobe>
+    fn on_terrain_info(self, src: Handle, result: ClientResult)
+        -> Result<ObserverCell>
     {
-        let mut rsp = self.transactor.expect(src, rsp)?;
+        let mut rsp = self.transactor.expect(src, result)?;
 
         let game_data = Rc::from(
             GameData {
@@ -319,7 +319,7 @@ impl FetchTerrainData {
                 upgrade_data: self.upgrade_data,
                 buff_data: self.buff_data,
 
-                terrain_info: rsp.response.take_game_info().into_sc2()?
+                terrain_info: rsp.take_game_info().into_sc2()?
             }
         );
 
@@ -348,11 +348,11 @@ pub struct GameDataReady {
 }
 
 impl GameDataReady {
-    fn start(soma: Soma, game_data: Rc<GameData>) -> Result<ObserverLobe> {
+    fn start(soma: Soma, game_data: Rc<GameData>) -> Result<ObserverCell> {
         soma.send_req_input(Role::Observer, Message::GameDataReady)?;
 
         Ok(
-            ObserverLobe::GameDataReady(
+            ObserverCell::GameDataReady(
                 GameDataReady {
                     soma: soma,
 
@@ -374,9 +374,9 @@ impl GameDataReady {
         )
     }
 
-    fn ready(soma: Soma, data: ObserverData) -> Result<ObserverLobe> {
+    fn ready(soma: Soma, data: ObserverData) -> Result<ObserverCell> {
         Ok(
-            ObserverLobe::GameDataReady(
+            ObserverCell::GameDataReady(
                 GameDataReady {
                     soma: soma,
                     data: data,
@@ -385,7 +385,7 @@ impl GameDataReady {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::Observe) => {
@@ -400,7 +400,7 @@ impl GameDataReady {
             }
         }
         else {
-            Ok(ObserverLobe::GameDataReady(self))
+            Ok(ObserverCell::GameDataReady(self))
         }
     }
 }
@@ -413,14 +413,14 @@ pub struct Observe {
 }
 
 impl Observe {
-    fn observe(soma: Soma, data: ObserverData) -> Result<ObserverLobe> {
+    fn observe(soma: Soma, data: ObserverData) -> Result<ObserverCell> {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
         let transactor = Transactor::send(&soma, ClientRequest::new(req))?;
 
         Ok(
-            ObserverLobe::Observe(
+            ObserverCell::Observe(
                 Observe {
                     soma: soma,
                     transactor: transactor,
@@ -431,11 +431,11 @@ impl Observe {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ObserverCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
-                Protocol::Message(src, Message::ClientResponse(rsp)) => {
-                    self.on_observe(src, rsp)
+                Protocol::Message(src, Message::ClientResult(result)) => {
+                    self.on_observe(src, result)
                 },
 
                 Protocol::Message(_, msg) => {
@@ -445,14 +445,14 @@ impl Observe {
             }
         }
         else {
-            Ok(ObserverLobe::Observe(self))
+            Ok(ObserverCell::Observe(self))
         }
     }
 
-    fn on_observe(self, src: Handle, rsp: ClientResponse)
-        -> Result<ObserverLobe>
+    fn on_observe(self, src: Handle, result: ClientResult)
+        -> Result<ObserverCell>
     {
-        let mut rsp = self.transactor.expect(src, rsp)?.response;
+        let mut rsp = self.transactor.expect(src, result)?;
 
         if rsp.get_status() != sc2api::Status::in_game {
             return Started::restart(self.soma)

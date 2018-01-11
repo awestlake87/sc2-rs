@@ -3,8 +3,8 @@ use std::collections::{ HashMap };
 use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
-use cortical;
-use cortical::{ Lobe, Handle, ResultExt, Protocol, Constraint };
+use organelle;
+use organelle::{ Cell, Handle, ResultExt, Protocol, Constraint };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
@@ -45,8 +45,8 @@ impl Default for LauncherSettings {
     }
 }
 
-/// lobe in charge of launching game instances and assigning ports
-pub struct LauncherLobe {
+/// cell in charge of launching game instances and assigning ports
+pub struct LauncherCell {
     soma:               Soma,
 
     exe:                PathBuf,
@@ -58,7 +58,7 @@ pub struct LauncherLobe {
     ports:              Vec<GamePorts>,
 }
 
-impl LauncherLobe {
+impl LauncherCell {
     /// create a launcher from settings
     pub fn from(settings: LauncherSettings) -> Result<Self> {
         let dir = {
@@ -190,12 +190,12 @@ impl LauncherLobe {
     }
 }
 
-impl Lobe for LauncherLobe {
+impl Cell for LauncherCell {
     type Message = Message;
     type Role = Role;
 
     fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
-        -> cortical::Result<Self>
+        -> organelle::Result<Self>
     {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -216,7 +216,7 @@ impl Lobe for LauncherLobe {
                 },
                 _ => bail!("unexpected protocol message")
             }.chain_err(
-                || cortical::ErrorKind::LobeError
+                || organelle::ErrorKind::CellError
             )
         }
         else {

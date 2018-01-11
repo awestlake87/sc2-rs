@@ -4,7 +4,7 @@ extern crate error_chain;
 #[macro_use]
 extern crate serde_derive;
 
-extern crate cortical;
+extern crate organelle;
 extern crate glutin;
 extern crate nalgebra as na;
 extern crate num;
@@ -12,8 +12,8 @@ extern crate rand;
 
 extern crate sc2;
 
-mod marine_micro_lobe;
-mod terran_lobe;
+mod marine_micro_cell;
+mod terran_cell;
 
 use std::path::PathBuf;
 
@@ -29,8 +29,8 @@ use sc2::{
     Map
 };
 
-pub use marine_micro_lobe::{ MarineMicroLobe };
-pub use terran_lobe::{ TerranLobe };
+pub use marine_micro_cell::{ MarineMicroCell };
+pub use terran_cell::{ TerranCell };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.

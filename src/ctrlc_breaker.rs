@@ -1,24 +1,24 @@
 
-use cortical;
-use cortical::{ Lobe, Protocol, Effector, };
+use organelle;
+use organelle::{ Cell, Protocol, Effector, };
 use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
 use super::{ Result, Message, Role };
 
-/// lobe that stops the cortex upon Ctrl-C
-pub struct CtrlcBreakerLobe {
+/// cell that stops the organelle upon Ctrl-C
+pub struct CtrlcBreakerCell {
 }
 
-impl CtrlcBreakerLobe {
-    /// create a new Ctrl-C breaker lobe
+impl CtrlcBreakerCell {
+    /// create a new Ctrl-C breaker cell
     pub fn new() -> Result<Self> {
         Ok(Self { })
     }
 
     fn init(self, effector: Effector<Message, Role>)
-        -> cortical::Result<Self>
+        -> organelle::Result<Self>
     {
         let (tx, rx) = mpsc::channel(1);
 
@@ -47,12 +47,12 @@ impl CtrlcBreakerLobe {
     }
 }
 
-impl Lobe for CtrlcBreakerLobe {
+impl Cell for CtrlcBreakerCell {
     type Message = Message;
     type Role = Role;
 
-    fn update(mut self, msg: Protocol<Message, Role>)
-        -> cortical::Result<Self>
+    fn update(self, msg: Protocol<Message, Role>)
+        -> organelle::Result<Self>
     {
         match msg {
             Protocol::Init(effector) => self.init(effector),

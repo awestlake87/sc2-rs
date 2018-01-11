@@ -1,18 +1,22 @@
 
-use cortical;
-use cortical::{ ResultExt, Lobe, Protocol, Constraint };
+use organelle;
+use organelle::{ ResultExt, Cell, Protocol, Constraint };
 
 use super::{ Result, Soma, Message, Role, Race, Difficulty, PlayerSetup };
 
-pub enum ComputerLobe {
+/// cell that acts as the built-in SC2 AI
+pub enum ComputerCell {
+    /// initialize the soma
     Init(Init),
+    /// respond to the setup queries
     Setup(Setup),
 }
 
-impl ComputerLobe {
+impl ComputerCell {
+    /// create a new computer cell
     pub fn new(race: Race, difficulty: Difficulty) -> Result<Self> {
         Ok(
-            ComputerLobe::Init(
+            ComputerCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -32,16 +36,16 @@ impl ComputerLobe {
     }
 }
 
-impl Lobe for ComputerLobe {
+impl Cell for ComputerCell {
     type Message = Message;
     type Role = Role;
 
-    fn update(self, msg: Protocol<Message, Role>) -> cortical::Result<Self> {
+    fn update(self, msg: Protocol<Message, Role>) -> organelle::Result<Self> {
         match self {
-            ComputerLobe::Init(state) => state.update(msg),
-            ComputerLobe::Setup(state) => state.update(msg),
+            ComputerCell::Init(state) => state.update(msg),
+            ComputerCell::Setup(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -53,7 +57,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => Setup::setup(self.soma, self.setup),
@@ -66,7 +70,7 @@ impl Init {
             }
         }
         else {
-            Ok(ComputerLobe::Init(self))
+            Ok(ComputerCell::Init(self))
         }
     }
 }
@@ -78,11 +82,11 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(soma: Soma, setup: PlayerSetup) -> Result<ComputerLobe> {
-        Ok(ComputerLobe::Setup(Setup { soma: soma, setup: setup }))
+    fn setup(soma: Soma, setup: PlayerSetup) -> Result<ComputerCell> {
+        Ok(ComputerCell::Setup(Setup { soma: soma, setup: setup }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
@@ -90,7 +94,7 @@ impl Setup {
                         Role::Controller, Message::PlayerSetup(self.setup)
                     )?;
 
-                    Ok(ComputerLobe::Setup(self))
+                    Ok(ComputerCell::Setup(self))
                 },
 
                 Protocol::Message(_, msg) => {
@@ -100,7 +104,7 @@ impl Setup {
             }
         }
         else {
-            Ok(ComputerLobe::Setup(self))
+            Ok(ComputerCell::Setup(self))
         }
     }
 }

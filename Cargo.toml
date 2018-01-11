@@ -21,8 +21,8 @@ tungstenite = "*"
 url = "*"
 uuid = { version = "*", features = ["serde", "v4"] }
 
-[dependencies.cortical]
-git = "https://github.com/awestlake87/cortical"
+[dependencies.organelle]
+git = "https://github.com/awestlake87/organelle"
 branch = "reactive"
 
 [workspace]

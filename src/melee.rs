@@ -1,8 +1,8 @@
 
 use std::collections::HashMap;
 
-use cortical;
-use cortical::{ Lobe, Handle, Protocol, ResultExt, Constraint };
+use organelle;
+use organelle::{ Cell, Handle, Protocol, ResultExt, Constraint };
 use url::Url;
 use uuid::Uuid;
 
@@ -11,7 +11,7 @@ use super::{
 
     Message,
     Role,
-    Cortex,
+    Organelle,
     Soma,
 
     GameSettings,
@@ -20,7 +20,7 @@ use super::{
     PlayerSetup,
 };
 
-use launcher::{ LauncherLobe, LauncherSettings };
+use launcher::{ LauncherCell, LauncherSettings };
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {
@@ -30,18 +30,18 @@ pub enum MeleeSuite {
     EndlessRepeat(GameSettings),
 }
 
-/// settings for the melee lobe
-pub struct MeleeSettings<L1: Lobe + 'static, L2: Lobe + 'static> {
-    /// the settings for the launcher lobe
+/// settings for the melee cell
+pub struct MeleeSettings<L1: Cell + 'static, L2: Cell + 'static> {
+    /// the settings for the launcher cell
     pub launcher:   LauncherSettings,
-    /// the player cortices
+    /// the player organelles
     pub players:    (L1, L2),
     /// the suite of games to choose from
     pub suite:      MeleeSuite,
 }
 
-/// lobe designed to pit two bots against each other in Sc2 games
-pub enum MeleeLobe {
+/// cell designed to pit two bots against each other in Sc2 games
+pub enum MeleeCell {
     /// wait for soma to gather effector, inputs, and outputs
     Init(Init),
 
@@ -55,15 +55,15 @@ pub enum MeleeLobe {
     /// coordinate one instance for player vs the built-in Sc2 AI
     PlayerVsComputer(PlayerVsComputer),
 
-    /// melee suite is exhausted and cortex is awaiting shutdown
+    /// melee suite is exhausted and organelle is awaiting shutdown
     Completed(Completed),
 }
 
-impl MeleeLobe {
-    /// melee lobe only works as a controller in a melee cortex
+impl MeleeCell {
+    /// melee cell only works as a controller in a melee organelle
     fn new(suite: MeleeSuite) -> Result<Self> {
         Ok(
-            MeleeLobe::Init(
+            MeleeCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![ ],
@@ -81,11 +81,11 @@ impl MeleeLobe {
         )
     }
 
-    /// create the melee cortex
-    pub fn cortex<L1, L2>(settings: MeleeSettings<L1, L2>) -> Result<Cortex>
+    /// create the melee organelle
+    pub fn organelle<L1, L2>(settings: MeleeSettings<L1, L2>) -> Result<Organelle>
         where
-            L1: Lobe,
-            L2: Lobe,
+            L1: Cell,
+            L2: Cell,
 
             Message: From<L1::Message> + From<L2::Message>,
             Role: From<L1::Role> + From<L2::Role>,
@@ -96,42 +96,42 @@ impl MeleeLobe {
             L1::Role: From<Role>,
             L2::Role: From<Role>,
     {
-        let mut cortex = Cortex::new(MeleeLobe::new(settings.suite)?);
+        let mut organelle = Organelle::new(MeleeCell::new(settings.suite)?);
 
-        let launcher = cortex.add_lobe(LauncherLobe::from(settings.launcher)?);
+        let launcher = organelle.add_cell(LauncherCell::from(settings.launcher)?);
 
-        let melee = cortex.get_main_handle();
+        let melee = organelle.get_main_handle();
 
-        let player1 = cortex.add_lobe(settings.players.0);
-        let player2 = cortex.add_lobe(settings.players.1);
+        let player1 = organelle.add_cell(settings.players.0);
+        let player2 = organelle.add_cell(settings.players.1);
 
-        cortex.connect(melee, launcher, Role::Launcher);
+        organelle.connect(melee, launcher, Role::Launcher);
 
-        cortex.connect(melee, player1, Role::Controller);
-        cortex.connect(melee, player2, Role::Controller);
-        cortex.connect(melee, player1, Role::InstanceProvider);
-        cortex.connect(melee, player2, Role::InstanceProvider);
+        organelle.connect(melee, player1, Role::Controller);
+        organelle.connect(melee, player2, Role::Controller);
+        organelle.connect(melee, player1, Role::InstanceProvider);
+        organelle.connect(melee, player2, Role::InstanceProvider);
 
-        Ok(cortex)
+        Ok(organelle)
     }
 }
 
-impl Lobe for MeleeLobe {
+impl Cell for MeleeCell {
     type Message = Message;
     type Role = Role;
 
     fn update(self, msg: Protocol<Self::Message, Self::Role>)
-        -> cortical::Result<Self>
+        -> organelle::Result<Self>
     {
         match self {
-            MeleeLobe::Init(state) => state.update(msg),
-            MeleeLobe::Setup(state) => state.update(msg),
-            MeleeLobe::Launch(state) => state.update(msg),
-            MeleeLobe::PlayerVsPlayer(state) => state.update(msg),
-            MeleeLobe::PlayerVsComputer(state) => state.update(msg),
-            MeleeLobe::Completed(state) => state.update(msg),
+            MeleeCell::Init(state) => state.update(msg),
+            MeleeCell::Setup(state) => state.update(msg),
+            MeleeCell::Launch(state) => state.update(msg),
+            MeleeCell::PlayerVsPlayer(state) => state.update(msg),
+            MeleeCell::PlayerVsComputer(state) => state.update(msg),
+            MeleeCell::Completed(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -142,7 +142,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => Setup::setup(self.soma, self.suite),
@@ -155,7 +155,7 @@ impl Init {
             }
         }
         else {
-            Ok(MeleeLobe::Init(self))
+            Ok(MeleeCell::Init(self))
         }
     }
 }
@@ -172,7 +172,7 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(soma: Soma, suite: MeleeSuite) -> Result<MeleeLobe> {
+    fn setup(soma: Soma, suite: MeleeSuite) -> Result<MeleeCell> {
         let clients = soma.var_output(Role::InstanceProvider)?.clone();
         let agents = soma.var_output(Role::Controller)?.clone();
 
@@ -201,7 +201,7 @@ impl Setup {
         );
 
         Ok(
-            MeleeLobe::Setup(
+            MeleeCell::Setup(
                 Setup {
                     soma: soma,
                     suite: suite,
@@ -216,7 +216,7 @@ impl Setup {
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::PlayerSetup(setup)) => {
@@ -230,12 +230,12 @@ impl Setup {
             }
         }
         else {
-            Ok(MeleeLobe::Setup(self))
+            Ok(MeleeCell::Setup(self))
         }
     }
 
     fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         if src == self.agents.0 {
             self.players.0 = Some(setup);
@@ -259,7 +259,7 @@ impl Setup {
                 )
             },
 
-            _ => Ok(MeleeLobe::Setup(self))
+            _ => Ok(MeleeCell::Setup(self))
         }
     }
 }
@@ -290,7 +290,7 @@ impl Launch {
         players: (PlayerSetup, PlayerSetup),
         game: GameSettings,
     )
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         let is_pvp = {
             if players.0.is_player() && players.1.is_computer() {
@@ -312,7 +312,7 @@ impl Launch {
         soma.effector()?.send(launcher, Message::GetPortsPool);
 
         Ok(
-            MeleeLobe::Launch(
+            MeleeCell::Launch(
                 Launch {
                     soma: soma,
                     suite: suite,
@@ -332,7 +332,7 @@ impl Launch {
             )
         )
     }
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::InstancePool(instances)) => {
@@ -350,14 +350,14 @@ impl Launch {
             }
         }
         else {
-            Ok(MeleeLobe::Launch(self))
+            Ok(MeleeCell::Launch(self))
         }
     }
 
     fn on_instance_pool(
         mut self, src: Handle, instances: HashMap<Uuid, (Url, PortSet)>
     )
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         assert_eq!(src, self.launcher);
 
@@ -368,7 +368,7 @@ impl Launch {
     }
 
     fn on_ports_pool(mut self, src: Handle, ports: Vec<GamePorts>)
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         assert_eq!(src, self.launcher);
 
@@ -403,7 +403,7 @@ impl Launch {
         Ok(())
     }
 
-    fn try_provide_instances(mut self) -> Result<MeleeLobe> {
+    fn try_provide_instances(self) -> Result<MeleeCell> {
         if self.is_pvp {
             if self.instances.len() >= 2 && self.ports.len() >= 1 {
                 let (id1, &(ref url1, ref ports1)) = self.instances.iter()
@@ -435,11 +435,11 @@ impl Launch {
                 )
             }
             else {
-                Ok(MeleeLobe::Launch(self))
+                Ok(MeleeCell::Launch(self))
             }
         }
         else if self.instances.len() >= 1 {
-            let (id, &(ref url, ref ports)) = self.instances.iter()
+            let (id, &(ref url, _)) = self.instances.iter()
                 .nth(0).unwrap()
             ;
 
@@ -473,7 +473,7 @@ impl Launch {
             )
         }
         else {
-            Ok(MeleeLobe::Launch(self))
+            Ok(MeleeCell::Launch(self))
         }
     }
 }
@@ -501,10 +501,10 @@ impl PlayerVsPlayer {
         game: GameSettings,
         ports: GamePorts
     )
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         Ok(
-            MeleeLobe::PlayerVsPlayer(
+            MeleeCell::PlayerVsPlayer(
                 PlayerVsPlayer {
                     soma: soma,
                     suite: suite,
@@ -521,7 +521,7 @@ impl PlayerVsPlayer {
             )
         )
     }
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::Ready) => {
@@ -542,11 +542,11 @@ impl PlayerVsPlayer {
             }
         }
         else {
-            Ok(MeleeLobe::PlayerVsPlayer(self))
+            Ok(MeleeCell::PlayerVsPlayer(self))
         }
     }
 
-    fn on_agent_ready(mut self, src: Handle) -> Result<MeleeLobe> {
+    fn on_agent_ready(mut self, src: Handle) -> Result<MeleeCell> {
         if src == self.agents.0 {
             self.ready.0 = true;
         }
@@ -566,10 +566,10 @@ impl PlayerVsPlayer {
             );
         }
 
-        Ok(MeleeLobe::PlayerVsPlayer(self))
+        Ok(MeleeCell::PlayerVsPlayer(self))
     }
 
-    fn on_game_created(self, src: Handle) -> Result<MeleeLobe> {
+    fn on_game_created(self, src: Handle) -> Result<MeleeCell> {
         assert_eq!(src, self.agents.0);
 
         self.soma.effector()?.send(
@@ -581,10 +581,10 @@ impl PlayerVsPlayer {
             Message::GameReady(self.players.1, Some(self.ports.clone()))
         );
 
-        Ok(MeleeLobe::PlayerVsPlayer(self))
+        Ok(MeleeCell::PlayerVsPlayer(self))
     }
 
-    fn on_game_ended(mut self, src: Handle) -> Result<MeleeLobe> {
+    fn on_game_ended(mut self, src: Handle) -> Result<MeleeCell> {
         if src == self.agents.0 {
             self.ended.0 = true;
         }
@@ -604,12 +604,12 @@ impl PlayerVsPlayer {
             }
         }
         else {
-            Ok(MeleeLobe::PlayerVsPlayer(self))
+            Ok(MeleeCell::PlayerVsPlayer(self))
         }
     }
 }
 
-/// MeleeLobe state that pits players against the built-in AI
+/// MeleeCell state that pits players against the built-in AI
 pub struct PlayerVsComputer {
     soma:               Soma,
     suite:              Option<MeleeSuite>,
@@ -619,7 +619,6 @@ pub struct PlayerVsComputer {
     computer_setup:     PlayerSetup,
 
     player:             Handle,
-    computer:           Handle,
 }
 
 impl PlayerVsComputer {
@@ -630,10 +629,10 @@ impl PlayerVsComputer {
         computer: (Handle, PlayerSetup),
         game: GameSettings,
     )
-        -> Result<MeleeLobe>
+        -> Result<MeleeCell>
     {
         Ok(
-            MeleeLobe::PlayerVsComputer(
+            MeleeCell::PlayerVsComputer(
                 PlayerVsComputer {
                     soma: soma,
                     suite: suite,
@@ -643,12 +642,11 @@ impl PlayerVsComputer {
                     computer_setup: computer.1,
 
                     player: player.0,
-                    computer: computer.0,
                 }
             )
         )
     }
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(src, Message::Ready) => {
@@ -669,11 +667,11 @@ impl PlayerVsComputer {
             }
         }
         else {
-            Ok(MeleeLobe::PlayerVsComputer(self))
+            Ok(MeleeCell::PlayerVsComputer(self))
         }
     }
 
-    fn on_agent_ready(self, src: Handle) -> Result<MeleeLobe> {
+    fn on_agent_ready(self, src: Handle) -> Result<MeleeCell> {
         if src != self.player {
             bail!("expected source of Ready to be the agent")
         }
@@ -686,10 +684,10 @@ impl PlayerVsComputer {
             )
         );
 
-        Ok(MeleeLobe::PlayerVsComputer(self))
+        Ok(MeleeCell::PlayerVsComputer(self))
     }
 
-    fn on_game_created(self, src: Handle) -> Result<MeleeLobe> {
+    fn on_game_created(self, src: Handle) -> Result<MeleeCell> {
         if src != self.player {
             bail!("expected source of GameCreated to be the agent")
         }
@@ -699,10 +697,10 @@ impl PlayerVsComputer {
             Message::GameReady(self.player_setup, None)
         );
 
-        Ok(MeleeLobe::PlayerVsComputer(self))
+        Ok(MeleeCell::PlayerVsComputer(self))
     }
 
-    fn on_game_ended(self, src: Handle) -> Result<MeleeLobe> {
+    fn on_game_ended(self, src: Handle) -> Result<MeleeCell> {
         if src != self.player {
             bail!("expected source of GameEnded to be an agent")
         }
@@ -721,15 +719,15 @@ pub struct Completed {
 }
 
 impl Completed {
-    fn complete(soma: Soma) -> Result<MeleeLobe> {
+    fn complete(soma: Soma) -> Result<MeleeCell> {
         soma.effector()?.stop();
 
         Ok(
-            MeleeLobe::Completed(Completed { soma: soma })
+            MeleeCell::Completed(Completed { soma: soma })
         )
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<MeleeCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, msg) => {
@@ -739,7 +737,7 @@ impl Completed {
             }
         }
         else {
-            Ok(MeleeLobe::Completed(self))
+            Ok(MeleeCell::Completed(self))
         }
     }
 }

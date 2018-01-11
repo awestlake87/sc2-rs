@@ -1,8 +1,8 @@
 
 use std::rc::Rc;
 
-use cortical;
-use cortical::{ Lobe, Protocol, ResultExt, Constraint };
+use organelle;
+use organelle::{ Cell, Protocol, ResultExt, Constraint };
 use rand::random;
 use sc2::{
     Result,
@@ -24,17 +24,17 @@ use sc2::{
 
 const TARGET_SCV_COUNT: usize = 15;
 
-pub enum TerranLobe {
+pub enum TerranCell {
     Init(Init),
     Setup(Setup),
 
     InGame(InGame),
 }
 
-impl TerranLobe {
-    pub fn cortex(interval: u32) -> Result<Self> {
+impl TerranCell {
+    pub fn organelle(interval: u32) -> Result<Self> {
         Ok(
-            TerranLobe::Init(
+            TerranCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -49,20 +49,20 @@ impl TerranLobe {
     }
 }
 
-impl Lobe for TerranLobe {
+impl Cell for TerranCell {
     type Message = Message;
     type Role = Role;
 
     fn update(self, msg: Protocol<Message, Role>)
-        -> cortical::Result<TerranLobe>
+        -> organelle::Result<TerranCell>
     {
         match self {
-            TerranLobe::Init(state) => state.update(msg),
-            TerranLobe::Setup(state) => state.update(msg),
+            TerranCell::Init(state) => state.update(msg),
+            TerranCell::Setup(state) => state.update(msg),
 
-            TerranLobe::InGame(state) => state.update(msg),
+            TerranCell::InGame(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -73,7 +73,7 @@ pub struct Init {
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Start => Setup::setup(self.soma, self.interval),
@@ -85,7 +85,7 @@ impl Init {
             }
         }
         else {
-            Ok(TerranLobe::Init(self))
+            Ok(TerranCell::Init(self))
         }
     }
 }
@@ -96,11 +96,11 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(soma: Soma, interval: u32) -> Result<TerranLobe> {
-        Ok(TerranLobe::Setup(Setup { soma: soma, interval: interval }))
+    fn setup(soma: Soma, interval: u32) -> Result<TerranCell> {
+        Ok(TerranCell::Setup(Setup { soma: soma, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>)-> Result<TerranLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>)-> Result<TerranCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
@@ -113,14 +113,14 @@ impl Setup {
                         )
                     )?;
 
-                    Ok(TerranLobe::Setup(self))
+                    Ok(TerranCell::Setup(self))
                 },
                 Protocol::Message(_, Message::RequestUpdateInterval) => {
                     self.soma.send_req_input(
                         Role::Agent, Message::UpdateInterval(self.interval)
                     )?;
 
-                    Ok(TerranLobe::Setup(self))
+                    Ok(TerranCell::Setup(self))
                 },
                 Protocol::Message(_, Message::GameStarted) => {
                     InGame::start(self.soma, self.interval)
@@ -133,7 +133,7 @@ impl Setup {
             }
         }
         else {
-            Ok(TerranLobe::Setup(self))
+            Ok(TerranCell::Setup(self))
         }
     }
 }
@@ -144,11 +144,11 @@ pub struct InGame {
 }
 
 impl InGame {
-    fn start(soma: Soma, interval: u32) -> Result<TerranLobe> {
-        Ok(TerranLobe::InGame(InGame { soma: soma, interval: interval }))
+    fn start(soma: Soma, interval: u32) -> Result<TerranCell> {
+        Ok(TerranCell::InGame(InGame { soma: soma, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::Observation(frame)) => {
@@ -166,11 +166,11 @@ impl InGame {
             }
         }
         else {
-            Ok(TerranLobe::InGame(self))
+            Ok(TerranCell::InGame(self))
         }
     }
 
-    fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranLobe> {
+    fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranCell> {
         let commands = self.create_commands(&*frame)?;
 
         let agent = self.soma.req_input(Role::Agent)?;
@@ -184,7 +184,7 @@ impl InGame {
 
         self.soma.effector()?.send_in_order(agent, messages);
 
-        Ok(TerranLobe::InGame(self))
+        Ok(TerranCell::InGame(self))
     }
 
     fn create_commands(&self, frame: &FrameData) -> Result<Vec<Command>> {

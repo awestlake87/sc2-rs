@@ -13,6 +13,6 @@ serde = "1.0"
 serde_derive = "1.0"
 sc2 = { path = "../../" }
 
-[dependencies.cortical]
-git = "https://github.com/awestlake87/cortical"
+[dependencies.organelle]
+git = "https://github.com/awestlake87/organelle"
 branch = "reactive"

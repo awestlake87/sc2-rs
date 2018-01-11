@@ -2,7 +2,7 @@
 #[macro_use]
 extern crate error_chain;
 
-extern crate cortical;
+extern crate organelle;
 extern crate docopt;
 extern crate glob;
 extern crate glutin;
@@ -10,10 +10,10 @@ extern crate glutin;
 extern crate sc2;
 extern crate examples_common;
 
-use cortical::{ Cortex };
+use organelle::{ Organelle };
 use docopt::Docopt;
 use examples_common::{
-    USAGE, Args, get_launcher_settings, get_game_settings, MarineMicroLobe
+    USAGE, Args, get_launcher_settings, get_game_settings, MarineMicroCell
 };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -30,17 +30,17 @@ quick_main!(
             return Ok(())
         }
 
-        let mut cortex = Cortex::new(
-            sc2::MeleeLobe::cortex(
+        let mut organelle = Organelle::new(
+            sc2::MeleeCell::organelle(
                 sc2::MeleeSettings {
                     launcher: get_launcher_settings(&args)?,
                     players: (
-                        sc2::AgentLobe::cortex(
-                            MarineMicroLobe::cortex(
+                        sc2::AgentCell::organelle(
+                            MarineMicroCell::organelle(
                                 args.flag_step_size.unwrap_or(1)
                             )?
                         )?,
-                        sc2::ComputerLobe::new(
+                        sc2::ComputerCell::new(
                             sc2::Race::Zerg, sc2::Difficulty::VeryEasy
                         )?
                     ),
@@ -51,9 +51,9 @@ quick_main!(
             )?
         );
 
-        cortex.add_lobe(sc2::CtrlcBreakerLobe::new()?);
+        organelle.add_cell(sc2::CtrlcBreakerCell::new()?);
 
-        cortical::run(cortex)?;
+        organelle::run(organelle)?;
 
         Ok(())
     }

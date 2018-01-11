@@ -10,7 +10,7 @@
 extern crate error_chain;
 
 extern crate bytes;
-extern crate cortical;
+extern crate organelle;
 extern crate ctrlc;
 extern crate futures;
 extern crate glob;
@@ -45,10 +45,10 @@ use futures::sync::mpsc::{ Sender };
 use url::Url;
 use uuid::Uuid;
 
-pub use self::agent::{ AgentLobe };
-pub use self::client::{ ClientRequest, ClientResponse, TransactionId };
-pub use self::computer::{ ComputerLobe };
-pub use self::ctrlc_breaker::{ CtrlcBreakerLobe };
+pub use self::agent::{ AgentCell };
+pub use self::client::{ ClientRequest, ClientResult };
+pub use self::computer::{ ComputerCell };
+pub use self::ctrlc_breaker::{ CtrlcBreakerCell };
 pub use self::data::{
     Color,
     Rect,
@@ -98,12 +98,12 @@ pub use self::frame::{
     GameState,
     GameData,
 };
-pub use self::launcher::{ LauncherLobe, LauncherSettings };
-pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeLobe };
+pub use self::launcher::{ LauncherCell, LauncherSettings };
+pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeCell };
 
 error_chain! {
     links {
-        Cortical(cortical::Error, cortical::ErrorKind) #[doc="cortical glue"];
+        Organelle(organelle::Error, organelle::ErrorKind) #[doc="organelle glue"];
     }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
@@ -196,7 +196,7 @@ pub enum Message {
     /// the pool of game ports to choose from (num_instances / 2)
     PortsPool(Vec<GamePorts>),
 
-    /// allow a lobe to take complete control of an instance
+    /// allow a cell to take complete control of an instance
     ProvideInstance(Uuid, Url),
 
     /// attempt to connect to instance
@@ -207,10 +207,10 @@ pub enum Message {
     ClientReceive(tungstenite::Message),
     /// send some request to the game instance
     ClientRequest(ClientRequest),
-    /// game instance responded within the expected timeframe
-    ClientResponse(ClientResponse),
-    /// game instance timed out on request
-    ClientTimeout(TransactionId),
+    /// result of transaction with game instance
+    ClientResult(ClientResult),
+    /// internal-use message used to indicate when a transaction has timed out
+    ClientTimeout(Uuid),
     /// disconnect from the instance
     ClientDisconnect,
     /// client has closed
@@ -253,7 +253,7 @@ pub enum Message {
     Command(Command),
     /// issue a debug command to the game instance
     DebugCommand(DebugCommand),
-    /// notify the stepper that the lobe is done updating
+    /// notify the stepper that the cell is done updating
     UpdateComplete,
 
     /// game ended
@@ -261,7 +261,7 @@ pub enum Message {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-/// defines the roles that govern how connections between lobes are made
+/// defines the roles that govern how connections between cells are made
 pub enum Role {
     /// launches new game instances or kills them
     Launcher,
@@ -280,7 +280,7 @@ pub enum Role {
     Observer,
 }
 
-/// type alias for an Sc2 Cortex
-pub type Cortex = cortical::Cortex<Message, Role>;
+/// type alias for an Sc2 Organelle
+pub type Organelle = organelle::Organelle<Message, Role>;
 /// type alias for an Sc2 Soma
-pub type Soma = cortical::Soma<Message, Role>;
+pub type Soma = organelle::Soma<Message, Role>;

@@ -67,7 +67,7 @@ pub struct Rect2 {
 /// 2D integer point used to specify a location
 pub type Point2I = na::Vector2<i32>;
 /// 3D integer point used to specify a location
-pub type Point3I = na::Vector3<i32>;
+//pub type Point3I = na::Vector3<i32>;
 
 /// 2D integer rectangle represented by two points
 #[derive(Debug, Copy, Clone)]

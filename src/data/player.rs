@@ -96,7 +96,7 @@ pub enum PlayerSetup {
         race:           Race
     },
 
-    Observer,
+    //Observer,
 }
 
 impl PlayerSetup {
@@ -116,11 +116,11 @@ impl PlayerSetup {
         }
     }
 
-    /// does the player setup represent an observer
+    /*/// does the player setup represent an observer
     pub fn is_observer(&self) -> bool {
         match self {
             &PlayerSetup::Observer => true,
             _ => false,
         }
-    }
+    }*/
 }

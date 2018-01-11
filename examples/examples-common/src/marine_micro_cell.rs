@@ -1,8 +1,8 @@
 
 use std::rc::Rc;
 
-use cortical;
-use cortical::{ Lobe, Protocol, ResultExt, Constraint };
+use organelle;
+use organelle::{ Cell, Protocol, ResultExt, Constraint };
 use sc2::{
     Result,
     Message,
@@ -13,17 +13,17 @@ use sc2::{
     Race,
 };
 
-pub enum MarineMicroLobe {
+pub enum MarineMicroCell {
     Init(Init),
     Setup(Setup),
 
     InGame(InGame),
 }
 
-impl MarineMicroLobe {
-    pub fn cortex(interval: u32) -> Result<Self> {
+impl MarineMicroCell {
+    pub fn organelle(interval: u32) -> Result<Self> {
         Ok(
-            MarineMicroLobe::Init(
+            MarineMicroCell::Init(
                 Init {
                     soma: Soma::new(
                         vec![
@@ -38,20 +38,20 @@ impl MarineMicroLobe {
     }
 }
 
-impl Lobe for MarineMicroLobe {
+impl Cell for MarineMicroCell {
     type Message = Message;
     type Role = Role;
 
     fn update(self, msg: Protocol<Message, Role>)
-        -> cortical::Result<MarineMicroLobe>
+        -> organelle::Result<MarineMicroCell>
     {
         match self {
-            MarineMicroLobe::Init(state) => state.update(msg),
-            MarineMicroLobe::Setup(state) => state.update(msg),
+            MarineMicroCell::Init(state) => state.update(msg),
+            MarineMicroCell::Setup(state) => state.update(msg),
 
-            MarineMicroLobe::InGame(state) => state.update(msg),
+            MarineMicroCell::InGame(state) => state.update(msg),
         }.chain_err(
-            || cortical::ErrorKind::LobeError
+            || organelle::ErrorKind::CellError
         )
     }
 }
@@ -63,7 +63,7 @@ pub struct Init {
 
 impl Init {
     fn update(mut self, msg: Protocol<Message, Role>)
-        -> Result<MarineMicroLobe>
+        -> Result<MarineMicroCell>
     {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -73,7 +73,7 @@ impl Init {
             }
         }
         else {
-            Ok(MarineMicroLobe::Init(self))
+            Ok(MarineMicroCell::Init(self))
         }
     }
 }
@@ -84,11 +84,11 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(soma: Soma, interval: u32) -> Result<MarineMicroLobe> {
-        Ok(MarineMicroLobe::Setup(Setup { soma: soma, interval: interval }))
+    fn setup(soma: Soma, interval: u32) -> Result<MarineMicroCell> {
+        Ok(MarineMicroCell::Setup(Setup { soma: soma, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>)-> Result<MarineMicroLobe> {
+    fn update(mut self, msg: Protocol<Message, Role>)-> Result<MarineMicroCell> {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
                 Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
@@ -101,14 +101,14 @@ impl Setup {
                         )
                     )?;
 
-                    Ok(MarineMicroLobe::Setup(self))
+                    Ok(MarineMicroCell::Setup(self))
                 },
                 Protocol::Message(_, Message::RequestUpdateInterval) => {
                     self.soma.send_req_input(
                         Role::Agent, Message::UpdateInterval(self.interval)
                     )?;
 
-                    Ok(MarineMicroLobe::Setup(self))
+                    Ok(MarineMicroCell::Setup(self))
                 },
                 Protocol::Message(_, Message::GameStarted) => {
                     InGame::start(self.soma)
@@ -118,7 +118,7 @@ impl Setup {
             }
         }
         else {
-            Ok(MarineMicroLobe::Setup(self))
+            Ok(MarineMicroCell::Setup(self))
         }
     }
 }
@@ -128,12 +128,12 @@ pub struct InGame {
 }
 
 impl InGame {
-    fn start(soma: Soma) -> Result<MarineMicroLobe> {
-        Ok(MarineMicroLobe::InGame(InGame { soma: soma }))
+    fn start(soma: Soma) -> Result<MarineMicroCell> {
+        Ok(MarineMicroCell::InGame(InGame { soma: soma }))
     }
 
     fn update(mut self, msg: Protocol<Message, Role>)
-        -> Result<MarineMicroLobe>
+        -> Result<MarineMicroCell>
     {
         if let Some(msg) = self.soma.update(msg)? {
             match msg {
@@ -145,14 +145,14 @@ impl InGame {
             }
         }
         else {
-            Ok(MarineMicroLobe::InGame(self))
+            Ok(MarineMicroCell::InGame(self))
         }
     }
 
-    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroLobe> {
+    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroCell> {
         self.soma.send_req_input(Role::Agent, Message::UpdateComplete)?;
 
-        Ok(MarineMicroLobe::InGame(self))
+        Ok(MarineMicroCell::InGame(self))
     }
 }
 
