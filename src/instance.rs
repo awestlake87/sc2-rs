@@ -1,14 +1,15 @@
 
 use std::path::PathBuf;
-use std::time;
-use std::thread;
 use std::process;
 
 use url::Url;
 
-use super::{ Result, ErrorKind };
-use data::{ Rect, PortSet };
-use client::{ Client };
+use super::{
+    Result,
+    ErrorKind,
+    Rect,
+    PortSet
+};
 
 #[derive(Copy, Clone)]
 pub enum InstanceKind {
@@ -98,25 +99,9 @@ impl Instance {
         Ok(())
     }
 
-    pub fn connect(&self) -> Result<Client> {
+    pub fn get_url(&self) -> Result<Url> {
         let (host, port) = self.address.clone();
-
-        let url = Url::parse(
-            &format!("ws://{}:{}/sc2api", host, port)[..]
-        ).expect("somehow I fucked up the URL");
-
-        println!("attempting connection to {:?}", url);
-
-        for i in 0..10 {
-            match Client::connect(url.clone()) {
-                Ok(client) => return Ok(client),
-                Err(_) => ()
-            };
-            thread::sleep(time::Duration::from_millis(5000));
-            println!("retrying {}...", 10 - i);
-        };
-
-        Err(ErrorKind::ClientOpenFailed.into())
+        Ok(Url::parse(&*format!("ws://{}:{}/sc2api", host, port))?)
     }
 
     pub fn kill(&mut self) -> Result<()> {

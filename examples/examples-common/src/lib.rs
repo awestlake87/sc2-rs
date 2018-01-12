@@ -1,27 +1,35 @@
 
 #[macro_use]
 extern crate error_chain;
-extern crate glutin;
-extern crate nalgebra as na;
-extern crate num;
-extern crate rand;
 #[macro_use]
 extern crate serde_derive;
 
+extern crate organelle;
+extern crate nalgebra as na;
+extern crate num;
+extern crate rand;
+
 extern crate sc2;
 
-mod marine_micro_bot;
-mod terran_bot;
+mod marine_micro_cell;
+mod terran_cell;
 
 use std::path::PathBuf;
 
 use rand::random;
 
-use sc2::{ CoordinatorSettings, Result, Launcher, LauncherSettings };
-use sc2::data::{ Rect2, Point2, TerrainInfo, GameSettings, Map };
+use sc2::{
+    Result,
+    LauncherSettings,
+    Rect2,
+    Point2,
+    TerrainInfo,
+    GameSettings,
+    Map
+};
 
-pub use marine_micro_bot::{ MarineMicroBot };
-pub use terran_bot::{ TerranBot };
+pub use marine_micro_cell::{ MarineMicroCell };
+pub use terran_cell::{ TerranCell };
 
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
@@ -52,12 +60,13 @@ pub struct Args {
     pub flag_wine:                  bool,
     pub flag_version:               bool,
     pub flag_realtime:              bool,
-    pub flag_step_size:             Option<usize>,
+    pub flag_step_size:             Option<u32>,
 }
 
-pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let default_settings = LauncherSettings::default();
-    let launcher = Launcher::from(
+
+    Ok(
         LauncherSettings {
             use_wine: args.flag_wine,
             dir: args.flag_dir.clone(),
@@ -70,7 +79,11 @@ pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
                 }
             }
         }
-    )?;
+    )
+}
+
+/*pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
+    let launcher = Launcher::from(get_launcher_settings(args)?)?;
 
     Ok(
         CoordinatorSettings {
@@ -84,7 +97,7 @@ pub fn get_coordinator_settings(args: &Args) -> Result<CoordinatorSettings> {
             },
         }
     )
-}
+}*/
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     let map = match args.flag_map {
@@ -93,31 +106,6 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     };
 
     Ok(GameSettings { map: map })
-}
-
-pub fn poll_escape(events: &mut glutin::EventsLoop) -> bool {
-    let mut escape = false;
-
-    events.poll_events(
-        |e| match e {
-            glutin::Event::DeviceEvent { event, .. } => match event {
-                glutin::DeviceEvent::Key(
-                    glutin::KeyboardInput { virtual_keycode, .. }
-                ) => {
-                    match virtual_keycode {
-                        Some(glutin::VirtualKeyCode::Escape) => {
-                            escape = true;
-                        }
-                        _ => ()
-                    }
-                },
-                _ => ()
-            },
-            _ => ()
-        }
-    );
-
-    escape
 }
 
 pub fn find_random_location_in_rect(r: Rect2) -> Point2 {

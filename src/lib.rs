@@ -6,9 +6,12 @@
 //! this API is intended to provide functionality similar to that of Blizzard
 //! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
 
-extern crate bytes;
 #[macro_use]
 extern crate error_chain;
+
+extern crate bytes;
+extern crate organelle;
+extern crate ctrlc;
 extern crate futures;
 extern crate glob;
 extern crate nalgebra as na;
@@ -17,34 +20,95 @@ extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
+extern crate tokio_timer;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate url;
+extern crate uuid;
 
 mod agent;
 mod client;
-mod coordinator;
-mod instance;
+mod computer;
+mod ctrlc_breaker;
+mod data;
 mod frame;
+mod instance;
 mod launcher;
-mod participant;
-mod replay_observer;
+mod melee;
+mod observer;
 
-pub mod colors;
-pub mod data;
-
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
-pub use agent::{ Agent };
-pub use coordinator::{ Coordinator, CoordinatorSettings };
-pub use frame::{ Command, FrameData, GameEvent, DebugTextTarget };
-pub use launcher::{ Launcher, LauncherSettings };
-pub use participant::{ User };
-pub use replay_observer::{ ReplayObserver };
+use futures::sync::mpsc::{ Sender };
+use url::Url;
+use uuid::Uuid;
+
+pub use self::agent::{ AgentCell };
+pub use self::client::{ ClientRequest, ClientResult };
+pub use self::computer::{ ComputerCell };
+pub use self::ctrlc_breaker::{ CtrlcBreakerCell };
+pub use self::data::{
+    Color,
+    Rect,
+    Rect2,
+    Point2,
+    Point3,
+    Vector2,
+    Vector3,
+
+    UnitType,
+    Ability,
+    Upgrade,
+    Buff,
+    Alliance,
+
+    ActionTarget,
+    Tag,
+    ImageData,
+    Visibility,
+    BuffData,
+    UpgradeData,
+    AbilityData,
+    Effect,
+    UnitTypeData,
+    Score,
+    Unit,
+    TerrainInfo,
+    PowerSource,
+    DisplayType,
+    SpatialAction,
+    Action,
+    Map,
+    GamePorts,
+    PortSet,
+    PlayerSetup,
+    GameSettings,
+    Race,
+    Difficulty,
+};
+pub use self::frame::{
+    FrameData,
+    Command,
+    DebugCommand,
+    DebugTextTarget,
+    MapState,
+    GameEvent,
+    GameState,
+    GameData,
+};
+pub use self::launcher::{ LauncherCell, LauncherSettings };
+pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeCell };
 
 error_chain! {
+    links {
+        Organelle(organelle::Error, organelle::ErrorKind) #[doc="organelle glue"];
+    }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
+        UrlParseError(url::ParseError) #[doc="link to url parse errors"];
+        Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
     }
     errors {
         /// exe was not supplied to the coordinator
@@ -72,6 +136,11 @@ error_chain! {
         ClientRecvFailed {
             description("unable to receive message from game instance")
             display("client recv failed")
+        }
+        /// client failed to initiate close handshake
+        ClientCloseFailed {
+            description("unable to initiate close handshake")
+            display("client close failed")
         }
 
         /// errors received from game instance
@@ -112,3 +181,108 @@ trait IntoProto<T> {
     /// convert into protobuf data
     fn into_proto(self) -> Result<T>;
 }
+
+/// the messages that can be sent between Sc2 capable
+#[derive(Debug)]
+pub enum Message {
+    /// get instances pool
+    GetInstancePool,
+    /// get the ports pool
+    GetPortsPool,
+    /// launch an instance
+    LaunchInstance,
+    /// the pool of instances to choose from
+    InstancePool(HashMap<Uuid, (Url, PortSet)>),
+    /// the pool of game ports to choose from (num_instances / 2)
+    PortsPool(Vec<GamePorts>),
+
+    /// allow a cell to take complete control of an instance
+    ProvideInstance(Uuid, Url),
+
+    /// attempt to connect to instance
+    ClientAttemptConnect(Url),
+    /// internal-use client successfully connected to instance
+    ClientConnected(Sender<tungstenite::Message>),
+    /// internal-use client received a message
+    ClientReceive(tungstenite::Message),
+    /// send some request to the game instance
+    ClientRequest(ClientRequest),
+    /// result of transaction with game instance
+    ClientResult(ClientResult),
+    /// internal-use message used to indicate when a transaction has timed out
+    ClientTimeout(Uuid),
+    /// disconnect from the instance
+    ClientDisconnect,
+    /// client has closed
+    ClientClosed,
+    /// client encountered a websocket error
+    ClientError(Rc<Error>),
+
+    /// agent is ready for a game to begin
+    Ready,
+
+    /// request player setup
+    RequestPlayerSetup(GameSettings),
+    /// respond with player setup
+    PlayerSetup(PlayerSetup),
+
+    /// create a game with the given settings and list of participants
+    CreateGame(GameSettings, Vec<PlayerSetup>),
+    /// game was created with the given settings
+    GameCreated,
+    /// notify agents that game is ready to join with the given player setup
+    GameReady(PlayerSetup, Option<GamePorts>),
+    /// join an existing game
+    JoinGame(GamePorts),
+    /// fetch the game data
+    FetchGameData,
+    /// game data ready
+    GameDataReady,
+    /// request update interval from player
+    RequestUpdateInterval,
+    /// respond with update interval in game steps
+    UpdateInterval(u32),
+    /// game started
+    GameStarted,
+
+    /// observe the game state
+    Observe,
+    /// current game state
+    Observation(Rc<FrameData>),
+    /// issue a command to the game instance
+    Command(Command),
+    /// issue a debug command to the game instance
+    DebugCommand(DebugCommand),
+    /// notify the stepper that the cell is done updating
+    UpdateComplete,
+
+    /// game ended
+    GameEnded,
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+/// defines the roles that govern how connections between cells are made
+pub enum Role {
+    /// launches new game instances or kills them
+    Launcher,
+    /// broadcasts idle instances
+    InstancePool,
+    /// provides instances to clients
+    InstanceProvider,
+
+    /// controls agents or observer
+    Controller,
+    /// provides agent interface to bots
+    Agent,
+    /// provides client interface to agents or observers
+    Client,
+    /// observes game state
+    Observer,
+}
+
+/// type alias for an Sc2 Organelle
+pub type Organelle = organelle::Organelle<Message, Role>;
+/// type alias for an Sc2 Soma
+pub type Soma = organelle::Soma<Message, Role>;
+/// type alias for an Sc2 Eukaryote
+pub type Eukaryote<T> = organelle::Eukaryote<Message, Role, T>;

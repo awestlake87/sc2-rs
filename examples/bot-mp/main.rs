@@ -1,31 +1,24 @@
 
+#[macro_use]
+extern crate error_chain;
+
+extern crate organelle;
 extern crate docopt;
-#[macro_use] extern crate error_chain;
-extern crate glutin;
+extern crate glob;
 
 extern crate sc2;
 extern crate examples_common;
 
+use organelle::{ Organelle, Cell };
 use docopt::Docopt;
-
-use sc2::{ Result, Coordinator, User };
-use sc2::data::{ PlayerSetup, Race };
-
 use examples_common::{
-    USAGE,
-    Args,
-    get_coordinator_settings,
-    get_game_settings,
-    poll_escape,
-    TerranBot
+    USAGE, Args, get_launcher_settings, get_game_settings, TerranCell
 };
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 quick_main!(
-    || -> Result<()> {
-        let mut events = glutin::EventsLoop::new();
-
+    || -> sc2::Result<()> {
         let args: Args = Docopt::new(USAGE)
             .and_then(|d| d.deserialize())
             .unwrap_or_else(|e| e.exit())
@@ -36,42 +29,32 @@ quick_main!(
             return Ok(())
         }
 
-        let coordinator_settings = get_coordinator_settings(&args)?;
-        let game_settings = get_game_settings(&args)?;
+        let mut organelle = Organelle::new(
+            sc2::MeleeCell::organelle(
+                sc2::MeleeSettings {
+                    launcher: get_launcher_settings(&args)?,
+                    players: (
+                        sc2::AgentCell::organelle(
+                            TerranCell::organelle(
+                                args.flag_step_size.unwrap_or(1)
+                            )?
+                        )?,
+                        sc2::AgentCell::organelle(
+                            TerranCell::organelle(
+                                args.flag_step_size.unwrap_or(1)
+                            )?
+                        )?,
+                    ),
+                    suite: sc2::MeleeSuite::EndlessRepeat(
+                        get_game_settings(&args)?
+                    )
+                }
+            )?
+        );
 
-        let mut coordinator = Coordinator::from_settings(
-            coordinator_settings
-        )?;
+        organelle.add_cell(sc2::CtrlcBreakerCell::new()?);
 
-        let p1 = PlayerSetup::Player { race: Race::Terran };
-        let p2 = PlayerSetup::Player { race: Race::Terran };
-
-        coordinator.launch_starcraft(
-            vec![
-                (p1, Some(User::Agent(Box::from(TerranBot::new())))),
-                (p2, Some(User::Agent(Box::from(TerranBot::new()))))
-            ]
-        )?;
-
-        println!("launched!");
-
-        let mut done = false;
-
-        while !done {
-            coordinator.start_game(game_settings.clone())?;
-            println!("game started!");
-
-            while !done {
-                 if !coordinator.update()? {
-                     println!("stop updating");
-                     break
-                 }
-
-                 if poll_escape(&mut events) {
-                     done = true;
-                 }
-            }
-        }
+        organelle.run()?;
 
         Ok(())
     }

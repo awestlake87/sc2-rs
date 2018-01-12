@@ -48,7 +48,7 @@ impl IntoProto<common::Race> for Race {
 
 /// difficulty setting for built-in StarCraft II AI
 #[allow(missing_docs)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Difficulty {
     VeryEasy,
     Easy,
@@ -81,7 +81,7 @@ impl Difficulty {
 }
 
 /// settings for players
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum PlayerSetup {
     /// add a built-in StarCraft II bot with the given race and difficulty
     Computer {
@@ -95,6 +95,32 @@ pub enum PlayerSetup {
         /// race of the player
         race:           Race
     },
-    /// add a replay observer (these are separate from the other two)
-    Observer
+
+    //Observer,
+}
+
+impl PlayerSetup {
+    /// does the PlayerSetup represent a player
+    pub fn is_player(&self) -> bool {
+        match self {
+            &PlayerSetup::Player { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// does the PlayerSetup represent a computer
+    pub fn is_computer(&self) -> bool {
+        match self {
+            &PlayerSetup::Computer { .. } => true,
+            _ => false,
+        }
+    }
+
+    /*/// does the player setup represent an observer
+    pub fn is_observer(&self) -> bool {
+        match self {
+            &PlayerSetup::Observer => true,
+            _ => false,
+        }
+    }*/
 }

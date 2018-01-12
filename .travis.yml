@@ -1,5 +1,13 @@
 language: rust
 
+addons:
+  apt:
+    packages:
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev
+
 rust:
   - stable
   - beta
@@ -11,13 +19,33 @@ matrix:
 
 cache: cargo
 
-before_deploy:
-  - cargo doc --no-deps
+before_script:
+  - |
+      pip install 'travis-cargo<0.2' --user &&
+      export PATH=$HOME/.local/bin:$PATH
+
+script:
+  - |
+      travis-cargo build &&
+      travis-cargo test &&
+      travis-cargo bench &&
+      travis-cargo --only stable doc
+
+after_success:
+  - |
+      travis-cargo --only stable publish -- --token $CARGO_TOKEN ||
+      { echo "publish failed!"; exit 1; }
+  - |
+      export VERSION=`cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'` &&
+      git tag v$VERSION &&
+      git push https://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs v$VERSION
+
 
 deploy:
-  provider: pages
-  skip_cleanup: true
-  github_token: $GITHUB_TOKEN # Set in travis-ci.org dashboard
-  on:
-    branch: master
-  local_dir: ./target/doc
+  - provider: pages
+    skip_cleanup: true
+    github_token: $GITHUB_TOKEN # Set in travis-ci.org dashboard
+    on:
+      branch: master
+      condition: -d ./target/doc
+    local_dir: ./target/doc

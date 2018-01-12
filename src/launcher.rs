@@ -1,19 +1,27 @@
 
+use std::collections::{ HashMap };
 use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
+use organelle;
+use organelle::{ Cell, Handle, ResultExt, Protocol, Constraint };
 use glob::glob;
 use regex::Regex;
+use uuid::Uuid;
 
-use super::{ Result, ErrorKind };
-use data::{ Rect, PortSet, GamePorts };
+use super::{
+    Result,
+    ErrorKind,
+
+    Message,
+    Soma,
+    Role,
+
+    Rect,
+    PortSet,
+    GamePorts,
+};
 use instance::{ Instance, InstanceSettings, InstanceKind };
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum ExeArch {
-    X64,
-    X32
-}
 
 /// settings used to create a launcher
 pub struct LauncherSettings {
@@ -37,15 +45,20 @@ impl Default for LauncherSettings {
     }
 }
 
-/// object in charge of launching game instances and assigning ports
-pub struct Launcher {
+/// cell in charge of launching game instances and assigning ports
+pub struct LauncherCell {
+    soma:               Soma,
+
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
     current_port:       u16,
     use_wine:           bool,
+
+    instances:          HashMap<Uuid, Instance>,
+    ports:              Vec<GamePorts>,
 }
 
-impl Launcher {
+impl LauncherCell {
     /// create a launcher from settings
     pub fn from(settings: LauncherSettings) -> Result<Self> {
         let dir = {
@@ -61,16 +74,28 @@ impl Launcher {
 
         Ok(
             Self {
+                soma: Soma::new(
+                    vec![ Constraint::RequireOne(Role::Launcher) ],
+                    vec![ ]
+                )?,
+
                 exe: exe,
                 pwd: pwd,
                 current_port: settings.base_port,
                 use_wine: settings.use_wine,
+
+                instances: HashMap::new(),
+                ports: vec![ ],
             }
         )
     }
 
     /// launch an instance
-    pub fn launch(&mut self) -> Result<Instance> {
+    fn launch(mut self, src: Handle) -> Result<Self> {
+        let controller = self.soma.req_input(Role::Launcher)?;
+
+        assert_eq!(src, controller);
+
         let mut instance = Instance::from_settings(
             InstanceSettings {
                 kind: {
@@ -96,7 +121,19 @@ impl Launcher {
 
         instance.start()?;
 
-        Ok(instance)
+        let hdl = Uuid::new_v4();
+        self.instances.insert(hdl, instance);
+
+        self.send_instance_pool(controller)?;
+
+        if self.instances.len() / 2 > self.ports.len() {
+            let game_ports = self.create_game_ports();
+            self.ports.push(game_ports);
+
+            self.send_ports_pool(controller)?;
+        }
+
+        Ok(self)
     }
 
     /// create a set of ports for multiplayer games
@@ -114,7 +151,86 @@ impl Launcher {
 
         ports
     }
+
+    fn get_instance_pool(self, src: Handle) -> Result<Self> {
+        self.send_instance_pool(src)?;
+        Ok(self)
+    }
+
+    fn send_instance_pool(&self, dest: Handle) -> Result<()> {
+        self.soma.effector()?.send(
+            dest,
+            Message::InstancePool({
+                let mut instances = HashMap::new();
+
+                for (uuid, instance) in self.instances.iter() {
+                    instances.insert(
+                        *uuid, (instance.get_url()?, instance.ports)
+                    );
+                }
+
+                instances
+            })
+        );
+
+        Ok(())
+    }
+
+    fn get_ports_pool(self, src: Handle) -> Result<Self> {
+        self.send_ports_pool(src)?;
+        Ok(self)
+    }
+
+    fn send_ports_pool(&self, dest: Handle) -> Result<()> {
+        self.soma.effector()?.send(
+            dest, Message::PortsPool(self.ports.clone())
+        );
+
+        Ok(())
+    }
 }
+
+impl Cell for LauncherCell {
+    type Message = Message;
+    type Role = Role;
+
+    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
+        -> organelle::Result<Self>
+    {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Ok(self),
+
+                Protocol::Message(src, Message::GetInstancePool) => {
+                    self.get_instance_pool(src)
+                },
+                Protocol::Message(src, Message::GetPortsPool) => {
+                    self.get_ports_pool(src)
+                },
+                Protocol::Message(src, Message::LaunchInstance) => {
+                    self.launch(src)
+                },
+
+                Protocol::Message(_, msg) => {
+                    bail!("unexpected message {:#?}", msg)
+                },
+                _ => bail!("unexpected protocol message")
+            }.chain_err(
+                || organelle::ErrorKind::CellError
+            )
+        }
+        else {
+            Ok(self)
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum ExeArch {
+    X64,
+    X32
+}
+
 
 fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
     if cfg!(windows) {

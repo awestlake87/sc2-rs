@@ -1,5 +1,163 @@
 
-use na::{ distance, distance_squared, normalize };
+use std::rc::Rc;
+
+use organelle;
+use organelle::{ Cell, Protocol, ResultExt, Constraint };
+use sc2::{
+    Result,
+    Message,
+    Role,
+    Soma,
+    FrameData,
+    PlayerSetup,
+    Race,
+};
+
+pub enum MarineMicroCell {
+    Init(Init),
+    Setup(Setup),
+
+    InGame(InGame),
+}
+
+impl MarineMicroCell {
+    pub fn organelle(interval: u32) -> Result<Self> {
+        Ok(
+            MarineMicroCell::Init(
+                Init {
+                    soma: Soma::new(
+                        vec![
+                            Constraint::RequireOne(Role::Agent),
+                        ],
+                        vec![ ],
+                    )?,
+                    interval: interval,
+                }
+            )
+        )
+    }
+}
+
+impl Cell for MarineMicroCell {
+    type Message = Message;
+    type Role = Role;
+
+    fn update(self, msg: Protocol<Message, Role>)
+        -> organelle::Result<MarineMicroCell>
+    {
+        match self {
+            MarineMicroCell::Init(state) => state.update(msg),
+            MarineMicroCell::Setup(state) => state.update(msg),
+
+            MarineMicroCell::InGame(state) => state.update(msg),
+        }.chain_err(
+            || organelle::ErrorKind::CellError
+        )
+    }
+}
+
+pub struct Init {
+    soma:           Soma,
+    interval:       u32,
+}
+
+impl Init {
+    fn update(mut self, msg: Protocol<Message, Role>)
+        -> Result<MarineMicroCell>
+    {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Start => Setup::setup(self.soma, self.interval),
+
+                _ => bail!("unexpected message")
+            }
+        }
+        else {
+            Ok(MarineMicroCell::Init(self))
+        }
+    }
+}
+
+pub struct Setup {
+    soma:           Soma,
+    interval:       u32,
+}
+
+impl Setup {
+    fn setup(soma: Soma, interval: u32) -> Result<MarineMicroCell> {
+        Ok(MarineMicroCell::Setup(Setup { soma: soma, interval: interval }))
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>)-> Result<MarineMicroCell> {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
+                    self.soma.send_req_input(
+                        Role::Agent,
+                        Message::PlayerSetup(
+                            PlayerSetup::Player {
+                                race: Race::Terran
+                            }
+                        )
+                    )?;
+
+                    Ok(MarineMicroCell::Setup(self))
+                },
+                Protocol::Message(_, Message::RequestUpdateInterval) => {
+                    self.soma.send_req_input(
+                        Role::Agent, Message::UpdateInterval(self.interval)
+                    )?;
+
+                    Ok(MarineMicroCell::Setup(self))
+                },
+                Protocol::Message(_, Message::GameStarted) => {
+                    InGame::start(self.soma)
+                },
+
+                _ => bail!("unexpected message"),
+            }
+        }
+        else {
+            Ok(MarineMicroCell::Setup(self))
+        }
+    }
+}
+
+pub struct InGame {
+    soma:           Soma,
+}
+
+impl InGame {
+    fn start(soma: Soma) -> Result<MarineMicroCell> {
+        Ok(MarineMicroCell::InGame(InGame { soma: soma }))
+    }
+
+    fn update(mut self, msg: Protocol<Message, Role>)
+        -> Result<MarineMicroCell>
+    {
+        if let Some(msg) = self.soma.update(msg)? {
+            match msg {
+                Protocol::Message(_, Message::Observation(frame)) => {
+                    self.on_frame(frame)
+                },
+
+                _ => bail!("unexpected message")
+            }
+        }
+        else {
+            Ok(MarineMicroCell::InGame(self))
+        }
+    }
+
+    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroCell> {
+        self.soma.send_req_input(Role::Agent, Message::UpdateComplete)?;
+
+        Ok(MarineMicroCell::InGame(self))
+    }
+}
+
+
+/*use na::{ distance, distance_squared, normalize };
 use num::Float;
 use sc2::data::{
     Tag, Point2, UnitType, Alliance, Ability, ActionTarget
@@ -155,4 +313,4 @@ fn get_nearest_zergling(frame: &FrameData, from: Point2) -> Option<Tag> {
     }
 
     tag
-}
+}*/
