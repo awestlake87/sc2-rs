@@ -36,12 +36,13 @@ deploy:
     on:
       branch: master
       condition: -d ./target/doc # on stable channel
-    script: |
-      travis-cargo --only stable publish -- --token $CARGO_TOKEN &&
-      export VERSION=`cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'` &&
-      echo "tag v$VERSION" &&
-      git tag v$VERSION &&
-      git push https://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs v$VERSION
+    script:
+      - travis-cargo --only stable publish -- --token $CARGO_TOKEN ||
+        { echo "publish failed!"; exit 1; }
+      - |
+          export VERSION=`cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'` &&
+          git tag v$VERSION &&
+          git push https://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs v$VERSION
 
   - provider: pages
     skip_cleanup: true
