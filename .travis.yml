@@ -31,21 +31,17 @@ script:
       travis-cargo bench &&
       travis-cargo --only stable doc
 
-after_success:
-  - |
-      travis-cargo --only stable publish -- --token $CARGO_TOKEN ||
-      { echo "publish failed!"; exit 1; }
-
 deploy:
   - provider: script
     on:
       branch: master
-    script: scripts/auto-tag.sh
+      condition: -d ./target/doc # on stable channel
+    script: scripts/publish.sh
 
   - provider: pages
     skip_cleanup: true
     github_token: $GITHUB_TOKEN # Set in travis-ci.org dashboard
     on:
       branch: master
-      condition: -d ./target/doc
+      condition: -d ./target/doc # on stable channel
     local_dir: ./target/doc
