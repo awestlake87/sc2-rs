@@ -5,14 +5,10 @@ authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 
 [dependencies]
 error-chain = "*"
-glutin = "*"
 nalgebra = "*"
 num = "*"
+organelle = "*"
 rand = "*"
 serde = "1.0"
 serde_derive = "1.0"
 sc2 = { path = "../../" }
-
-[dependencies.organelle]
-git = "https://github.com/awestlake87/organelle"
-branch = "reactive"

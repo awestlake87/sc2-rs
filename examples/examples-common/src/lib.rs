@@ -5,7 +5,6 @@ extern crate error_chain;
 extern crate serde_derive;
 
 extern crate organelle;
-extern crate glutin;
 extern crate nalgebra as na;
 extern crate num;
 extern crate rand;
@@ -107,31 +106,6 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     };
 
     Ok(GameSettings { map: map })
-}
-
-pub fn poll_escape(events: &mut glutin::EventsLoop) -> bool {
-    let mut escape = false;
-
-    events.poll_events(
-        |e| match e {
-            glutin::Event::DeviceEvent { event, .. } => match event {
-                glutin::DeviceEvent::Key(
-                    glutin::KeyboardInput { virtual_keycode, .. }
-                ) => {
-                    match virtual_keycode {
-                        Some(glutin::VirtualKeyCode::Escape) => {
-                            escape = true;
-                        }
-                        _ => ()
-                    }
-                },
-                _ => ()
-            },
-            _ => ()
-        }
-    );
-
-    escape
 }
 
 pub fn find_random_location_in_rect(r: Rect2) -> Point2 {

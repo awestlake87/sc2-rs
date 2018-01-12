@@ -5,7 +5,6 @@ extern crate error_chain;
 extern crate organelle;
 extern crate docopt;
 extern crate glob;
-extern crate glutin;
 
 extern crate sc2;
 extern crate examples_common;
