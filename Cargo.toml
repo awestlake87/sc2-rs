@@ -4,7 +4,6 @@ version = "0.1.1"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 description = "organelle networks for StarCraft II Client API"
 license = "MIT"
-license-file = "LICENSE.md"
 documentation = "https://docs.rs/sc2-rs"
 homepage = "https://github.com/awestlake87/sc2-rs"
 repository = "https://github.com/awestlake87/sc2-rs"
@@ -28,19 +27,17 @@ tungstenite = "0.5"
 url = "1.6"
 uuid = { version = "0.5", features = ["serde", "v4"] }
 
-[workspace]
-members = ["examples/examples-common"]
-
 [[example]]
 name = "bot-micro"
 crate-type = ["bin"]
-path = "examples/bot-micro/main.rs"
+path = "examples/bot-micro.rs"
 
 [[example]]
 name = "bot-mp"
 crate-type = ["bin"]
-path = "examples/bot-mp/main.rs"
+path = "examples/bot-mp.rs"
 
 [dev-dependencies]
 docopt = "0.8"
-examples-common = { path = "examples/examples-common" }
+serde = "1.0"
+serde_derive = "1.0"
