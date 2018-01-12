@@ -40,7 +40,7 @@ deploy:
   - provider: script
     on:
       branch: master
-      condition: `travis-cargo --only stable pkgid` -eq `cargo pkgid`
+      condition: | `travis-cargo --only stable pkgid` -eq `cargo pkgid`
     script: |
         export VERSION=`cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'` &&
         git tag v$VERSION &&
