@@ -33,6 +33,7 @@ script:
 
 deploy:
   - provider: script
+    skip_cleanup: true
     on:
       branch: master
       condition: -d ./target/doc # on stable channel
