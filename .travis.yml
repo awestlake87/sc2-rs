@@ -33,22 +33,15 @@ script:
 
 deploy:
   - provider: script
-    skip_cleanup: true
     on:
       branch: master
-      condition: -d ./target/doc # on stable channel
-    script:
-      - travis-cargo --only stable publish -- --token $CARGO_TOKEN ||
-        { echo "publish failed!"; exit 1; }
-      - |
-          export VERSION=`cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'` &&
-          git tag v$VERSION &&
-          git push https://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs v$VERSION
+      condition: -d ./target/doc
+    script: scripts/deploy.sh
 
   - provider: pages
     skip_cleanup: true
     github_token: $GITHUB_TOKEN # Set in travis-ci.org dashboard
     on:
       branch: master
-      condition: -d ./target/doc # on stable channel
+      condition: -d ./target/doc
     local_dir: ./target/doc
