@@ -6,7 +6,7 @@ use std::time;
 
 use bytes::{ Buf, BufMut };
 use organelle;
-use organelle::{ ResultExt, Handle, Impulse, Dendrite, Neuron };
+use organelle::{ Sheath, ResultExt, Handle, Impulse, Dendrite, Neuron };
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
 use protobuf;
@@ -18,7 +18,7 @@ use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
-use super::{ Result, Error, ErrorKind, Signal, Axon, Synapse, Sheath };
+use super::{ Result, Error, ErrorKind, Signal, Axon, Synapse };
 
 /// keeps a record of a req/rsp transaction between the game instance
 pub struct Transactor {

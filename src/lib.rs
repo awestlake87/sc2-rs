@@ -280,9 +280,5 @@ pub enum Synapse {
     Observer,
 }
 
-/// type alias for an Sc2 Organelle
-pub type Organelle = organelle::Organelle<Signal, Synapse>;
 /// type alias for an Sc2 Axon
 pub type Axon = organelle::Axon<Signal, Synapse>;
-/// type alias for an Sc2 Sheath
-pub type Sheath<T> = organelle::Sheath<Signal, Synapse, T>;

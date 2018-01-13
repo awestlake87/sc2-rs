@@ -5,7 +5,7 @@ use std::mem;
 use std::rc::Rc;
 
 use organelle;
-use organelle::{ ResultExt, Handle, Soma, Impulse, Dendrite };
+use organelle::{ ResultExt, Handle, Neuron, Sheath, Impulse, Dendrite };
 use sc2_proto::{ sc2api };
 
 use super::{
@@ -55,156 +55,138 @@ pub enum ObserverSoma {
 }
 
 impl ObserverSoma {
-    pub fn new() -> Result<Self> {
+    pub fn sheath() -> Result<Sheath<Self>> {
         Ok(
-            ObserverSoma::Init(
-                Init {
-                    axon: Axon::new(
-                        vec![
-                            Dendrite::RequireOne(Synapse::Observer),
-                        ],
-                        vec![
-                            Dendrite::RequireOne(Synapse::Client),
-                        ],
-                    )?,
-                }
-            )
+            Sheath::new(
+                ObserverSoma::Init(Init { }),
+                vec![
+                    Dendrite::RequireOne(Synapse::Observer),
+                ],
+                vec![
+                    Dendrite::RequireOne(Synapse::Client),
+                ],
+            )?
         )
     }
 }
 
-impl Soma for ObserverSoma {
+impl Neuron for ObserverSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Signal, Synapse>)
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         match self {
-            ObserverSoma::Init(state) => state.update(msg),
+            ObserverSoma::Init(state) => state.update(axon, msg),
 
-            ObserverSoma::Started(state) => state.update(msg),
+            ObserverSoma::Started(state) => state.update(axon, msg),
 
-            ObserverSoma::FetchGameData(state) => state.update(msg),
-            ObserverSoma::FetchTerrainData(state) => state.update(msg),
+            ObserverSoma::FetchGameData(state) => state.update(axon, msg),
+            ObserverSoma::FetchTerrainData(state) => state.update(axon, msg),
 
-            ObserverSoma::GameDataReady(state) => state.update(msg),
+            ObserverSoma::GameDataReady(state) => state.update(axon, msg),
 
-            ObserverSoma::Observe(state) => state.update(msg),
+            ObserverSoma::Observe(state) => state.update(axon, msg),
         }.chain_err(
             || organelle::ErrorKind::SomaError
         )
     }
 }
 
-pub struct Init {
-    axon:           Axon,
-}
+pub struct Init;
 
 impl Init {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Started::start(self.axon),
+    fn update(self, _axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Start => Started::start(),
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(ObserverSoma::Init(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
-pub struct Started {
-    axon:           Axon,
-}
+pub struct Started;
 
 impl Started {
-    fn start(axon: Axon) -> Result<ObserverSoma> {
-        Ok(ObserverSoma::Started(Started { axon: axon }))
+    fn start() -> Result<ObserverSoma> {
+        Ok(ObserverSoma::Started(Started { }))
     }
 
-    fn restart(axon: Axon) -> Result<ObserverSoma> {
+    fn restart(axon: &Axon) -> Result<ObserverSoma> {
         axon.send_req_input(Synapse::Observer, Signal::GameEnded)?;
 
-        Ok(ObserverSoma::Started(Started { axon: axon }))
+        Ok(ObserverSoma::Started(Started { }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Ready)
-                | Impulse::Signal(_, Signal::ClientClosed)
-                | Impulse::Signal(_, Signal::ClientError(_)) => {
-                    Ok(ObserverSoma::Started(self))
-                },
-                Impulse::Signal(src, Signal::FetchGameData) => {
-                    self.on_fetch_game_data(src)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::Ready)
+            | Impulse::Signal(_, Signal::ClientClosed)
+            | Impulse::Signal(_, Signal::ClientError(_)) => {
+                Ok(ObserverSoma::Started(self))
+            },
+            Impulse::Signal(src, Signal::FetchGameData) => {
+                self.on_fetch_game_data(axon, src)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ObserverSoma::Started(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_fetch_game_data(self, src: Handle) -> Result<ObserverSoma> {
-        assert_eq!(src, self.axon.req_input(Synapse::Observer)?);
+    fn on_fetch_game_data(self, axon: &Axon, src: Handle)
+        -> Result<ObserverSoma>
+    {
+        assert_eq!(src, axon.req_input(Synapse::Observer)?);
 
-        FetchGameData::fetch(self.axon)
+        FetchGameData::fetch(axon)
     }
 }
 
 pub struct FetchGameData {
-    axon:           Axon,
     transactor:     Transactor,
 }
 
 impl FetchGameData {
-    fn fetch(axon: Axon) -> Result<ObserverSoma> {
+    fn fetch(axon: &Axon) -> Result<ObserverSoma> {
         let mut req = sc2api::Request::new();
         req.mut_data().set_unit_type_id(true);
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
         Ok(
             ObserverSoma::FetchGameData(
-                FetchGameData {
-                    axon: axon,
-                    transactor: transactor
-                }
+                FetchGameData { transactor: transactor }
             )
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.on_game_data(src, result)
-                }
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.on_game_data(axon, src, result)
             }
-        }
-        else {
-            Ok(ObserverSoma::FetchGameData(self))
+
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_game_data(self, src: Handle, result: ClientResult)
+    fn on_game_data(self, axon: &Axon, src: Handle, result: ClientResult)
         -> Result<ObserverSoma>
     {
         let mut rsp = self.transactor.expect(src, result)?;
@@ -243,13 +225,12 @@ impl FetchGameData {
         }
 
         FetchTerrainData::fetch(
-            self.axon, unit_type_data, ability_data, upgrade_data, buff_data
+            axon, unit_type_data, ability_data, upgrade_data, buff_data
         )
     }
 }
 
 pub struct FetchTerrainData {
-    axon:                   Axon,
     transactor:             Transactor,
 
     unit_type_data:         HashMap<UnitType, UnitTypeData>,
@@ -260,7 +241,7 @@ pub struct FetchTerrainData {
 
 impl FetchTerrainData {
     fn fetch(
-        axon: Axon,
+        axon: &Axon,
         unit_type_data: HashMap<UnitType, UnitTypeData>,
         ability_data: HashMap<Ability, AbilityData>,
         upgrade_data: HashMap<Upgrade, UpgradeData>,
@@ -271,12 +252,11 @@ impl FetchTerrainData {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
         Ok(
             ObserverSoma::FetchTerrainData(
                 FetchTerrainData {
-                    axon: axon,
                     transactor: transactor,
 
                     unit_type_data: unit_type_data,
@@ -288,26 +268,22 @@ impl FetchTerrainData {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(rsp)) => {
-                    self.on_terrain_info(src, rsp)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(rsp)) => {
+                self.on_terrain_info(axon, src, rsp)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ObserverSoma::FetchTerrainData(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_terrain_info(self, src: Handle, result: ClientResult)
+    fn on_terrain_info(self, axon: &Axon, src: Handle, result: ClientResult)
         -> Result<ObserverSoma>
     {
         let mut rsp = self.transactor.expect(src, result)?;
@@ -323,7 +299,7 @@ impl FetchTerrainData {
             }
         );
 
-        GameDataReady::start(self.axon, game_data)
+        GameDataReady::start(axon, game_data)
     }
 }
 
@@ -343,19 +319,16 @@ struct ObserverData {
 }
 
 pub struct GameDataReady {
-    axon:               Axon,
     data:               ObserverData,
 }
 
 impl GameDataReady {
-    fn start(axon: Axon, game_data: Rc<GameData>) -> Result<ObserverSoma> {
+    fn start(axon: &Axon, game_data: Rc<GameData>) -> Result<ObserverSoma> {
         axon.send_req_input(Synapse::Observer, Signal::GameDataReady)?;
 
         Ok(
             ObserverSoma::GameDataReady(
                 GameDataReady {
-                    axon: axon,
-
                     data: ObserverData {
                         previous_step: 0,
                         current_step: 0,
@@ -374,55 +347,43 @@ impl GameDataReady {
         )
     }
 
-    fn ready(axon: Axon, data: ObserverData) -> Result<ObserverSoma> {
-        Ok(
-            ObserverSoma::GameDataReady(
-                GameDataReady {
-                    axon: axon,
-                    data: data,
-                }
-            )
-        )
+    fn ready(data: ObserverData) -> Result<ObserverSoma> {
+        Ok(ObserverSoma::GameDataReady(GameDataReady { data: data }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::Observe) => {
-                    assert_eq!(src, self.axon.req_input(Synapse::Observer)?);
-                    Observe::observe(self.axon, self.data)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::Observe) => {
+                assert_eq!(src, axon.req_input(Synapse::Observer)?);
+                Observe::observe(axon, self.data)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(ObserverSoma::GameDataReady(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct Observe {
-    axon:           Axon,
     transactor:     Transactor,
 
     data:           ObserverData,
 }
 
 impl Observe {
-    fn observe(axon: Axon, data: ObserverData) -> Result<ObserverSoma> {
+    fn observe(axon: &Axon, data: ObserverData) -> Result<ObserverSoma> {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
         Ok(
             ObserverSoma::Observe(
                 Observe {
-                    axon: axon,
                     transactor: transactor,
 
                     data: data
@@ -431,31 +392,28 @@ impl Observe {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ObserverSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.on_observe(src, result)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ObserverSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.on_observe(axon, src, result)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(ObserverSoma::Observe(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_observe(self, src: Handle, result: ClientResult)
+    fn on_observe(self, axon: &Axon, src: Handle, result: ClientResult)
         -> Result<ObserverSoma>
     {
         let mut rsp = self.transactor.expect(src, result)?;
 
         if rsp.get_status() != sc2api::Status::in_game {
-            return Started::restart(self.axon)
+            return Started::restart(axon)
         }
 
         let mut observation = rsp.take_observation().take_observation();
@@ -674,8 +632,8 @@ impl Observe {
             }
         );
 
-        self.axon.send_req_input(Synapse::Observer, Signal::Observation(frame))?;
+        axon.send_req_input(Synapse::Observer, Signal::Observation(frame))?;
 
-        GameDataReady::ready(self.axon, data)
+        GameDataReady::ready(data)
     }
 }

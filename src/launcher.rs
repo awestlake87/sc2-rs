@@ -4,7 +4,7 @@ use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
 use organelle;
-use organelle::{ Neuron, Handle, ResultExt, Impulse, Dendrite };
+use organelle::{ Sheath, Neuron, Handle, ResultExt, Impulse, Dendrite };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
@@ -16,7 +16,6 @@ use super::{
     Signal,
     Axon,
     Synapse,
-    Sheath,
 
     Rect,
     PortSet,

@@ -1,9 +1,9 @@
 
 use organelle;
-use organelle::{ ResultExt, Neuron, Impulse, Dendrite };
+use organelle::{ Sheath, ResultExt, Neuron, Impulse, Dendrite };
 
 use super::{
-    Result, Axon, Signal, Sheath, Synapse, Race, Difficulty, PlayerSetup
+    Result, Axon, Signal, Synapse, Race, Difficulty, PlayerSetup
 };
 
 /// soma that acts as the built-in SC2 AI

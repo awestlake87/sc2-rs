@@ -1,25 +1,22 @@
 
 use organelle;
-use organelle::{ Soma, Impulse, Effector, };
+use organelle::{ Sheath, Neuron, Impulse };
 use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
-use super::{ Result, Signal, Synapse };
+use super::{ Result, Axon, Signal, Synapse };
 
 /// soma that stops the organelle upon Ctrl-C
-pub struct CtrlcBreakerSoma {
-}
+pub struct CtrlcBreakerSoma;
 
 impl CtrlcBreakerSoma {
     /// create a new Ctrl-C breaker soma
-    pub fn new() -> Result<Self> {
-        Ok(Self { })
+    pub fn sheath() -> Result<Sheath<Self>> {
+        Ok(Sheath::new(Self { }, vec![ ], vec![ ])?)
     }
 
-    fn init(self, effector: Effector<Signal, Synapse>)
-        -> organelle::Result<Self>
-    {
+    fn init(self, axon: &Axon) -> organelle::Result<Self> {
         let (tx, rx) = mpsc::channel(1);
 
         ctrlc::set_handler(
@@ -32,9 +29,9 @@ impl CtrlcBreakerSoma {
             }
         ).unwrap();
 
-        let ctrlc_effector = effector.clone();
+        let ctrlc_effector = axon.effector()?.clone();
 
-        effector.spawn(
+        axon.effector()?.spawn(
             rx.for_each(
                 move |_| {
                     ctrlc_effector.stop();
@@ -47,15 +44,15 @@ impl CtrlcBreakerSoma {
     }
 }
 
-impl Soma for CtrlcBreakerSoma {
+impl Neuron for CtrlcBreakerSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Signal, Synapse>)
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         match msg {
-            Impulse::Init(effector) => self.init(effector),
+            Impulse::Start => self.init(axon),
 
             _ => Ok(self),
         }

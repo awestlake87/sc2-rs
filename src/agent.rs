@@ -3,7 +3,9 @@ use std::rc::Rc;
 use std::time;
 
 use organelle;
-use organelle::{ ResultExt, Handle, Soma, Neuron, Impulse, Dendrite };
+use organelle::{
+    Organelle, Sheath, ResultExt, Handle, Soma, Neuron, Impulse, Dendrite
+};
 use sc2_proto::{ sc2api, debug };
 use url::Url;
 
@@ -14,8 +16,6 @@ use super::{
     Signal,
     Synapse,
     Axon,
-    Organelle,
-    Sheath,
 
     FrameData,
     Command,
@@ -82,19 +82,19 @@ impl AgentSoma {
                     Dendrite::RequireOne(Synapse::InstanceProvider),
                     Dendrite::RequireOne(Synapse::Observer),
                 ],
-            )?,
+            )?
         )
     }
 
     /// compose an agent organelle to interact with a controller soma
-    pub fn organelle<L>(soma: L) -> Result<Organelle> where
-        L: Soma + 'static,
+    pub fn organelle<T>(soma: T) -> Result<Organelle<Sheath<Self>>> where
+        T: Soma + 'static,
 
-        L::Signal: From<Signal>,
-        L::Synapse: From<Synapse>,
+        T::Signal: From<Signal>,
+        T::Synapse: From<Synapse>,
 
-        Signal: From<L::Signal>,
-        Synapse: From<L::Synapse>,
+        Signal: From<T::Signal>,
+        Synapse: From<T::Synapse>,
     {
         let mut organelle = Organelle::new(AgentSoma::sheath()?);
 
@@ -107,7 +107,9 @@ impl AgentSoma {
         let client = organelle.add_soma::<Sheath<ClientSoma>>(
             ClientSoma::sheath()?
         );
-        let observer = organelle.add_soma::<ObserverSoma>(ObserverSoma::new()?);
+        let observer = organelle.add_soma::<Sheath<ObserverSoma>>(
+            ObserverSoma::sheath()?
+        );
 
         organelle.connect(agent, client, Synapse::InstanceProvider);
         organelle.connect(agent, client, Synapse::Client);

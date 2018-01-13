@@ -2,7 +2,9 @@
 use std::collections::HashMap;
 
 use organelle;
-use organelle::{ Soma, Neuron, Handle, Impulse, ResultExt, Dendrite };
+use organelle::{
+    Organelle, Sheath, Soma, Neuron, Handle, Impulse, ResultExt, Dendrite
+};
 use url::Url;
 use uuid::Uuid;
 
@@ -11,9 +13,7 @@ use super::{
 
     Signal,
     Synapse,
-    Organelle,
     Axon,
-    Sheath,
 
     GameSettings,
     GamePorts,
@@ -78,19 +78,20 @@ impl MeleeSoma {
     }
 
     /// create the melee organelle
-    pub fn organelle<L1, L2>(settings: MeleeSettings<L1, L2>) -> Result<Organelle>
-        where
-            L1: Soma,
-            L2: Soma,
+    pub fn organelle<L1, L2>(settings: MeleeSettings<L1, L2>)
+        -> Result<Organelle<Sheath<Self>>>
+    where
+        L1: Soma,
+        L2: Soma,
 
-            Signal: From<L1::Signal> + From<L2::Signal>,
-            Synapse: From<L1::Synapse> + From<L2::Synapse>,
+        Signal: From<L1::Signal> + From<L2::Signal>,
+        Synapse: From<L1::Synapse> + From<L2::Synapse>,
 
-            L1::Signal: From<Signal>,
-            L2::Signal: From<Signal>,
+        L1::Signal: From<Signal>,
+        L2::Signal: From<Signal>,
 
-            L1::Synapse: From<Synapse>,
-            L2::Synapse: From<Synapse>,
+        L1::Synapse: From<Synapse>,
+        L2::Synapse: From<Synapse>,
     {
         let mut organelle = Organelle::new(MeleeSoma::sheath(settings.suite)?);
 
