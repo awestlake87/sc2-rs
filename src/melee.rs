@@ -14,7 +14,6 @@ use super::{
     Signal,
     Synapse,
     Axon,
-    ClientSignal,
 
     GameSettings,
     GamePorts,
@@ -405,15 +404,11 @@ impl Launch {
 
                 axon.effector()?.send(
                     self.clients.0,
-                    Signal::Client(
-                        ClientSignal::ProvideInstance(*id1, url1.clone())
-                    )
+                    Signal::ProvideInstance(*id1, url1.clone())
                 );
                 axon.effector()?.send(
                     self.clients.1,
-                    Signal::Client(
-                        ClientSignal::ProvideInstance(*id2, url2.clone())
-                    )
+                    Signal::ProvideInstance(*id2, url2.clone())
                 );
 
                 PlayerVsPlayer::start(
@@ -451,8 +446,7 @@ impl Launch {
             };
 
             axon.effector()?.send(
-                player,
-                Signal::Client(ClientSignal::ProvideInstance(*id, url.clone()))
+                player, Signal::ProvideInstance(*id, url.clone())
             );
 
             PlayerVsComputer::start(

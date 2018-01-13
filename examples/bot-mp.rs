@@ -515,7 +515,7 @@ quick_main!(
             )?
         );
 
-        organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+        organelle.add_soma(sc2::CtrlcBreakerSoma::new()?);
 
         organelle.run()?;
 
