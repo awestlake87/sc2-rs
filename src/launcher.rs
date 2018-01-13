@@ -4,7 +4,7 @@ use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
 use organelle;
-use organelle::{ Cell, Handle, ResultExt, Protocol, Constraint };
+use organelle::{ Soma, Handle, ResultExt, Impulse, Dendrite };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
@@ -13,9 +13,9 @@ use super::{
     Result,
     ErrorKind,
 
-    Message,
-    Soma,
-    Role,
+    Signal,
+    Axon,
+    Synapse,
 
     Rect,
     PortSet,
@@ -45,9 +45,9 @@ impl Default for LauncherSettings {
     }
 }
 
-/// cell in charge of launching game instances and assigning ports
-pub struct LauncherCell {
-    soma:               Soma,
+/// soma in charge of launching game instances and assigning ports
+pub struct LauncherSoma {
+    axon:               Axon,
 
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
@@ -58,7 +58,7 @@ pub struct LauncherCell {
     ports:              Vec<GamePorts>,
 }
 
-impl LauncherCell {
+impl LauncherSoma {
     /// create a launcher from settings
     pub fn from(settings: LauncherSettings) -> Result<Self> {
         let dir = {
@@ -74,8 +74,8 @@ impl LauncherCell {
 
         Ok(
             Self {
-                soma: Soma::new(
-                    vec![ Constraint::RequireOne(Role::Launcher) ],
+                axon: Axon::new(
+                    vec![ Dendrite::RequireOne(Synapse::Launcher) ],
                     vec![ ]
                 )?,
 
@@ -92,7 +92,7 @@ impl LauncherCell {
 
     /// launch an instance
     fn launch(mut self, src: Handle) -> Result<Self> {
-        let controller = self.soma.req_input(Role::Launcher)?;
+        let controller = self.axon.req_input(Synapse::Launcher)?;
 
         assert_eq!(src, controller);
 
@@ -158,9 +158,9 @@ impl LauncherCell {
     }
 
     fn send_instance_pool(&self, dest: Handle) -> Result<()> {
-        self.soma.effector()?.send(
+        self.axon.effector()?.send(
             dest,
-            Message::InstancePool({
+            Signal::InstancePool({
                 let mut instances = HashMap::new();
 
                 for (uuid, instance) in self.instances.iter() {
@@ -182,41 +182,41 @@ impl LauncherCell {
     }
 
     fn send_ports_pool(&self, dest: Handle) -> Result<()> {
-        self.soma.effector()?.send(
-            dest, Message::PortsPool(self.ports.clone())
+        self.axon.effector()?.send(
+            dest, Signal::PortsPool(self.ports.clone())
         );
 
         Ok(())
     }
 }
 
-impl Cell for LauncherCell {
-    type Message = Message;
-    type Role = Role;
+impl Soma for LauncherSoma {
+    type Signal = Signal;
+    type Synapse = Synapse;
 
-    fn update(mut self, msg: Protocol<Self::Message, Self::Role>)
+    fn update(mut self, msg: Impulse<Self::Signal, Self::Synapse>)
         -> organelle::Result<Self>
     {
-        if let Some(msg) = self.soma.update(msg)? {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Start => Ok(self),
+                Impulse::Start => Ok(self),
 
-                Protocol::Message(src, Message::GetInstancePool) => {
+                Impulse::Signal(src, Signal::GetInstancePool) => {
                     self.get_instance_pool(src)
                 },
-                Protocol::Message(src, Message::GetPortsPool) => {
+                Impulse::Signal(src, Signal::GetPortsPool) => {
                     self.get_ports_pool(src)
                 },
-                Protocol::Message(src, Message::LaunchInstance) => {
+                Impulse::Signal(src, Signal::LaunchInstance) => {
                     self.launch(src)
                 },
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message")
             }.chain_err(
-                || organelle::ErrorKind::CellError
+                || organelle::ErrorKind::SomaError
             )
         }
         else {

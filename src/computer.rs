@@ -1,27 +1,27 @@
 
 use organelle;
-use organelle::{ ResultExt, Cell, Protocol, Constraint };
+use organelle::{ ResultExt, Soma, Impulse, Dendrite };
 
-use super::{ Result, Soma, Message, Role, Race, Difficulty, PlayerSetup };
+use super::{ Result, Axon, Signal, Synapse, Race, Difficulty, PlayerSetup };
 
-/// cell that acts as the built-in SC2 AI
-pub enum ComputerCell {
-    /// initialize the soma
+/// soma that acts as the built-in SC2 AI
+pub enum ComputerSoma {
+    /// initialize the axon
     Init(Init),
     /// respond to the setup queries
     Setup(Setup),
 }
 
-impl ComputerCell {
-    /// create a new computer cell
+impl ComputerSoma {
+    /// create a new computer soma
     pub fn new(race: Race, difficulty: Difficulty) -> Result<Self> {
         Ok(
-            ComputerCell::Init(
+            ComputerSoma::Init(
                 Init {
-                    soma: Soma::new(
+                    axon: Axon::new(
                         vec![
-                            Constraint::RequireOne(Role::Controller),
-                            Constraint::RequireOne(Role::InstanceProvider),
+                            Dendrite::RequireOne(Synapse::Controller),
+                            Dendrite::RequireOne(Synapse::InstanceProvider),
                         ],
                         vec![ ],
                     )?,
@@ -36,75 +36,75 @@ impl ComputerCell {
     }
 }
 
-impl Cell for ComputerCell {
-    type Message = Message;
-    type Role = Role;
+impl Soma for ComputerSoma {
+    type Signal = Signal;
+    type Synapse = Synapse;
 
-    fn update(self, msg: Protocol<Message, Role>) -> organelle::Result<Self> {
+    fn update(self, msg: Impulse<Signal, Synapse>) -> organelle::Result<Self> {
         match self {
-            ComputerCell::Init(state) => state.update(msg),
-            ComputerCell::Setup(state) => state.update(msg),
+            ComputerSoma::Init(state) => state.update(msg),
+            ComputerSoma::Setup(state) => state.update(msg),
         }.chain_err(
-            || organelle::ErrorKind::CellError
+            || organelle::ErrorKind::SomaError
         )
     }
 }
 
 pub struct Init {
-    soma:           Soma,
+    axon:           Axon,
 
     setup:          PlayerSetup,
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerCell> {
-        if let Some(msg) = self.soma.update(msg)? {
+    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ComputerSoma> {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Start => Setup::setup(self.soma, self.setup),
+                Impulse::Start => Setup::setup(self.axon, self.setup),
 
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message")
             }
         }
         else {
-            Ok(ComputerCell::Init(self))
+            Ok(ComputerSoma::Init(self))
         }
     }
 }
 
 pub struct Setup {
-    soma:           Soma,
+    axon:           Axon,
 
     setup:          PlayerSetup,
 }
 
 impl Setup {
-    fn setup(soma: Soma, setup: PlayerSetup) -> Result<ComputerCell> {
-        Ok(ComputerCell::Setup(Setup { soma: soma, setup: setup }))
+    fn setup(axon: Axon, setup: PlayerSetup) -> Result<ComputerSoma> {
+        Ok(ComputerSoma::Setup(Setup { axon: axon, setup: setup }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<ComputerCell> {
-        if let Some(msg) = self.soma.update(msg)? {
+    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ComputerSoma> {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
-                    self.soma.send_req_input(
-                        Role::Controller, Message::PlayerSetup(self.setup)
+                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
+                    self.axon.send_req_input(
+                        Synapse::Controller, Signal::PlayerSetup(self.setup)
                     )?;
 
-                    Ok(ComputerCell::Setup(self))
+                    Ok(ComputerSoma::Setup(self))
                 },
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message")
             }
         }
         else {
-            Ok(ComputerCell::Setup(self))
+            Ok(ComputerSoma::Setup(self))
         }
     }
 }

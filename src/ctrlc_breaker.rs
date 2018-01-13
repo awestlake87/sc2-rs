@@ -1,23 +1,23 @@
 
 use organelle;
-use organelle::{ Cell, Protocol, Effector, };
+use organelle::{ Soma, Impulse, Effector, };
 use ctrlc;
 use futures::prelude::*;
 use futures::sync::mpsc;
 
-use super::{ Result, Message, Role };
+use super::{ Result, Signal, Synapse };
 
-/// cell that stops the organelle upon Ctrl-C
-pub struct CtrlcBreakerCell {
+/// soma that stops the organelle upon Ctrl-C
+pub struct CtrlcBreakerSoma {
 }
 
-impl CtrlcBreakerCell {
-    /// create a new Ctrl-C breaker cell
+impl CtrlcBreakerSoma {
+    /// create a new Ctrl-C breaker soma
     pub fn new() -> Result<Self> {
         Ok(Self { })
     }
 
-    fn init(self, effector: Effector<Message, Role>)
+    fn init(self, effector: Effector<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         let (tx, rx) = mpsc::channel(1);
@@ -47,15 +47,15 @@ impl CtrlcBreakerCell {
     }
 }
 
-impl Cell for CtrlcBreakerCell {
-    type Message = Message;
-    type Role = Role;
+impl Soma for CtrlcBreakerSoma {
+    type Signal = Signal;
+    type Synapse = Synapse;
 
-    fn update(self, msg: Protocol<Message, Role>)
+    fn update(self, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         match msg {
-            Protocol::Init(effector) => self.init(effector),
+            Impulse::Init(effector) => self.init(effector),
 
             _ => Ok(self),
         }

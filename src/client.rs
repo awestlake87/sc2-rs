@@ -6,7 +6,7 @@ use std::time;
 
 use bytes::{ Buf, BufMut };
 use organelle;
-use organelle::{ ResultExt, Handle, Protocol, Constraint, Nucleus };
+use organelle::{ ResultExt, Handle, Impulse, Dendrite, Neuron };
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
 use protobuf;
@@ -18,7 +18,7 @@ use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
-use super::{ Result, Error, ErrorKind, Message, Soma, Role, Eukaryote };
+use super::{ Result, Error, ErrorKind, Signal, Axon, Synapse, Sheath };
 
 /// keeps a record of a req/rsp transaction between the game instance
 pub struct Transactor {
@@ -28,14 +28,14 @@ pub struct Transactor {
 }
 
 impl Transactor {
-    /// send a client request to the client cell
-    pub fn send(soma: &Soma, req: ClientRequest) -> Result<Self> {
+    /// send a client request to the client soma
+    pub fn send(axon: &Axon, req: ClientRequest) -> Result<Self> {
         let transaction = req.transaction;
         let kind = req.kind;
 
-        let client = soma.req_output(Role::Client)?;
+        let client = axon.req_output(Synapse::Client)?;
 
-        soma.effector()?.send(client, Message::ClientRequest(req));
+        axon.effector()?.send(client, Signal::ClientRequest(req));
 
         Ok(
             Self {
@@ -308,7 +308,7 @@ impl ClientResult {
 
 const NUM_RETRIES: u32 = 10;
 
-pub enum ClientCell {
+pub enum ClientSoma {
     Init(Init),
     AwaitInstance(AwaitInstance),
     Connect(Connect),
@@ -318,14 +318,14 @@ pub enum ClientCell {
     Disconnect(Disconnect),
 }
 
-impl ClientCell {
-    pub fn new() -> Result<Eukaryote<ClientCell>> {
+impl ClientSoma {
+    pub fn new() -> Result<Sheath<ClientSoma>> {
         Ok(
-            Eukaryote::new(
-                ClientCell::Init(Init { }),
+            Sheath::new(
+                ClientSoma::Init(Init { }),
                 vec![
-                    Constraint::RequireOne(Role::InstanceProvider),
-                    Constraint::Variadic(Role::Client)
+                    Dendrite::RequireOne(Synapse::InstanceProvider),
+                    Dendrite::Variadic(Synapse::Client)
                 ],
                 vec![ ],
             )?
@@ -333,21 +333,21 @@ impl ClientCell {
     }
 }
 
-impl Nucleus for ClientCell {
-    type Message = Message;
-    type Role = Role;
+impl Neuron for ClientSoma {
+    type Signal = Signal;
+    type Synapse = Synapse;
 
-    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         match self {
-            ClientCell::Init(state) => state.update(soma, msg),
-            ClientCell::AwaitInstance(state) => state.update(soma, msg),
-            ClientCell::Connect(state) => state.update(soma, msg),
-            ClientCell::Open(state) => state.update(soma, msg),
-            ClientCell::Disconnect(state) => state.update(soma, msg),
+            ClientSoma::Init(state) => state.update(axon, msg),
+            ClientSoma::AwaitInstance(state) => state.update(axon, msg),
+            ClientSoma::Connect(state) => state.update(axon, msg),
+            ClientSoma::Open(state) => state.update(axon, msg),
+            ClientSoma::Disconnect(state) => state.update(axon, msg),
         }.chain_err(
-            || organelle::ErrorKind::CellError
+            || organelle::ErrorKind::SomaError
         )
     }
 }
@@ -355,20 +355,20 @@ impl Nucleus for ClientCell {
 pub struct Init { }
 
 impl Init {
-    fn update(self, _: &Soma, msg: Protocol<Message, Role>)
-        -> Result<ClientCell>
+    fn update(self, _: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ClientSoma>
     {
         match msg {
-            Protocol::Start => self.start(),
+            Impulse::Start => self.start(),
 
-            Protocol::Message(_, msg) => {
+            Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
             },
             _ => bail!("unexpected protocol message")
         }
     }
 
-    fn start(self) -> Result<ClientCell> {
+    fn start(self) -> Result<ClientSoma> {
         AwaitInstance::await()
     }
 }
@@ -376,25 +376,25 @@ impl Init {
 pub struct AwaitInstance { }
 
 impl AwaitInstance {
-    fn await() -> Result<ClientCell> {
-        Ok(ClientCell::AwaitInstance(AwaitInstance { }))
+    fn await() -> Result<ClientSoma> {
+        Ok(ClientSoma::AwaitInstance(AwaitInstance { }))
     }
 
-    fn reset(soma: &Soma) -> Result<ClientCell> {
-        for c in soma.var_input(Role::Client)? {
-            soma.effector()?.send(*c, Message::ClientClosed);
+    fn reset(axon: &Axon) -> Result<ClientSoma> {
+        for c in axon.var_input(Synapse::Client)? {
+            axon.effector()?.send(*c, Signal::ClientClosed);
         }
 
         Self::await()
     }
 
-    fn reset_error(soma: &Soma, e: Rc<Error>) -> Result<ClientCell> {
-        for c in soma.var_input(Role::Client)? {
-            soma.effector()?.send_in_order(
+    fn reset_error(axon: &Axon, e: Rc<Error>) -> Result<ClientSoma> {
+        for c in axon.var_input(Synapse::Client)? {
+            axon.effector()?.send_in_order(
                 *c,
                 vec![
-                    Message::ClientError(Rc::clone(&e)),
-                    Message::ClientClosed
+                    Signal::ClientError(Rc::clone(&e)),
+                    Signal::ClientClosed
                 ]
             );
         }
@@ -402,29 +402,29 @@ impl AwaitInstance {
         Self::await()
     }
 
-    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
-        -> Result<ClientCell>
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ClientSoma>
     {
         match msg {
-            Protocol::Message(
-                src, Message::ProvideInstance(instance, url)
+            Impulse::Signal(
+                src, Signal::ProvideInstance(instance, url)
             ) => {
-                self.assign_instance(soma, src, instance, url)
+                self.assign_instance(axon, src, instance, url)
             },
 
-            Protocol::Message(_, msg) => {
+            Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
             },
             _ => bail!("unexpected protocol message")
         }
     }
 
-    fn assign_instance(self, soma: &Soma, src: Handle, _: Uuid, url: Url)
-        -> Result<ClientCell>
+    fn assign_instance(self, axon: &Axon, src: Handle, _: Uuid, url: Url)
+        -> Result<ClientSoma>
     {
-        assert_eq!(src, soma.req_input(Role::InstanceProvider)?);
+        assert_eq!(src, axon.req_input(Synapse::InstanceProvider)?);
 
-        Connect::connect(soma, url)
+        Connect::connect(axon, url)
     }
 }
 
@@ -434,14 +434,14 @@ pub struct Connect {
 }
 
 impl Connect {
-    fn connect(soma: &Soma, url: Url) -> Result<ClientCell> {
-        let this_cell = soma.effector()?.this_cell();
-        soma.effector()?.send(
-            this_cell, Message::ClientAttemptConnect(url)
+    fn connect(axon: &Axon, url: Url) -> Result<ClientSoma> {
+        let this_soma = axon.effector()?.this_soma();
+        axon.effector()?.send(
+            this_soma, Signal::ClientAttemptConnect(url)
         );
 
         Ok(
-            ClientCell::Connect(
+            ClientSoma::Connect(
                 Connect {
                     timer: Timer::default(),
                     retries: NUM_RETRIES,
@@ -450,34 +450,34 @@ impl Connect {
         )
     }
 
-    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
-        -> Result<ClientCell>
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ClientSoma>
     {
         match msg {
-            Protocol::Message(src, Message::ClientAttemptConnect(url)) => {
-                self.attempt_connect(soma, src, url)
+            Impulse::Signal(src, Signal::ClientAttemptConnect(url)) => {
+                self.attempt_connect(axon, src, url)
             },
-            Protocol::Message(src, Message::ClientConnected(sender)) => {
-                self.on_connected(soma, src, sender)
+            Impulse::Signal(src, Signal::ClientConnected(sender)) => {
+                self.on_connected(axon, src, sender)
             },
 
-            Protocol::Message(_, msg) => {
+            Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
             },
             _ => bail!("unexpected protocol message")
         }
     }
 
-    fn attempt_connect(mut self, soma: &Soma, src: Handle, url: Url)
-        -> Result<ClientCell>
+    fn attempt_connect(mut self, axon: &Axon, src: Handle, url: Url)
+        -> Result<ClientSoma>
     {
-        assert_eq!(src, soma.effector()?.this_cell());
+        assert_eq!(src, axon.effector()?.this_soma());
 
-        let connected_effector = soma.effector()?.clone();
-        let retry_effector = soma.effector()?.clone();
-        let timer_effector = soma.effector()?.clone();
+        let connected_effector = axon.effector()?.clone();
+        let retry_effector = axon.effector()?.clone();
+        let timer_effector = axon.effector()?.clone();
 
-        let client_remote = soma.effector()?.remote();
+        let client_remote = axon.effector()?.remote();
 
         if self.retries == 0 {
             bail!("unable to connect to instance")
@@ -494,11 +494,11 @@ impl Connect {
 
         let retry_url = url.clone();
 
-        soma.effector()?.spawn(
+        axon.effector()?.spawn(
             self.timer.sleep(time::Duration::from_secs(5))
                 .and_then(move |_| connect_async(url, client_remote)
                     .and_then(move |(ws_stream, _)| {
-                        let this_cell = connected_effector.this_cell();
+                        let this_soma = connected_effector.this_soma();
 
                         let (send_tx, send_rx) = mpsc::channel(10);
 
@@ -523,22 +523,22 @@ impl Connect {
                         connected_effector.spawn(
                             stream.for_each(move |msg| {
                                 recv_eff.send(
-                                    this_cell, Message::ClientReceive(msg)
+                                    this_soma, Signal::ClientReceive(msg)
                                 );
 
                                 Ok(())
                             })
                                 .and_then(move |_| {
                                     close_eff.send(
-                                        this_cell, Message::ClientClosed
+                                        this_soma, Signal::ClientClosed
                                     );
 
                                     Ok(())
                                 })
                                 .or_else(move |e| {
                                     error_eff.send(
-                                        this_cell,
-                                        Message::ClientError(
+                                        this_soma,
+                                        Signal::ClientError(
                                             Rc::from(
                                                 Error::with_chain(
                                                     e,
@@ -552,17 +552,17 @@ impl Connect {
                                 })
                         );
                         connected_effector.send(
-                            this_cell,
-                            Message::ClientConnected(send_tx)
+                            this_soma,
+                            Signal::ClientConnected(send_tx)
                         );
 
                         Ok(())
                     })
                     .or_else(move |_| {
-                        let this_cell = retry_effector.this_cell();
+                        let this_soma = retry_effector.this_soma();
                         retry_effector.send(
-                            this_cell,
-                            Message::ClientAttemptConnect(retry_url)
+                            this_soma,
+                            Signal::ClientAttemptConnect(retry_url)
                         );
 
                         Ok(())
@@ -571,7 +571,7 @@ impl Connect {
                 .or_else(move |e| {
                     timer_effector.error(
                         organelle::Error::with_chain(
-                            e, organelle::ErrorKind::CellError
+                            e, organelle::ErrorKind::SomaError
                         )
                     );
 
@@ -579,20 +579,20 @@ impl Connect {
                 })
         );
 
-        Ok(ClientCell::Connect(self))
+        Ok(ClientSoma::Connect(self))
     }
 
     fn on_connected(
         self,
-        soma: &Soma,
+        axon: &Axon,
         src: Handle,
         sender: mpsc::Sender<tungstenite::Message>
     )
-        -> Result<ClientCell>
+        -> Result<ClientSoma>
     {
-        assert_eq!(src, soma.effector()?.this_cell());
+        assert_eq!(src, axon.effector()?.this_soma());
 
-        Open::open(soma, sender, self.timer)
+        Open::open(axon, sender, self.timer)
     }
 }
 
@@ -607,16 +607,16 @@ pub struct Open {
 
 impl Open {
     fn open(
-        soma: &Soma, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
+        axon: &Axon, sender: mpsc::Sender<tungstenite::Message>, timer: Timer
     )
-        -> Result<ClientCell>
+        -> Result<ClientSoma>
     {
-        for c in soma.var_input(Role::Client)? {
-            soma.effector()?.send(*c, Message::Ready);
+        for c in axon.var_input(Synapse::Client)? {
+            axon.effector()?.send(*c, Signal::Ready);
         }
 
         Ok(
-            ClientCell::Open(
+            ClientSoma::Open(
                 Open {
                     sender: sender,
                     timer: timer,
@@ -627,40 +627,40 @@ impl Open {
         )
     }
 
-    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
-        -> Result<ClientCell>
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ClientSoma>
     {
         match msg {
-            Protocol::Message(src, Message::ClientRequest(req)) => {
-                self.send(soma, src, req)
+            Impulse::Signal(src, Signal::ClientRequest(req)) => {
+                self.send(axon, src, req)
             },
-            Protocol::Message(src, Message::ClientReceive(msg)) => {
-                self.recv(soma, src, msg)
+            Impulse::Signal(src, Signal::ClientReceive(msg)) => {
+                self.recv(axon, src, msg)
             },
-            Protocol::Message(
-                src, Message::ClientTimeout(transaction)
+            Impulse::Signal(
+                src, Signal::ClientTimeout(transaction)
             ) => {
-                self.on_timeout(soma, src, transaction)
+                self.on_timeout(axon, src, transaction)
             },
-            Protocol::Message(_, Message::ClientDisconnect) => {
+            Impulse::Signal(_, Signal::ClientDisconnect) => {
                 Disconnect::disconnect()
             },
-            Protocol::Message(src, Message::ClientClosed) => {
-                self.on_close(soma, src)
+            Impulse::Signal(src, Signal::ClientClosed) => {
+                self.on_close(axon, src)
             },
-            Protocol::Message(src, Message::ClientError(e)) => {
-                self.on_error(soma, src, e)
+            Impulse::Signal(src, Signal::ClientError(e)) => {
+                self.on_error(axon, src, e)
             },
 
-            Protocol::Message(_, msg) => {
+            Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
             },
             _ => bail!("unexpected protocol message")
         }
     }
 
-    fn send(mut self, soma: &Soma, src: Handle, req: ClientRequest)
-        -> Result<ClientCell>
+    fn send(mut self, axon: &Axon, src: Handle, req: ClientRequest)
+        -> Result<ClientSoma>
     {
         let buf = Vec::new();
         let mut writer = buf.writer();
@@ -677,9 +677,9 @@ impl Open {
             cos.flush()?;
         }
 
-        let timeout_effector = soma.effector()?.clone();
+        let timeout_effector = axon.effector()?.clone();
 
-        soma.effector()?.spawn(
+        axon.effector()?.spawn(
             self.timer.timeout(
                 self.sender.clone().send(
                     tungstenite::Message::Binary(writer.into_inner())
@@ -690,23 +690,23 @@ impl Open {
             )
             .and_then(|_| Ok(()))
             .or_else(move |_| {
-                let this_cell = timeout_effector.this_cell();
+                let this_soma = timeout_effector.this_soma();
 
                 timeout_effector.send(
-                    this_cell, Message::ClientTimeout(transaction)
+                    this_soma, Signal::ClientTimeout(transaction)
                 );
 
                 Ok(())
             })
         );
 
-        Ok(ClientCell::Open(self))
+        Ok(ClientSoma::Open(self))
     }
 
-    fn recv(mut self, soma: &Soma, src: Handle, msg: tungstenite::Message)
-        -> Result<ClientCell>
+    fn recv(mut self, axon: &Axon, src: Handle, msg: tungstenite::Message)
+        -> Result<ClientSoma>
     {
-        assert_eq!(src, soma.effector()?.this_cell());
+        assert_eq!(src, axon.effector()?.this_soma());
 
         let rsp = match msg {
             tungstenite::Message::Binary(buf) => {
@@ -726,18 +726,18 @@ impl Open {
             // rx must be closed
         }
 
-        soma.effector()?.send(
+        axon.effector()?.send(
             dest,
-            Message::ClientResult(ClientResult::success(transaction, rsp))
+            Signal::ClientResult(ClientResult::success(transaction, rsp))
         );
 
-        Ok(ClientCell::Open(self))
+        Ok(ClientSoma::Open(self))
     }
 
-    fn on_timeout(mut self, soma: &Soma, src: Handle, transaction: Uuid)
-        -> Result<ClientCell>
+    fn on_timeout(mut self, axon: &Axon, src: Handle, transaction: Uuid)
+        -> Result<ClientSoma>
     {
-        assert_eq!(src, soma.effector()?.this_cell());
+        assert_eq!(src, axon.effector()?.this_soma());
 
         if let Some(i) = self.transactions.iter()
             .position(|&(ref t, _, _)| *t == transaction)
@@ -745,45 +745,45 @@ impl Open {
             let dest = self.transactions[i].1;
 
             self.transactions.remove(i);
-            soma.effector()?.send(
-                dest, Message::ClientTimeout(transaction)
+            axon.effector()?.send(
+                dest, Signal::ClientTimeout(transaction)
             );
         }
 
-        Ok(ClientCell::Open(self))
+        Ok(ClientSoma::Open(self))
     }
 
-    fn on_close(self, soma: &Soma, src: Handle) -> Result<ClientCell> {
-        assert_eq!(src, soma.effector()?.this_cell());
+    fn on_close(self, axon: &Axon, src: Handle) -> Result<ClientSoma> {
+        assert_eq!(src, axon.effector()?.this_soma());
 
-        AwaitInstance::reset(soma)
+        AwaitInstance::reset(axon)
     }
 
-    fn on_error(self, soma: &Soma, src: Handle, e: Rc<Error>) -> Result<ClientCell> {
-        assert_eq!(src, soma.effector()?.this_cell());
+    fn on_error(self, axon: &Axon, src: Handle, e: Rc<Error>) -> Result<ClientSoma> {
+        assert_eq!(src, axon.effector()?.this_soma());
 
-        AwaitInstance::reset_error(soma, e)
+        AwaitInstance::reset_error(axon, e)
     }
 }
 
 pub struct Disconnect { }
 
 impl Disconnect {
-    fn disconnect() -> Result<ClientCell> {
-        Ok(ClientCell::Disconnect(Disconnect { }))
+    fn disconnect() -> Result<ClientSoma> {
+        Ok(ClientSoma::Disconnect(Disconnect { }))
     }
-    fn update(self, soma: &Soma, msg: Protocol<Message, Role>)
-        -> Result<ClientCell>
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ClientSoma>
     {
         match msg {
-            Protocol::Message(_, Message::ClientClosed) => {
-                AwaitInstance::reset(soma)
+            Impulse::Signal(_, Signal::ClientClosed) => {
+                AwaitInstance::reset(axon)
             },
-            Protocol::Message(_, Message::ClientError(e)) => {
-                AwaitInstance::reset_error(soma, e)
+            Impulse::Signal(_, Signal::ClientError(e)) => {
+                AwaitInstance::reset_error(axon, e)
             },
 
-            Protocol::Message(_, msg) => {
+            Impulse::Signal(_, msg) => {
                 bail!("unexpected msg {:#?}", msg)
             },
             _ => bail!("unexpected protocol message")
