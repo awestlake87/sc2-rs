@@ -45,10 +45,10 @@ use futures::sync::mpsc::{ Sender };
 use url::Url;
 use uuid::Uuid;
 
-pub use self::agent::{ AgentCell };
+pub use self::agent::{ AgentSoma };
 pub use self::client::{ ClientRequest, ClientResult };
-pub use self::computer::{ ComputerCell };
-pub use self::ctrlc_breaker::{ CtrlcBreakerCell };
+pub use self::computer::{ ComputerSoma };
+pub use self::ctrlc_breaker::{ CtrlcBreakerSoma };
 pub use self::data::{
     Color,
     Rect,
@@ -98,8 +98,8 @@ pub use self::frame::{
     GameState,
     GameData,
 };
-pub use self::launcher::{ LauncherCell, LauncherSettings };
-pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeCell };
+pub use self::launcher::{ LauncherSoma, LauncherSettings };
+pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeSoma };
 
 error_chain! {
     links {
@@ -184,7 +184,7 @@ trait IntoProto<T> {
 
 /// the messages that can be sent between Sc2 capable
 #[derive(Debug)]
-pub enum Message {
+pub enum Signal {
     /// get instances pool
     GetInstancePool,
     /// get the ports pool
@@ -196,7 +196,7 @@ pub enum Message {
     /// the pool of game ports to choose from (num_instances / 2)
     PortsPool(Vec<GamePorts>),
 
-    /// allow a cell to take complete control of an instance
+    /// allow a soma to take complete control of an instance
     ProvideInstance(Uuid, Url),
 
     /// attempt to connect to instance
@@ -253,7 +253,7 @@ pub enum Message {
     Command(Command),
     /// issue a debug command to the game instance
     DebugCommand(DebugCommand),
-    /// notify the stepper that the cell is done updating
+    /// notify the stepper that the soma is done updating
     UpdateComplete,
 
     /// game ended
@@ -261,8 +261,8 @@ pub enum Message {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-/// defines the roles that govern how connections between cells are made
-pub enum Role {
+/// defines the roles that govern how connections between somas are made
+pub enum Synapse {
     /// launches new game instances or kills them
     Launcher,
     /// broadcasts idle instances
@@ -280,9 +280,5 @@ pub enum Role {
     Observer,
 }
 
-/// type alias for an Sc2 Organelle
-pub type Organelle = organelle::Organelle<Message, Role>;
-/// type alias for an Sc2 Soma
-pub type Soma = organelle::Soma<Message, Role>;
-/// type alias for an Sc2 Eukaryote
-pub type Eukaryote<T> = organelle::Eukaryote<Message, Role, T>;
+/// type alias for an Sc2 Axon
+pub type Axon = organelle::Axon<Signal, Synapse>;

@@ -15,14 +15,14 @@ extern crate sc2;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use organelle::{ Organelle, Cell, Protocol, ResultExt, Constraint };
+use organelle::{ Organelle, Soma, Impulse, ResultExt, Dendrite };
 use docopt::Docopt;
 use rand::random;
 use sc2::{
     Result,
-    Message,
-    Role,
-    Soma,
+    Signal,
+    Synapse,
+    Axon,
     FrameData,
     PlayerSetup,
     Race,
@@ -103,21 +103,21 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 
 const TARGET_SCV_COUNT: usize = 15;
 
-pub enum TerranCell {
+pub enum TerranSoma {
     Init(Init),
     Setup(Setup),
 
     InGame(InGame),
 }
 
-impl TerranCell {
+impl TerranSoma {
     pub fn organelle(interval: u32) -> Result<Self> {
         Ok(
-            TerranCell::Init(
+            TerranSoma::Init(
                 Init {
-                    soma: Soma::new(
+                    axon: Axon::new(
                         vec![
-                            Constraint::RequireOne(Role::Agent),
+                            Dendrite::RequireOne(Synapse::Agent),
                         ],
                         vec![ ],
                     )?,
@@ -128,142 +128,142 @@ impl TerranCell {
     }
 }
 
-impl Cell for TerranCell {
-    type Message = Message;
-    type Role = Role;
+impl Soma for TerranSoma {
+    type Signal = Signal;
+    type Synapse = Synapse;
 
-    fn update(self, msg: Protocol<Message, Role>)
-        -> organelle::Result<TerranCell>
+    fn update(self, msg: Impulse<Signal, Synapse>)
+        -> organelle::Result<TerranSoma>
     {
         match self {
-            TerranCell::Init(state) => state.update(msg),
-            TerranCell::Setup(state) => state.update(msg),
+            TerranSoma::Init(state) => state.update(msg),
+            TerranSoma::Setup(state) => state.update(msg),
 
-            TerranCell::InGame(state) => state.update(msg),
+            TerranSoma::InGame(state) => state.update(msg),
         }.chain_err(
-            || organelle::ErrorKind::CellError
+            || organelle::ErrorKind::SomaError
         )
     }
 }
 
 pub struct Init {
-    soma:           Soma,
+    axon:           Axon,
     interval:       u32,
 }
 
 impl Init {
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranCell> {
-        if let Some(msg) = self.soma.update(msg)? {
+    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Start => Setup::setup(self.soma, self.interval),
+                Impulse::Start => Setup::setup(self.axon, self.interval),
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message"),
             }
         }
         else {
-            Ok(TerranCell::Init(self))
+            Ok(TerranSoma::Init(self))
         }
     }
 }
 
 pub struct Setup {
-    soma:           Soma,
+    axon:           Axon,
     interval:       u32,
 }
 
 impl Setup {
-    fn setup(soma: Soma, interval: u32) -> Result<TerranCell> {
-        Ok(TerranCell::Setup(Setup { soma: soma, interval: interval }))
+    fn setup(axon: Axon, interval: u32) -> Result<TerranSoma> {
+        Ok(TerranSoma::Setup(Setup { axon: axon, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>)-> Result<TerranCell> {
-        if let Some(msg) = self.soma.update(msg)? {
+    fn update(mut self, msg: Impulse<Signal, Synapse>)-> Result<TerranSoma> {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Message(_, Message::RequestPlayerSetup(_)) => {
-                    self.soma.send_req_input(
-                        Role::Agent,
-                        Message::PlayerSetup(
+                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
+                    self.axon.send_req_input(
+                        Synapse::Agent,
+                        Signal::PlayerSetup(
                             PlayerSetup::Player {
                                 race: Race::Terran
                             }
                         )
                     )?;
 
-                    Ok(TerranCell::Setup(self))
+                    Ok(TerranSoma::Setup(self))
                 },
-                Protocol::Message(_, Message::RequestUpdateInterval) => {
-                    self.soma.send_req_input(
-                        Role::Agent, Message::UpdateInterval(self.interval)
+                Impulse::Signal(_, Signal::RequestUpdateInterval) => {
+                    self.axon.send_req_input(
+                        Synapse::Agent, Signal::UpdateInterval(self.interval)
                     )?;
 
-                    Ok(TerranCell::Setup(self))
+                    Ok(TerranSoma::Setup(self))
                 },
-                Protocol::Message(_, Message::GameStarted) => {
-                    InGame::start(self.soma, self.interval)
+                Impulse::Signal(_, Signal::GameStarted) => {
+                    InGame::start(self.axon, self.interval)
                 },
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message"),
             }
         }
         else {
-            Ok(TerranCell::Setup(self))
+            Ok(TerranSoma::Setup(self))
         }
     }
 }
 
 pub struct InGame {
-    soma:           Soma,
+    axon:           Axon,
     interval:       u32,
 }
 
 impl InGame {
-    fn start(soma: Soma, interval: u32) -> Result<TerranCell> {
-        Ok(TerranCell::InGame(InGame { soma: soma, interval: interval }))
+    fn start(axon: Axon, interval: u32) -> Result<TerranSoma> {
+        Ok(TerranSoma::InGame(InGame { axon: axon, interval: interval }))
     }
 
-    fn update(mut self, msg: Protocol<Message, Role>) -> Result<TerranCell> {
-        if let Some(msg) = self.soma.update(msg)? {
+    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
+        if let Some(msg) = self.axon.update(msg)? {
             match msg {
-                Protocol::Message(_, Message::Observation(frame)) => {
+                Impulse::Signal(_, Signal::Observation(frame)) => {
                     self.on_frame(frame)
                 },
 
-                Protocol::Message(_, Message::GameEnded) => {
-                    Setup::setup(self.soma, self.interval)
+                Impulse::Signal(_, Signal::GameEnded) => {
+                    Setup::setup(self.axon, self.interval)
                 },
 
-                Protocol::Message(_, msg) => {
+                Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
                 _ => bail!("unexpected protocol message")
             }
         }
         else {
-            Ok(TerranCell::InGame(self))
+            Ok(TerranSoma::InGame(self))
         }
     }
 
-    fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranCell> {
+    fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranSoma> {
         let commands = self.create_commands(&*frame)?;
 
-        let agent = self.soma.req_input(Role::Agent)?;
+        let agent = self.axon.req_input(Synapse::Agent)?;
 
-        let mut messages: Vec<Message> = commands.into_iter()
-            .map(|cmd| Message::Command(cmd))
+        let mut messages: Vec<Signal> = commands.into_iter()
+            .map(|cmd| Signal::Command(cmd))
             .collect()
         ;
 
-        messages.push(Message::UpdateComplete);
+        messages.push(Signal::UpdateComplete);
 
-        self.soma.effector()?.send_in_order(agent, messages);
+        self.axon.effector()?.send_in_order(agent, messages);
 
-        Ok(TerranCell::InGame(self))
+        Ok(TerranSoma::InGame(self))
     }
 
     fn create_commands(&self, frame: &FrameData) -> Result<Vec<Command>> {
@@ -493,17 +493,17 @@ quick_main!(
         }
 
         let mut organelle = Organelle::new(
-            sc2::MeleeCell::organelle(
+            sc2::MeleeSoma::organelle(
                 sc2::MeleeSettings {
                     launcher: get_launcher_settings(&args)?,
                     players: (
-                        sc2::AgentCell::organelle(
-                            TerranCell::organelle(
+                        sc2::AgentSoma::organelle(
+                            TerranSoma::organelle(
                                 args.flag_step_size.unwrap_or(1)
                             )?
                         )?,
-                        sc2::AgentCell::organelle(
-                            TerranCell::organelle(
+                        sc2::AgentSoma::organelle(
+                            TerranSoma::organelle(
                                 args.flag_step_size.unwrap_or(1)
                             )?
                         )?,
@@ -515,7 +515,7 @@ quick_main!(
             )?
         );
 
-        organelle.add_cell(sc2::CtrlcBreakerCell::new()?);
+        organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
 
         organelle.run()?;
 
