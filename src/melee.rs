@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use organelle;
-use organelle::{ Soma, Handle, Impulse, ResultExt, Dendrite };
+use organelle::{ Soma, Neuron, Handle, Impulse, ResultExt, Dendrite };
 use url::Url;
 use uuid::Uuid;
 
@@ -13,6 +13,7 @@ use super::{
     Synapse,
     Organelle,
     Axon,
+    Sheath,
 
     GameSettings,
     GamePorts,
@@ -61,23 +62,18 @@ pub enum MeleeSoma {
 
 impl MeleeSoma {
     /// melee soma only works as a controller in a melee organelle
-    fn new(suite: MeleeSuite) -> Result<Self> {
+    fn sheath(suite: MeleeSuite) -> Result<Sheath<Self>> {
         Ok(
-            MeleeSoma::Init(
-                Init {
-                    axon: Axon::new(
-                        vec![ ],
-                        vec![
-                            Dendrite::RequireOne(Synapse::Launcher),
+            Sheath::new(
+                MeleeSoma::Init(Init { suite: suite }),
+                vec![ ],
+                vec![
+                    Dendrite::RequireOne(Synapse::Launcher),
 
-                            Dendrite::Variadic(Synapse::Controller),
-                            Dendrite::Variadic(Synapse::InstanceProvider),
-                        ]
-                    )?,
-
-                    suite: suite,
-                }
-            )
+                    Dendrite::Variadic(Synapse::Controller),
+                    Dendrite::Variadic(Synapse::InstanceProvider),
+                ]
+            )?
         )
     }
 
@@ -96,9 +92,11 @@ impl MeleeSoma {
             L1::Synapse: From<Synapse>,
             L2::Synapse: From<Synapse>,
     {
-        let mut organelle = Organelle::new(MeleeSoma::new(settings.suite)?);
+        let mut organelle = Organelle::new(MeleeSoma::sheath(settings.suite)?);
 
-        let launcher = organelle.add_soma(LauncherSoma::from(settings.launcher)?);
+        let launcher = organelle.add_soma(
+            LauncherSoma::sheath(settings.launcher)?
+        );
 
         let melee = organelle.get_main_handle();
 
@@ -116,20 +114,20 @@ impl MeleeSoma {
     }
 }
 
-impl Soma for MeleeSoma {
+impl Neuron for MeleeSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Self::Signal, Self::Synapse>)
+    fn update(self, axon: &Axon, msg: Impulse<Self::Signal, Self::Synapse>)
         -> organelle::Result<Self>
     {
         match self {
-            MeleeSoma::Init(state) => state.update(msg),
-            MeleeSoma::Setup(state) => state.update(msg),
-            MeleeSoma::Launch(state) => state.update(msg),
-            MeleeSoma::PlayerVsPlayer(state) => state.update(msg),
-            MeleeSoma::PlayerVsComputer(state) => state.update(msg),
-            MeleeSoma::Completed(state) => state.update(msg),
+            MeleeSoma::Init(state) => state.update(axon, msg),
+            MeleeSoma::Setup(state) => state.update(axon, msg),
+            MeleeSoma::Launch(state) => state.update(axon, msg),
+            MeleeSoma::PlayerVsPlayer(state) => state.update(axon, msg),
+            MeleeSoma::PlayerVsComputer(state) => state.update(axon, msg),
+            MeleeSoma::Completed(state) => state.update(axon, msg),
         }.chain_err(
             || organelle::ErrorKind::SomaError
         )
@@ -137,31 +135,25 @@ impl Soma for MeleeSoma {
 }
 
 pub struct Init {
-    axon:               Axon,
     suite:              MeleeSuite,
 }
 
 impl Init {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon, self.suite),
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Start => Setup::setup(axon, self.suite),
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(MeleeSoma::Init(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct Setup {
-    axon:               Axon,
     suite:              Option<MeleeSuite>,
 
     agents:             (Handle, Handle),
@@ -172,7 +164,7 @@ pub struct Setup {
 }
 
 impl Setup {
-    fn setup(axon: Axon, suite: MeleeSuite) -> Result<MeleeSoma> {
+    fn setup(axon: &Axon, suite: MeleeSuite) -> Result<MeleeSoma> {
         let clients = axon.var_output(Synapse::InstanceProvider)?.clone();
         let agents = axon.var_output(Synapse::Controller)?.clone();
 
@@ -203,7 +195,6 @@ impl Setup {
         Ok(
             MeleeSoma::Setup(
                 Setup {
-                    axon: axon,
                     suite: suite,
 
                     agents: (agents[0], agents[1]),
@@ -216,25 +207,22 @@ impl Setup {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
-                    self.on_player_setup(src, setup)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
+                self.on_player_setup(axon, src, setup)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(MeleeSoma::Setup(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_player_setup(mut self, src: Handle, setup: PlayerSetup)
+    fn on_player_setup(mut self, axon: &Axon, src: Handle, setup: PlayerSetup)
         -> Result<MeleeSoma>
     {
         if src == self.agents.0 {
@@ -250,7 +238,7 @@ impl Setup {
         match self.players {
             (Some(setup1), Some(setup2)) => {
                 Launch::launch(
-                    self.axon,
+                    axon,
                     self.suite,
                     self.agents,
                     self.clients,
@@ -265,7 +253,6 @@ impl Setup {
 }
 
 pub struct Launch {
-    axon:                   Axon,
     suite:                  Option<MeleeSuite>,
     launcher:               Handle,
 
@@ -283,7 +270,7 @@ pub struct Launch {
 
 impl Launch {
     fn launch(
-        axon: Axon,
+        axon: &Axon,
         suite: Option<MeleeSuite>,
         agents: (Handle, Handle),
         clients: (Handle, Handle),
@@ -314,7 +301,6 @@ impl Launch {
         Ok(
             MeleeSoma::Launch(
                 Launch {
-                    axon: axon,
                     suite: suite,
                     launcher: launcher,
 
@@ -332,30 +318,29 @@ impl Launch {
             )
         )
     }
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::InstancePool(instances)) => {
-                    self.on_instance_pool(src, instances)
-                },
-                Impulse::Signal(src, Signal::PortsPool(ports)) => {
-                    self.on_ports_pool(src, ports)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::InstancePool(instances)) => {
+                self.on_instance_pool(axon, src, instances)
+            },
+            Impulse::Signal(src, Signal::PortsPool(ports)) => {
+                self.on_ports_pool(axon, src, ports)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(MeleeSoma::Launch(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
     fn on_instance_pool(
-        mut self, src: Handle, instances: HashMap<Uuid, (Url, PortSet)>
+        mut self,
+        axon: &Axon,
+        src: Handle,
+        instances: HashMap<Uuid, (Url, PortSet)>
     )
         -> Result<MeleeSoma>
     {
@@ -363,27 +348,27 @@ impl Launch {
 
         self.instances = instances;
 
-        self.launch_instances()?;
-        self.try_provide_instances()
+        self.launch_instances(axon)?;
+        self.try_provide_instances(axon)
     }
 
-    fn on_ports_pool(mut self, src: Handle, ports: Vec<GamePorts>)
+    fn on_ports_pool(mut self, axon: &Axon, src: Handle, ports: Vec<GamePorts>)
         -> Result<MeleeSoma>
     {
         assert_eq!(src, self.launcher);
 
         self.ports = ports;
 
-        self.launch_instances()?;
-        self.try_provide_instances()
+        self.launch_instances(axon)?;
+        self.try_provide_instances(axon)
     }
 
-    fn launch_instances(&mut self) -> Result<()> {
+    fn launch_instances(&mut self, axon: &Axon) -> Result<()> {
         if self.is_pvp {
             if self.instances.len() < 2 && self.instances_requested < 2 {
                 // launch as many instances as needed
                 while self.instances_requested < 2 {
-                    self.axon.send_req_output(
+                    axon.send_req_output(
                         Synapse::Launcher, Signal::LaunchInstance
                     )?;
 
@@ -393,7 +378,7 @@ impl Launch {
         }
         else {
             if self.instances.len() < 1 && self.instances_requested == 0 {
-                self.axon.send_req_output(
+                axon.send_req_output(
                     Synapse::Launcher, Signal::LaunchInstance
                 )?;
                 self.instances_requested = 1;
@@ -403,7 +388,7 @@ impl Launch {
         Ok(())
     }
 
-    fn try_provide_instances(self) -> Result<MeleeSoma> {
+    fn try_provide_instances(self, axon: &Axon) -> Result<MeleeSoma> {
         if self.is_pvp {
             if self.instances.len() >= 2 && self.ports.len() >= 1 {
                 let (id1, &(ref url1, ref ports1)) = self.instances.iter()
@@ -416,17 +401,16 @@ impl Launch {
 
                 ports.client_ports = vec![ *ports1, *ports2 ];
 
-                self.axon.effector()?.send(
+                axon.effector()?.send(
                     self.clients.0,
                     Signal::ProvideInstance(*id1, url1.clone())
                 );
-                self.axon.effector()?.send(
+                axon.effector()?.send(
                     self.clients.1,
                     Signal::ProvideInstance(*id2, url2.clone())
                 );
 
                 PlayerVsPlayer::start(
-                    self.axon,
                     self.suite,
                     self.agents,
                     self.players,
@@ -460,12 +444,11 @@ impl Launch {
                 }
             };
 
-            self.axon.effector()?.send(
+            axon.effector()?.send(
                 player, Signal::ProvideInstance(*id, url.clone())
             );
 
             PlayerVsComputer::start(
-                self.axon,
                 self.suite,
                 (player, player_setup),
                 (computer, computer_setup),
@@ -479,7 +462,6 @@ impl Launch {
 }
 
 pub struct PlayerVsPlayer {
-    axon: Axon,
     suite: Option<MeleeSuite>,
 
     agents: (Handle, Handle),
@@ -494,7 +476,6 @@ pub struct PlayerVsPlayer {
 
 impl PlayerVsPlayer {
     fn start(
-        axon: Axon,
         suite: Option<MeleeSuite>,
         agents: (Handle, Handle),
         players: (PlayerSetup, PlayerSetup),
@@ -506,7 +487,6 @@ impl PlayerVsPlayer {
         Ok(
             MeleeSoma::PlayerVsPlayer(
                 PlayerVsPlayer {
-                    axon: axon,
                     suite: suite,
 
                     agents: agents,
@@ -521,32 +501,30 @@ impl PlayerVsPlayer {
             )
         )
     }
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::Ready) => {
-                    self.on_agent_ready(src)
-                },
-                Impulse::Signal(src, Signal::GameCreated) => {
-                    self.on_game_created(src)
-                },
-                Impulse::Signal(src, Signal::GameEnded) => {
-                    self.on_game_ended(src)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::Ready) => {
+                self.on_agent_ready(axon, src)
+            },
+            Impulse::Signal(src, Signal::GameCreated) => {
+                self.on_game_created(axon, src)
+            },
+            Impulse::Signal(src, Signal::GameEnded) => {
+                self.on_game_ended(axon, src)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(MeleeSoma::PlayerVsPlayer(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_agent_ready(mut self, src: Handle) -> Result<MeleeSoma> {
+    fn on_agent_ready(mut self, axon: &Axon, src: Handle)
+        -> Result<MeleeSoma>
+    {
         if src == self.agents.0 {
             self.ready.0 = true;
         }
@@ -558,7 +536,7 @@ impl PlayerVsPlayer {
         }
 
         if self.ready == (true, true) {
-            self.axon.effector()?.send(
+            axon.effector()?.send(
                 self.agents.0,
                 Signal::CreateGame(
                     self.game.clone(), vec![ self.players.0, self.players.1 ]
@@ -569,14 +547,14 @@ impl PlayerVsPlayer {
         Ok(MeleeSoma::PlayerVsPlayer(self))
     }
 
-    fn on_game_created(self, src: Handle) -> Result<MeleeSoma> {
+    fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
         assert_eq!(src, self.agents.0);
 
-        self.axon.effector()?.send(
+        axon.effector()?.send(
             self.agents.0,
             Signal::GameReady(self.players.0, Some(self.ports.clone()))
         );
-        self.axon.effector()?.send(
+        axon.effector()?.send(
             self.agents.1,
             Signal::GameReady(self.players.1, Some(self.ports.clone()))
         );
@@ -584,7 +562,7 @@ impl PlayerVsPlayer {
         Ok(MeleeSoma::PlayerVsPlayer(self))
     }
 
-    fn on_game_ended(mut self, src: Handle) -> Result<MeleeSoma> {
+    fn on_game_ended(mut self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
         if src == self.agents.0 {
             self.ended.0 = true;
         }
@@ -597,10 +575,10 @@ impl PlayerVsPlayer {
 
         if self.ended == (true, true) {
             if self.suite.is_none() {
-                Completed::complete(self.axon)
+                Completed::complete(axon)
             }
             else {
-                Setup::setup(self.axon, self.suite.unwrap())
+                Setup::setup(axon, self.suite.unwrap())
             }
         }
         else {
@@ -611,7 +589,6 @@ impl PlayerVsPlayer {
 
 /// MeleeSoma state that pits players against the built-in AI
 pub struct PlayerVsComputer {
-    axon:               Axon,
     suite:              Option<MeleeSuite>,
 
     game:               GameSettings,
@@ -623,7 +600,6 @@ pub struct PlayerVsComputer {
 
 impl PlayerVsComputer {
     fn start(
-        axon: Axon,
         suite: Option<MeleeSuite>,
         player: (Handle, PlayerSetup),
         computer: (Handle, PlayerSetup),
@@ -634,7 +610,6 @@ impl PlayerVsComputer {
         Ok(
             MeleeSoma::PlayerVsComputer(
                 PlayerVsComputer {
-                    axon: axon,
                     suite: suite,
 
                     game: game,
@@ -646,37 +621,33 @@ impl PlayerVsComputer {
             )
         )
     }
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::Ready) => {
-                    self.on_agent_ready(src)
-                },
-                Impulse::Signal(src, Signal::GameCreated) => {
-                    self.on_game_created(src)
-                },
-                Impulse::Signal(src, Signal::GameEnded) => {
-                    self.on_game_ended(src)
-                }
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::Ready) => {
+                self.on_agent_ready(axon, src)
+            },
+            Impulse::Signal(src, Signal::GameCreated) => {
+                self.on_game_created(axon, src)
+            },
+            Impulse::Signal(src, Signal::GameEnded) => {
+                self.on_game_ended(axon, src)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(MeleeSoma::PlayerVsComputer(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_agent_ready(self, src: Handle) -> Result<MeleeSoma> {
+    fn on_agent_ready(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
         if src != self.player {
             bail!("expected source of Ready to be the agent")
         }
 
-        self.axon.effector()?.send(
+        axon.effector()?.send(
             self.player,
             Signal::CreateGame(
                 self.game.clone(),
@@ -687,12 +658,12 @@ impl PlayerVsComputer {
         Ok(MeleeSoma::PlayerVsComputer(self))
     }
 
-    fn on_game_created(self, src: Handle) -> Result<MeleeSoma> {
+    fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
         if src != self.player {
             bail!("expected source of GameCreated to be the agent")
         }
 
-        self.axon.effector()?.send(
+        axon.effector()?.send(
             self.player,
             Signal::GameReady(self.player_setup, None)
         );
@@ -700,44 +671,39 @@ impl PlayerVsComputer {
         Ok(MeleeSoma::PlayerVsComputer(self))
     }
 
-    fn on_game_ended(self, src: Handle) -> Result<MeleeSoma> {
+    fn on_game_ended(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
         if src != self.player {
             bail!("expected source of GameEnded to be an agent")
         }
 
         if self.suite.is_none() {
-            Completed::complete(self.axon)
+            Completed::complete(axon)
         }
         else {
-            Setup::setup(self.axon, self.suite.unwrap())
+            Setup::setup(axon, self.suite.unwrap())
         }
     }
 }
 
-pub struct Completed {
-    axon:               Axon,
-}
+pub struct Completed;
 
 impl Completed {
-    fn complete(axon: Axon) -> Result<MeleeSoma> {
+    fn complete(axon: &Axon) -> Result<MeleeSoma> {
         axon.effector()?.stop();
 
         Ok(
-            MeleeSoma::Completed(Completed { axon: axon })
+            MeleeSoma::Completed(Completed { })
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<MeleeSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(MeleeSoma::Completed(self))
+    fn update(self, _axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<MeleeSoma>
+    {
+        match msg {
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }

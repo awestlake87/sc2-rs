@@ -256,7 +256,7 @@ quick_main!(
                                 args.flag_step_size.unwrap_or(1)
                             )?
                         )?,
-                        sc2::ComputerSoma::new(
+                        sc2::ComputerSoma::sheath(
                             sc2::Race::Zerg, sc2::Difficulty::VeryEasy
                         )?
                     ),

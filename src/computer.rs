@@ -1,8 +1,10 @@
 
 use organelle;
-use organelle::{ ResultExt, Soma, Impulse, Dendrite };
+use organelle::{ ResultExt, Neuron, Impulse, Dendrite };
 
-use super::{ Result, Axon, Signal, Synapse, Race, Difficulty, PlayerSetup };
+use super::{
+    Result, Axon, Signal, Sheath, Synapse, Race, Difficulty, PlayerSetup
+};
 
 /// soma that acts as the built-in SC2 AI
 pub enum ComputerSoma {
@@ -14,36 +16,37 @@ pub enum ComputerSoma {
 
 impl ComputerSoma {
     /// create a new computer soma
-    pub fn new(race: Race, difficulty: Difficulty) -> Result<Self> {
+    pub fn sheath(race: Race, difficulty: Difficulty) -> Result<Sheath<Self>> {
         Ok(
-            ComputerSoma::Init(
-                Init {
-                    axon: Axon::new(
-                        vec![
-                            Dendrite::RequireOne(Synapse::Controller),
-                            Dendrite::RequireOne(Synapse::InstanceProvider),
-                        ],
-                        vec![ ],
-                    )?,
-
-                    setup: PlayerSetup::Computer {
-                        race: race,
-                        difficulty: difficulty,
-                    },
-                }
-            )
+            Sheath::new(
+                ComputerSoma::Init(
+                    Init {
+                        setup: PlayerSetup::Computer {
+                            race: race,
+                            difficulty: difficulty,
+                        },
+                    }
+                ),
+                vec![
+                    Dendrite::RequireOne(Synapse::Controller),
+                    Dendrite::RequireOne(Synapse::InstanceProvider),
+                ],
+                vec![ ],
+            )?
         )
     }
 }
 
-impl Soma for ComputerSoma {
+impl Neuron for ComputerSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Signal, Synapse>) -> organelle::Result<Self> {
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> organelle::Result<Self>
+    {
         match self {
-            ComputerSoma::Init(state) => state.update(msg),
-            ComputerSoma::Setup(state) => state.update(msg),
+            ComputerSoma::Init(state) => state.update(axon, msg),
+            ComputerSoma::Setup(state) => state.update(axon, msg),
         }.chain_err(
             || organelle::ErrorKind::SomaError
         )
@@ -51,60 +54,50 @@ impl Soma for ComputerSoma {
 }
 
 pub struct Init {
-    axon:           Axon,
-
     setup:          PlayerSetup,
 }
 
 impl Init {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ComputerSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon, self.setup),
+    fn update(self, _axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ComputerSoma>
+    {
+        match msg {
+            Impulse::Start => Setup::setup(self.setup),
 
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ComputerSoma::Init(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }
 
 pub struct Setup {
-    axon:           Axon,
-
     setup:          PlayerSetup,
 }
 
 impl Setup {
-    fn setup(axon: Axon, setup: PlayerSetup) -> Result<ComputerSoma> {
-        Ok(ComputerSoma::Setup(Setup { axon: axon, setup: setup }))
+    fn setup(setup: PlayerSetup) -> Result<ComputerSoma> {
+        Ok(ComputerSoma::Setup(Setup { setup: setup }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<ComputerSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
-                    self.axon.send_req_input(
-                        Synapse::Controller, Signal::PlayerSetup(self.setup)
-                    )?;
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<ComputerSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
+                axon.send_req_input(
+                    Synapse::Controller, Signal::PlayerSetup(self.setup)
+                )?;
 
-                    Ok(ComputerSoma::Setup(self))
-                },
+                Ok(ComputerSoma::Setup(self))
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(ComputerSoma::Setup(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }

@@ -4,7 +4,7 @@ use std::env::home_dir;
 use std::path::{ PathBuf, MAIN_SEPARATOR };
 
 use organelle;
-use organelle::{ Soma, Handle, ResultExt, Impulse, Dendrite };
+use organelle::{ Neuron, Handle, ResultExt, Impulse, Dendrite };
 use glob::glob;
 use regex::Regex;
 use uuid::Uuid;
@@ -16,6 +16,7 @@ use super::{
     Signal,
     Axon,
     Synapse,
+    Sheath,
 
     Rect,
     PortSet,
@@ -47,8 +48,6 @@ impl Default for LauncherSettings {
 
 /// soma in charge of launching game instances and assigning ports
 pub struct LauncherSoma {
-    axon:               Axon,
-
     exe:                PathBuf,
     pwd:                Option<PathBuf>,
     current_port:       u16,
@@ -60,7 +59,7 @@ pub struct LauncherSoma {
 
 impl LauncherSoma {
     /// create a launcher from settings
-    pub fn from(settings: LauncherSettings) -> Result<Self> {
+    pub fn sheath(settings: LauncherSettings) -> Result<Sheath<Self>> {
         let dir = {
             if let Some(dir) = settings.dir {
                 dir
@@ -73,26 +72,25 @@ impl LauncherSoma {
         let pwd = select_pwd(&dir, arch);
 
         Ok(
-            Self {
-                axon: Axon::new(
-                    vec![ Dendrite::RequireOne(Synapse::Launcher) ],
-                    vec![ ]
-                )?,
+            Sheath::new(
+                Self {
+                    exe: exe,
+                    pwd: pwd,
+                    current_port: settings.base_port,
+                    use_wine: settings.use_wine,
 
-                exe: exe,
-                pwd: pwd,
-                current_port: settings.base_port,
-                use_wine: settings.use_wine,
-
-                instances: HashMap::new(),
-                ports: vec![ ],
-            }
+                    instances: HashMap::new(),
+                    ports: vec![ ],
+                },
+                vec![ Dendrite::RequireOne(Synapse::Launcher) ],
+                vec![ ]
+            )?
         )
     }
 
     /// launch an instance
-    fn launch(mut self, src: Handle) -> Result<Self> {
-        let controller = self.axon.req_input(Synapse::Launcher)?;
+    fn launch(mut self, axon: &Axon, src: Handle) -> Result<Self> {
+        let controller = axon.req_input(Synapse::Launcher)?;
 
         assert_eq!(src, controller);
 
@@ -124,13 +122,13 @@ impl LauncherSoma {
         let hdl = Uuid::new_v4();
         self.instances.insert(hdl, instance);
 
-        self.send_instance_pool(controller)?;
+        self.send_instance_pool(axon, controller)?;
 
         if self.instances.len() / 2 > self.ports.len() {
             let game_ports = self.create_game_ports();
             self.ports.push(game_ports);
 
-            self.send_ports_pool(controller)?;
+            self.send_ports_pool(axon, controller)?;
         }
 
         Ok(self)
@@ -152,13 +150,13 @@ impl LauncherSoma {
         ports
     }
 
-    fn get_instance_pool(self, src: Handle) -> Result<Self> {
-        self.send_instance_pool(src)?;
+    fn get_instance_pool(self, axon: &Axon, src: Handle) -> Result<Self> {
+        self.send_instance_pool(axon, src)?;
         Ok(self)
     }
 
-    fn send_instance_pool(&self, dest: Handle) -> Result<()> {
-        self.axon.effector()?.send(
+    fn send_instance_pool(&self, axon: &Axon, dest: Handle) -> Result<()> {
+        axon.effector()?.send(
             dest,
             Signal::InstancePool({
                 let mut instances = HashMap::new();
@@ -176,13 +174,13 @@ impl LauncherSoma {
         Ok(())
     }
 
-    fn get_ports_pool(self, src: Handle) -> Result<Self> {
-        self.send_ports_pool(src)?;
+    fn get_ports_pool(self, axon: &Axon, src: Handle) -> Result<Self> {
+        self.send_ports_pool(axon, src)?;
         Ok(self)
     }
 
-    fn send_ports_pool(&self, dest: Handle) -> Result<()> {
-        self.axon.effector()?.send(
+    fn send_ports_pool(&self, axon: &Axon, dest: Handle) -> Result<()> {
+        axon.effector()?.send(
             dest, Signal::PortsPool(self.ports.clone())
         );
 
@@ -190,38 +188,33 @@ impl LauncherSoma {
     }
 }
 
-impl Soma for LauncherSoma {
+impl Neuron for LauncherSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(mut self, msg: Impulse<Self::Signal, Self::Synapse>)
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Ok(self),
+        match msg {
+            Impulse::Start => Ok(self),
 
-                Impulse::Signal(src, Signal::GetInstancePool) => {
-                    self.get_instance_pool(src)
-                },
-                Impulse::Signal(src, Signal::GetPortsPool) => {
-                    self.get_ports_pool(src)
-                },
-                Impulse::Signal(src, Signal::LaunchInstance) => {
-                    self.launch(src)
-                },
+            Impulse::Signal(src, Signal::GetInstancePool) => {
+                self.get_instance_pool(axon, src)
+            },
+            Impulse::Signal(src, Signal::GetPortsPool) => {
+                self.get_ports_pool(axon, src)
+            },
+            Impulse::Signal(src, Signal::LaunchInstance) => {
+                self.launch(axon, src)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }.chain_err(
-                || organelle::ErrorKind::SomaError
-            )
-        }
-        else {
-            Ok(self)
-        }
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
+        }.chain_err(
+            || organelle::ErrorKind::SomaError
+        )
     }
 }
 
