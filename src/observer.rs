@@ -39,7 +39,7 @@ use super::{
     Point2,
     DisplayType,
 };
-use client::{ ClientRequest, ClientResult, Transactor };
+use client::{ ClientSignal, ClientRequest, ClientResult, Transactor };
 
 pub enum ObserverSoma {
     Init(Init),
@@ -128,9 +128,9 @@ impl Started {
         -> Result<ObserverSoma>
     {
         match msg {
-            Impulse::Signal(_, Signal::Ready)
-            | Impulse::Signal(_, Signal::ClientClosed)
-            | Impulse::Signal(_, Signal::ClientError(_)) => {
+            Impulse::Signal(_, Signal::Client(ClientSignal::Ready))
+            | Impulse::Signal(_, Signal::Client(ClientSignal::Closed))
+            | Impulse::Signal(_, Signal::Client(ClientSignal::Error(_))) => {
                 Ok(ObserverSoma::Started(self))
             },
             Impulse::Signal(src, Signal::FetchGameData) => {
@@ -162,7 +162,12 @@ impl FetchGameData {
         let mut req = sc2api::Request::new();
         req.mut_data().set_unit_type_id(true);
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             ObserverSoma::FetchGameData(
@@ -175,7 +180,9 @@ impl FetchGameData {
         -> Result<ObserverSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.on_game_data(axon, src, result)
             }
 
@@ -252,7 +259,11 @@ impl FetchTerrainData {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             ObserverSoma::FetchTerrainData(
@@ -272,7 +283,9 @@ impl FetchTerrainData {
         -> Result<ObserverSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(rsp)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(rsp))
+            ) => {
                 self.on_terrain_info(axon, src, rsp)
             },
 
@@ -379,7 +392,11 @@ impl Observe {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             ObserverSoma::Observe(
@@ -396,7 +413,9 @@ impl Observe {
         -> Result<ObserverSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.on_observe(axon, src, result)
             },
 

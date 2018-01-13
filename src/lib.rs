@@ -41,12 +41,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use futures::sync::mpsc::{ Sender };
 use url::Url;
 use uuid::Uuid;
 
 pub use self::agent::{ AgentSoma };
-pub use self::client::{ ClientRequest, ClientResult };
+pub use self::client::{ ClientSignal, ClientRequest, ClientResult };
 pub use self::computer::{ ComputerSoma };
 pub use self::ctrlc_breaker::{ CtrlcBreakerSoma };
 pub use self::data::{
@@ -196,27 +195,8 @@ pub enum Signal {
     /// the pool of game ports to choose from (num_instances / 2)
     PortsPool(Vec<GamePorts>),
 
-    /// allow a soma to take complete control of an instance
-    ProvideInstance(Uuid, Url),
-
-    /// attempt to connect to instance
-    ClientAttemptConnect(Url),
-    /// internal-use client successfully connected to instance
-    ClientConnected(Sender<tungstenite::Message>),
-    /// internal-use client received a message
-    ClientReceive(tungstenite::Message),
-    /// send some request to the game instance
-    ClientRequest(ClientRequest),
-    /// result of transaction with game instance
-    ClientResult(ClientResult),
-    /// internal-use message used to indicate when a transaction has timed out
-    ClientTimeout(Uuid),
-    /// disconnect from the instance
-    ClientDisconnect,
-    /// client has closed
-    ClientClosed,
-    /// client encountered a websocket error
-    ClientError(Rc<Error>),
+    /// client signals
+    Client(ClientSignal),
 
     /// agent is ready for a game to begin
     Ready,

@@ -6,7 +6,7 @@ use std::time;
 
 use bytes::{ Buf, BufMut };
 use organelle;
-use organelle::{ Sheath, ResultExt, Handle, Impulse, Dendrite, Neuron };
+use organelle::{ Impulse, Sheath, ResultExt, Handle, Dendrite, Neuron };
 use futures::prelude::*;
 use futures::sync::{ oneshot, mpsc };
 use protobuf;
@@ -18,7 +18,7 @@ use tungstenite;
 use url::Url;
 use uuid::Uuid;
 
-use super::{ Result, Error, ErrorKind, Signal, Axon, Synapse };
+use super::{ Result, Error, ErrorKind, Signal, Synapse };
 
 /// keeps a record of a req/rsp transaction between the game instance
 pub struct Transactor {
@@ -28,24 +28,6 @@ pub struct Transactor {
 }
 
 impl Transactor {
-    /// send a client request to the client soma
-    pub fn send(axon: &Axon, req: ClientRequest) -> Result<Self> {
-        let transaction = req.transaction;
-        let kind = req.kind;
-
-        let client = axon.req_output(Synapse::Client)?;
-
-        axon.effector()?.send(client, Signal::ClientRequest(req));
-
-        Ok(
-            Self {
-                client: client,
-                transaction: transaction,
-                kind: kind,
-            }
-        )
-    }
-
     /// expect the result to contain the response expected by this transactor
     pub fn expect(self, src: Handle, result: ClientResult)
         -> Result<Response>
@@ -61,7 +43,9 @@ impl Transactor {
                 }
 
                 if self.kind != rsp.kind {
-                    bail!("expected {:?} message, got {:?}", self.kind, rsp.kind)
+                    bail!(
+                        "expected {:?} message, got {:?}", self.kind, rsp.kind
+                    )
                 }
 
                 if rsp.response.get_error().len() != 0 {
@@ -139,6 +123,15 @@ impl ClientRequest {
             request: request,
             timeout: timeout,
             kind: kind
+        }
+    }
+
+    /// create a new transactor for the request
+    pub fn transactor(&self, client: Handle) -> Transactor {
+        Transactor {
+            client: client,
+            transaction: self.transaction,
+            kind: self.kind,
         }
     }
 
@@ -306,6 +299,50 @@ impl ClientResult {
     }
 }
 
+/// signals to be sent to and from client
+#[derive(Debug)]
+pub enum ClientSignal {
+    /// allow a soma to take complete control of an instance
+    ProvideInstance(Uuid, Url),
+
+    /// attempt to connect to instance
+    AttemptConnect(Url),
+    /// internal-use client successfully connected to instance
+    Connected(mpsc::Sender<tungstenite::Message>),
+    /// indicate to the user neuron that the client is ready
+    Ready,
+    /// internal-use client received a message
+    Receive(tungstenite::Message),
+    /// send some request to the game instance
+    Request(ClientRequest),
+    /// result of transaction with game instance
+    Result(ClientResult),
+    /// internal-use message used to indicate when a transaction has timed out
+    Timeout(Uuid),
+    /// disconnect from the instance
+    Disconnect,
+    /// client has closed
+    Closed,
+    /// client encountered a websocket error
+    Error(Rc<Error>),
+}
+
+impl From<ClientSignal> for Signal {
+    fn from(signal: ClientSignal) -> Self {
+        Signal::Client(signal)
+    }
+}
+impl From<Signal> for ClientSignal {
+    fn from(signal: Signal) -> Self {
+        match signal {
+            Signal::Client(signal) => signal,
+            _ => panic!("invalid conversion from signal {:#?}", signal)
+        }
+    }
+}
+
+type Axon = organelle::Axon<ClientSignal, Synapse>;
+
 const NUM_RETRIES: u32 = 10;
 
 pub enum ClientSoma {
@@ -334,12 +371,10 @@ impl ClientSoma {
 }
 
 impl Neuron for ClientSoma {
-    type Signal = Signal;
+    type Signal = ClientSignal;
     type Synapse = Synapse;
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> organelle::Result<Self>
-    {
+    fn update(self, axon: &Axon, msg: Impulse<ClientSignal, Synapse>) -> organelle::Result<Self> {
         match self {
             ClientSoma::Init(state) => state.update(axon, msg),
             ClientSoma::AwaitInstance(state) => state.update(axon, msg),
@@ -355,9 +390,7 @@ impl Neuron for ClientSoma {
 pub struct Init { }
 
 impl Init {
-    fn update(self, _: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ClientSoma>
-    {
+    fn update(self, _: &Axon, msg: Impulse<ClientSignal, Synapse>) -> Result<ClientSoma> {
         match msg {
             Impulse::Start => self.start(),
 
@@ -373,7 +406,7 @@ impl Init {
     }
 }
 
-pub struct AwaitInstance { }
+pub struct AwaitInstance;
 
 impl AwaitInstance {
     fn await() -> Result<ClientSoma> {
@@ -382,7 +415,7 @@ impl AwaitInstance {
 
     fn reset(axon: &Axon) -> Result<ClientSoma> {
         for c in axon.var_input(Synapse::Client)? {
-            axon.effector()?.send(*c, Signal::ClientClosed);
+            axon.effector()?.send(*c, ClientSignal::Closed);
         }
 
         Self::await()
@@ -393,8 +426,8 @@ impl AwaitInstance {
             axon.effector()?.send_in_order(
                 *c,
                 vec![
-                    Signal::ClientError(Rc::clone(&e)),
-                    Signal::ClientClosed
+                    ClientSignal::Error(Rc::clone(&e)),
+                    ClientSignal::Closed,
                 ]
             );
         }
@@ -402,12 +435,10 @@ impl AwaitInstance {
         Self::await()
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ClientSoma>
-    {
+    fn update(self, axon: &Axon, msg: Impulse<ClientSignal, Synapse>) -> Result<ClientSoma> {
         match msg {
             Impulse::Signal(
-                src, Signal::ProvideInstance(instance, url)
+                src, ClientSignal::ProvideInstance(instance, url)
             ) => {
                 self.assign_instance(axon, src, instance, url)
             },
@@ -437,7 +468,7 @@ impl Connect {
     fn connect(axon: &Axon, url: Url) -> Result<ClientSoma> {
         let this_soma = axon.effector()?.this_soma();
         axon.effector()?.send(
-            this_soma, Signal::ClientAttemptConnect(url)
+            this_soma, ClientSignal::AttemptConnect(url)
         );
 
         Ok(
@@ -450,14 +481,12 @@ impl Connect {
         )
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ClientSoma>
-    {
+    fn update(self, axon: &Axon, msg: Impulse<ClientSignal, Synapse>) -> Result<ClientSoma> {
         match msg {
-            Impulse::Signal(src, Signal::ClientAttemptConnect(url)) => {
+            Impulse::Signal(src, ClientSignal::AttemptConnect(url)) => {
                 self.attempt_connect(axon, src, url)
             },
-            Impulse::Signal(src, Signal::ClientConnected(sender)) => {
+            Impulse::Signal(src, ClientSignal::Connected(sender)) => {
                 self.on_connected(axon, src, sender)
             },
 
@@ -523,14 +552,14 @@ impl Connect {
                         connected_effector.spawn(
                             stream.for_each(move |msg| {
                                 recv_eff.send(
-                                    this_soma, Signal::ClientReceive(msg)
+                                    this_soma, ClientSignal::Receive(msg)
                                 );
 
                                 Ok(())
                             })
                                 .and_then(move |_| {
                                     close_eff.send(
-                                        this_soma, Signal::ClientClosed
+                                        this_soma, ClientSignal::Closed
                                     );
 
                                     Ok(())
@@ -538,7 +567,7 @@ impl Connect {
                                 .or_else(move |e| {
                                     error_eff.send(
                                         this_soma,
-                                        Signal::ClientError(
+                                        ClientSignal::Error(
                                             Rc::from(
                                                 Error::with_chain(
                                                     e,
@@ -552,8 +581,7 @@ impl Connect {
                                 })
                         );
                         connected_effector.send(
-                            this_soma,
-                            Signal::ClientConnected(send_tx)
+                            this_soma, ClientSignal::Connected(send_tx)
                         );
 
                         Ok(())
@@ -561,8 +589,7 @@ impl Connect {
                     .or_else(move |_| {
                         let this_soma = retry_effector.this_soma();
                         retry_effector.send(
-                            this_soma,
-                            Signal::ClientAttemptConnect(retry_url)
+                            this_soma, ClientSignal::AttemptConnect(retry_url)
                         );
 
                         Ok(())
@@ -612,7 +639,7 @@ impl Open {
         -> Result<ClientSoma>
     {
         for c in axon.var_input(Synapse::Client)? {
-            axon.effector()?.send(*c, Signal::Ready);
+            axon.effector()?.send(*c, ClientSignal::Ready);
         }
 
         Ok(
@@ -627,28 +654,26 @@ impl Open {
         )
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ClientSoma>
-    {
+    fn update(self, axon: &Axon, msg: Impulse<ClientSignal, Synapse>) -> Result<ClientSoma> {
         match msg {
-            Impulse::Signal(src, Signal::ClientRequest(req)) => {
+            Impulse::Signal(src, ClientSignal::Request(req)) => {
                 self.send(axon, src, req)
             },
-            Impulse::Signal(src, Signal::ClientReceive(msg)) => {
+            Impulse::Signal(src, ClientSignal::Receive(msg)) => {
                 self.recv(axon, src, msg)
             },
             Impulse::Signal(
-                src, Signal::ClientTimeout(transaction)
+                src, ClientSignal::Timeout(transaction)
             ) => {
                 self.on_timeout(axon, src, transaction)
             },
-            Impulse::Signal(_, Signal::ClientDisconnect) => {
+            Impulse::Signal(_, ClientSignal::Disconnect) => {
                 Disconnect::disconnect()
             },
-            Impulse::Signal(src, Signal::ClientClosed) => {
+            Impulse::Signal(src, ClientSignal::Closed) => {
                 self.on_close(axon, src)
             },
-            Impulse::Signal(src, Signal::ClientError(e)) => {
+            Impulse::Signal(src, ClientSignal::Error(e)) => {
                 self.on_error(axon, src, e)
             },
 
@@ -693,7 +718,7 @@ impl Open {
                 let this_soma = timeout_effector.this_soma();
 
                 timeout_effector.send(
-                    this_soma, Signal::ClientTimeout(transaction)
+                    this_soma, ClientSignal::Timeout(transaction)
                 );
 
                 Ok(())
@@ -728,7 +753,7 @@ impl Open {
 
         axon.effector()?.send(
             dest,
-            Signal::ClientResult(ClientResult::success(transaction, rsp))
+            ClientSignal::Result(ClientResult::success(transaction, rsp))
         );
 
         Ok(ClientSoma::Open(self))
@@ -746,7 +771,7 @@ impl Open {
 
             self.transactions.remove(i);
             axon.effector()?.send(
-                dest, Signal::ClientTimeout(transaction)
+                dest, ClientSignal::Result(ClientResult::Timeout(transaction))
             );
         }
 
@@ -759,7 +784,9 @@ impl Open {
         AwaitInstance::reset(axon)
     }
 
-    fn on_error(self, axon: &Axon, src: Handle, e: Rc<Error>) -> Result<ClientSoma> {
+    fn on_error(self, axon: &Axon, src: Handle, e: Rc<Error>)
+        -> Result<ClientSoma>
+    {
         assert_eq!(src, axon.effector()?.this_soma());
 
         AwaitInstance::reset_error(axon, e)
@@ -772,14 +799,13 @@ impl Disconnect {
     fn disconnect() -> Result<ClientSoma> {
         Ok(ClientSoma::Disconnect(Disconnect { }))
     }
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ClientSoma>
-    {
+
+    fn update(self, axon: &Axon, msg: Impulse<ClientSignal, Synapse>) -> Result<ClientSoma> {
         match msg {
-            Impulse::Signal(_, Signal::ClientClosed) => {
+            Impulse::Signal(_, ClientSignal::Closed) => {
                 AwaitInstance::reset(axon)
             },
-            Impulse::Signal(_, Signal::ClientError(e)) => {
+            Impulse::Signal(_, ClientSignal::Error(e)) => {
                 AwaitInstance::reset_error(axon, e)
             },
 

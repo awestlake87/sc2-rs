@@ -16,6 +16,7 @@ use super::{
     Signal,
     Synapse,
     Axon,
+    ClientSignal,
 
     FrameData,
     Command,
@@ -182,7 +183,7 @@ impl Setup {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::Ready) => {
+            Impulse::Signal(src, Signal::Client(ClientSignal::Ready)) => {
                 self.on_ready(axon, src)
             },
 
@@ -196,7 +197,8 @@ impl Setup {
             },
 
             Impulse::Signal(
-                src, Signal::ProvideInstance(instance, url)
+                src,
+                Signal::Client(ClientSignal::ProvideInstance(instance, url))
             ) => {
                 self.provide_instance(axon, src, instance, url)
             }
@@ -258,7 +260,8 @@ impl Setup {
         assert_eq!(src, axon.req_input(Synapse::InstanceProvider)?);
 
         axon.send_req_output(
-            Synapse::InstanceProvider, Signal::ProvideInstance(instance, url)
+            Synapse::InstanceProvider,
+            Signal::Client(ClientSignal::ProvideInstance(instance, url))
         )?;
 
         Ok(AgentSoma::Setup(self))
@@ -316,7 +319,11 @@ impl Setup {
 
         req.mut_create_game().set_realtime(false);
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(AgentSoma::CreateGame(CreateGame { transactor: transactor }))
     }
@@ -345,12 +352,13 @@ impl CreateGame {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.transactor.expect(src, result)?;
 
                 GameCreated::game_created(axon)
             },
-
 
             Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
@@ -378,7 +386,6 @@ impl GameCreated {
             Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
                 JoinGame::join_game(axon, setup, ports)
             },
-
 
             Impulse::Signal(_, msg) => {
                 bail!("unexpected message {:#?}", msg)
@@ -439,10 +446,13 @@ impl JoinGame {
             options.set_score(true);
         }
 
-        let transactor = Transactor::send(
-            axon,
-            ClientRequest::with_timeout(req, time::Duration::from_secs(60))
-        )?;
+        let req = ClientRequest::with_timeout(
+            req, time::Duration::from_secs(60)
+        );
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(AgentSoma::JoinGame(JoinGame { transactor: transactor }))
     }
@@ -451,7 +461,9 @@ impl JoinGame {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.on_join_game(axon, src, result)
             }
 
@@ -645,7 +657,11 @@ impl SendActions {
             }
         }
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             AgentSoma::SendActions(
@@ -663,7 +679,9 @@ impl SendActions {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.transactor.expect(src, result)?;
 
                 SendDebug::send_debug(
@@ -783,7 +801,11 @@ impl SendDebug {
             }
         }
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             AgentSoma::SendDebug(
@@ -799,7 +821,9 @@ impl SendDebug {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.transactor.expect(src, result)?;
 
                 Step::step(axon, self.interval)
@@ -830,7 +854,11 @@ impl Step {
 
         req.mut_step().set_count(interval);
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(
             AgentSoma::Step(
@@ -846,7 +874,9 @@ impl Step {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.on_step(axon, src, result)
             },
 
@@ -906,7 +936,11 @@ impl LeaveGame {
 
         req.mut_leave_game();
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+        let req = ClientRequest::new(req);
+        let client = axon.req_output(Synapse::Client)?;
+        let transactor = req.transactor(client);
+
+        axon.effector()?.send(client, ClientSignal::Request(req).into());
 
         Ok(AgentSoma::LeaveGame(LeaveGame { transactor: transactor }))
     }
@@ -915,7 +949,9 @@ impl LeaveGame {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
+            Impulse::Signal(
+                src, Signal::Client(ClientSignal::Result(result))
+            ) => {
                 self.transactor.expect(src, result)?;
 
                 Reset::reset(axon)
@@ -933,7 +969,9 @@ pub struct Reset;
 
 impl Reset {
     fn reset(axon: &Axon) -> Result<AgentSoma> {
-        axon.send_req_output(Synapse::Client, Signal::ClientDisconnect)?;
+        axon.send_req_output(
+            Synapse::Client, ClientSignal::Disconnect.into()
+        )?;
 
         Ok(AgentSoma::Reset(Reset { }))
     }
@@ -942,12 +980,12 @@ impl Reset {
         -> Result<AgentSoma>
     {
         match msg {
-            Impulse::Signal(_, Signal::ClientError(_)) => {
+            Impulse::Signal(_, Signal::Client(ClientSignal::Error(_))) => {
                 // client does not close cleanly anyway right now, so just
                 // ignore the error and wait for ClientClosed.
                 Ok(AgentSoma::Reset(self))
             }
-            Impulse::Signal(_, Signal::ClientClosed) => {
+            Impulse::Signal(_, Signal::Client(ClientSignal::Closed)) => {
                 axon.send_req_input(
                     Synapse::Controller, Signal::GameEnded
                 )?;
