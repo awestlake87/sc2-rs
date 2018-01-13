@@ -5,6 +5,4 @@
 
 [Documentation](https://docs.rs/sc2)
 
-[Documentation (master)](https://awestlake87.github.io/sc2-rs/sc2-rs)
-
 Rust implementation of StarCraft II Client API
