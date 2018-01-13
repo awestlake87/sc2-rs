@@ -319,7 +319,7 @@ pub enum ClientSoma {
 }
 
 impl ClientSoma {
-    pub fn new() -> Result<Sheath<ClientSoma>> {
+    pub fn sheath() -> Result<Sheath<ClientSoma>> {
         Ok(
             Sheath::new(
                 ClientSoma::Init(Init { }),

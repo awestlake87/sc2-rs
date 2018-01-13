@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time;
 
 use organelle;
-use organelle::{ ResultExt, Handle, Soma, Impulse, Dendrite };
+use organelle::{ ResultExt, Handle, Soma, Neuron, Impulse, Dendrite };
 use sc2_proto::{ sc2api, debug };
 use url::Url;
 
@@ -68,24 +68,21 @@ pub enum AgentSoma {
 }
 
 impl AgentSoma {
-    fn new() -> Result<Self> {
+    fn sheath() -> Result<Sheath<Self>> {
         Ok(
-            AgentSoma::Init(
-                Init {
-                    axon: Axon::new(
-                        vec![
-                            Dendrite::RequireOne(Synapse::Controller),
-                            Dendrite::RequireOne(Synapse::InstanceProvider),
-                        ],
-                        vec![
-                            Dendrite::RequireOne(Synapse::Client),
-                            Dendrite::RequireOne(Synapse::Agent),
-                            Dendrite::RequireOne(Synapse::InstanceProvider),
-                            Dendrite::RequireOne(Synapse::Observer),
-                        ],
-                    )?,
-                }
-            )
+            Sheath::new(
+                AgentSoma::Init(Init { }),
+                vec![
+                    Dendrite::RequireOne(Synapse::Controller),
+                    Dendrite::RequireOne(Synapse::InstanceProvider),
+                ],
+                vec![
+                    Dendrite::RequireOne(Synapse::Client),
+                    Dendrite::RequireOne(Synapse::Agent),
+                    Dendrite::RequireOne(Synapse::InstanceProvider),
+                    Dendrite::RequireOne(Synapse::Observer),
+                ],
+            )?,
         )
     }
 
@@ -99,7 +96,7 @@ impl AgentSoma {
         Signal: From<L::Signal>,
         Synapse: From<L::Synapse>,
     {
-        let mut organelle = Organelle::new(AgentSoma::new()?);
+        let mut organelle = Organelle::new(AgentSoma::sheath()?);
 
         let agent = organelle.get_main_handle();
         let player = organelle.add_soma(soma);
@@ -108,7 +105,7 @@ impl AgentSoma {
         // possible that it's a bug in the rust type system because it will
         // work when the function is generic across two soma types, but not one
         let client = organelle.add_soma::<Sheath<ClientSoma>>(
-            ClientSoma::new()?
+            ClientSoma::sheath()?
         );
         let observer = organelle.add_soma::<ObserverSoma>(ObserverSoma::new()?);
 
@@ -123,148 +120,142 @@ impl AgentSoma {
     }
 }
 
-impl Soma for AgentSoma {
+impl Neuron for AgentSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Signal, Synapse>)
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
         -> organelle::Result<Self>
     {
         match self {
-            AgentSoma::Init(state) => state.update(msg),
-            AgentSoma::Setup(state) => state.update(msg),
+            AgentSoma::Init(state) => state.update(axon, msg),
+            AgentSoma::Setup(state) => state.update(axon, msg),
 
-            AgentSoma::CreateGame(state) => state.update(msg),
-            AgentSoma::GameCreated(state) => state.update(msg),
-            AgentSoma::JoinGame(state) => state.update(msg),
+            AgentSoma::CreateGame(state) => state.update(axon, msg),
+            AgentSoma::GameCreated(state) => state.update(axon, msg),
+            AgentSoma::JoinGame(state) => state.update(axon, msg),
 
-            AgentSoma::StepperSetup(state) => state.update(msg),
-            AgentSoma::FetchGameData(state) => state.update(msg),
+            AgentSoma::StepperSetup(state) => state.update(axon, msg),
+            AgentSoma::FetchGameData(state) => state.update(axon, msg),
 
-            AgentSoma::Update(state) => state.update(msg),
-            AgentSoma::SendActions(state) => state.update(msg),
-            AgentSoma::SendDebug(state) => state.update(msg),
-            AgentSoma::Step(state) => state.update(msg),
-            AgentSoma::Observe(state) => state.update(msg),
+            AgentSoma::Update(state) => state.update(axon, msg),
+            AgentSoma::SendActions(state) => state.update(axon, msg),
+            AgentSoma::SendDebug(state) => state.update(axon, msg),
+            AgentSoma::Step(state) => state.update(axon, msg),
+            AgentSoma::Observe(state) => state.update(axon, msg),
 
-            AgentSoma::LeaveGame(state) => state.update(msg),
-            AgentSoma::Reset(state) => state.update(msg),
+            AgentSoma::LeaveGame(state) => state.update(axon, msg),
+            AgentSoma::Reset(state) => state.update(axon, msg),
         }.chain_err(
             || organelle::ErrorKind::SomaError
         )
     }
 }
 
-pub struct Init {
-    axon:           Axon,
-}
+pub struct Init;
 
 impl Init {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon),
+    fn update(self, _axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Start => Setup::setup(),
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::Init(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
-pub struct Setup {
-    axon:           Axon,
-}
+pub struct Setup;
 
 impl Setup {
-    fn setup(axon: Axon) -> Result<AgentSoma> {
-        Ok(AgentSoma::Setup(Setup { axon: axon, }))
+    fn setup() -> Result<AgentSoma> {
+        Ok(AgentSoma::Setup(Setup { }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::Ready) => {
-                    self.on_ready(src)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::Ready) => {
+                self.on_ready(axon, src)
+            },
 
-                Impulse::Signal(
-                    src, Signal::RequestPlayerSetup(settings)
-                ) => {
-                    self.on_req_player_setup(src, settings)
-                },
-                Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
-                    self.on_player_setup(src, setup)
-                },
+            Impulse::Signal(
+                src, Signal::RequestPlayerSetup(settings)
+            ) => {
+                self.on_req_player_setup(axon, src, settings)
+            },
+            Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
+                self.on_player_setup(axon, src, setup)
+            },
 
-                Impulse::Signal(
-                    src, Signal::ProvideInstance(instance, url)
-                ) => {
-                    self.provide_instance(src, instance, url)
-                }
-                Impulse::Signal(
-                    src, Signal::CreateGame(settings, players)
-                ) => {
-                    self.create_game(src, settings, players)
-                },
-                Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
-                    self.on_game_ready(setup, ports)
-                },
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
+            Impulse::Signal(
+                src, Signal::ProvideInstance(instance, url)
+            ) => {
+                self.provide_instance(axon, src, instance, url)
             }
-        }
-        else {
-            Ok(AgentSoma::Setup(self))
+            Impulse::Signal(
+                src, Signal::CreateGame(settings, players)
+            ) => {
+                self.create_game(axon, src, settings, players)
+            },
+            Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
+                self.on_game_ready(axon, setup, ports)
+            },
+
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_ready(self, src: Handle) -> Result<AgentSoma> {
-        assert_eq!(src, self.axon.req_output(Synapse::Client)?);
+    fn on_ready(self, axon: &Axon, src: Handle) -> Result<AgentSoma> {
+        assert_eq!(src, axon.req_output(Synapse::Client)?);
 
-        self.axon.send_req_input(Synapse::Controller, Signal::Ready)?;
+        axon.send_req_input(Synapse::Controller, Signal::Ready)?;
 
         Ok(AgentSoma::Setup(self))
     }
 
-    fn on_req_player_setup(self, src: Handle, settings: GameSettings)
+    fn on_req_player_setup(
+        self, axon: &Axon, src: Handle, settings: GameSettings
+    )
         -> Result<AgentSoma>
     {
-        assert_eq!(src, self.axon.req_input(Synapse::Controller)?);
+        assert_eq!(src, axon.req_input(Synapse::Controller)?);
 
-        self.axon.send_req_output(
+        axon.send_req_output(
             Synapse::Agent, Signal::RequestPlayerSetup(settings)
         )?;
 
         Ok(AgentSoma::Setup(self))
     }
 
-    fn on_player_setup(self, src: Handle, setup: PlayerSetup)
+    fn on_player_setup(self, axon: &Axon, src: Handle, setup: PlayerSetup)
         -> Result<AgentSoma>
     {
-        assert_eq!(src, self.axon.req_output(Synapse::Agent)?);
+        assert_eq!(src, axon.req_output(Synapse::Agent)?);
 
-        self.axon.send_req_input(
+        axon.send_req_input(
             Synapse::Controller, Signal::PlayerSetup(setup)
         )?;
 
         Ok(AgentSoma::Setup(self))
     }
 
-    fn provide_instance(self, src: Handle, instance: Handle, url: Url)
+    fn provide_instance(
+        self, axon: &Axon, src: Handle, instance: Handle, url: Url
+    )
         -> Result<AgentSoma>
     {
-        assert_eq!(src, self.axon.req_input(Synapse::InstanceProvider)?);
+        assert_eq!(src, axon.req_input(Synapse::InstanceProvider)?);
 
-        self.axon.send_req_output(
+        axon.send_req_output(
             Synapse::InstanceProvider, Signal::ProvideInstance(instance, url)
         )?;
 
@@ -273,13 +264,14 @@ impl Setup {
 
     fn create_game(
         self,
+        axon: &Axon,
         src: Handle,
         settings: GameSettings,
-        players: Vec<PlayerSetup>
+        players: Vec<PlayerSetup>,
     )
         -> Result<AgentSoma>
     {
-        assert_eq!(src, self.axon.req_input(Synapse::Controller)?);
+        assert_eq!(src, axon.req_input(Synapse::Controller)?);
 
         let mut req = sc2api::Request::new();
 
@@ -322,107 +314,84 @@ impl Setup {
 
         req.mut_create_game().set_realtime(false);
 
-        let transactor = Transactor::send(
-            &self.axon, ClientRequest::new(req)
-        )?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
-        Ok(
-            AgentSoma::CreateGame(
-                CreateGame {
-                    axon: self.axon,
-                    transactor: transactor,
-                }
-            )
-        )
+        Ok(AgentSoma::CreateGame(CreateGame { transactor: transactor }))
     }
 
-    fn on_game_ready(self, setup: PlayerSetup, ports: Option<GamePorts>)
+    fn on_game_ready(
+        self, axon: &Axon, setup: PlayerSetup, ports: Option<GamePorts>
+    )
         -> Result<AgentSoma>
     {
-        let this_soma = self.axon.effector()?.this_soma();
+        let this_soma = axon.effector()?.this_soma();
 
-        self.axon.effector()?.send(
+        axon.effector()?.send(
             this_soma, Signal::GameReady(setup, ports)
         );
 
-        Ok(AgentSoma::GameCreated(GameCreated { axon: self.axon }))
+        Ok(AgentSoma::GameCreated(GameCreated { }))
     }
 }
 
 pub struct CreateGame {
-    axon:           Axon,
     transactor:     Transactor,
 }
 
 impl CreateGame {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.transactor.expect(src, result)?;
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.transactor.expect(src, result)?;
 
-                    GameCreated::game_created(self.axon)
-                },
+                GameCreated::game_created(axon)
+            },
 
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(AgentSoma::CreateGame(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }
 
-pub struct GameCreated {
-    axon:           Axon,
-}
+pub struct GameCreated;
 
 impl GameCreated {
-    fn game_created(axon: Axon) -> Result<AgentSoma> {
+    fn game_created(axon: &Axon) -> Result<AgentSoma> {
         axon.send_req_input(
             Synapse::Controller, Signal::GameCreated
         )?;
 
-        Ok(
-            AgentSoma::GameCreated(
-                GameCreated {
-                    axon: axon,
-                }
-            )
-        )
+        Ok(AgentSoma::GameCreated(GameCreated { }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
-                    JoinGame::join_game(self.axon, setup, ports)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
+                JoinGame::join_game(axon, setup, ports)
+            },
 
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(AgentSoma::GameCreated(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }
 
 pub struct JoinGame {
-    axon:           Axon,
     transactor:     Transactor,
 }
 
 impl JoinGame {
-    fn join_game(axon: Axon, setup: PlayerSetup, ports: Option<GamePorts>)
+    fn join_game(axon: &Axon, setup: PlayerSetup, ports: Option<GamePorts>)
         -> Result<AgentSoma>
     {
         let mut req = sc2api::Request::new();
@@ -469,121 +438,94 @@ impl JoinGame {
         }
 
         let transactor = Transactor::send(
-            &axon,
+            axon,
             ClientRequest::with_timeout(req, time::Duration::from_secs(60))
         )?;
 
-        Ok(
-            AgentSoma::JoinGame(
-                JoinGame {
-                    axon: axon,
-                    transactor: transactor,
-                }
-            )
-        )
+        Ok(AgentSoma::JoinGame(JoinGame { transactor: transactor }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.on_join_game(src, result)
-                }
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.on_join_game(axon, src, result)
             }
-        }
-        else {
-            Ok(AgentSoma::JoinGame(self))
+
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 
-    fn on_join_game(self, src: Handle, result: ClientResult)
+    fn on_join_game(self, axon: &Axon, src: Handle, result: ClientResult)
         -> Result<AgentSoma>
     {
         self.transactor.expect(src, result)?;
 
-        FetchGameData::fetch(self.axon)
+        FetchGameData::fetch(axon)
     }
 }
 
-pub struct FetchGameData {
-    axon:           Axon,
-}
+pub struct FetchGameData;
 
 impl FetchGameData {
-    fn fetch(axon: Axon) -> Result<AgentSoma> {
+    fn fetch(axon: &Axon) -> Result<AgentSoma> {
         axon.send_req_output(Synapse::Observer, Signal::FetchGameData)?;
 
-        Ok(AgentSoma::FetchGameData(FetchGameData { axon: axon }))
+        Ok(AgentSoma::FetchGameData(FetchGameData { }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::GameDataReady) => {
-                    StepperSetup::setup(self.axon)
-                },
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::FetchGameData(self))
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::GameDataReady) => {
+                StepperSetup::setup(axon)
+            },
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct StepperSetup {
-    axon:           Axon,
     stepper:        Handle,
 }
 
 impl StepperSetup {
-    fn setup(axon: Axon) -> Result<AgentSoma> {
+    fn setup(axon: &Axon) -> Result<AgentSoma> {
         let stepper = axon.req_output(Synapse::Agent)?;
 
         axon.effector()?.send(stepper, Signal::RequestUpdateInterval);
 
-        Ok(
-            AgentSoma::StepperSetup(
-                StepperSetup {
-                    axon: axon,
-                    stepper: stepper,
-                }
-            )
-        )
+        Ok(AgentSoma::StepperSetup(StepperSetup { stepper: stepper }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::UpdateInterval(interval)) => {
-                    self.on_update_interval(src, interval)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::UpdateInterval(interval)) => {
+                self.on_update_interval(axon, src, interval)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::StepperSetup(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_update_interval(self, src: Handle, interval: u32)
+    fn on_update_interval(self, axon: &Axon, src: Handle, interval: u32)
         -> Result<AgentSoma>
     {
         if src == self.stepper {
-            Step::first(self.axon, interval)
+            Step::first(axon, interval)
         }
         else {
             bail!("unexpected source of update interval: {}", src)
@@ -592,14 +534,13 @@ impl StepperSetup {
 }
 
 pub struct Update {
-    axon:               Axon,
     interval:           u32,
     commands:           Vec<Command>,
     debug_commands:     Vec<DebugCommand>,
 }
 
 impl Update {
-    fn next(axon: Axon, interval: u32, frame: Rc<FrameData>)
+    fn next(axon: &Axon, interval: u32, frame: Rc<FrameData>)
         -> Result<AgentSoma>
     {
         axon.send_req_output(
@@ -609,7 +550,6 @@ impl Update {
         Ok(
             AgentSoma::Update(
                 Update {
-                    axon: axon,
                     interval: interval,
                     commands: vec![ ],
                     debug_commands: vec![ ],
@@ -618,36 +558,33 @@ impl Update {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Command(cmd)) => {
-                    self.commands.push(cmd);
-                    Ok(AgentSoma::Update(self))
-                },
-                Impulse::Signal(_, Signal::DebugCommand(cmd)) => {
-                    self.debug_commands.push(cmd);
-                    Ok(AgentSoma::Update(self))
-                },
+    fn update(mut self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::Command(cmd)) => {
+                self.commands.push(cmd);
+                Ok(AgentSoma::Update(self))
+            },
+            Impulse::Signal(_, Signal::DebugCommand(cmd)) => {
+                self.debug_commands.push(cmd);
+                Ok(AgentSoma::Update(self))
+            },
 
-                Impulse::Signal(_, Signal::UpdateComplete) => {
-                    self.on_update_complete()
-                },
+            Impulse::Signal(_, Signal::UpdateComplete) => {
+                self.on_update_complete(axon)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::Update(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_update_complete(self) -> Result<AgentSoma> {
+    fn on_update_complete(self, axon: &Axon) -> Result<AgentSoma> {
         SendActions::send_actions(
-            self.axon,
+            axon,
             self.interval,
             self.commands,
             self.debug_commands
@@ -656,7 +593,6 @@ impl Update {
 }
 
 pub struct SendActions {
-    axon:               Axon,
     interval:           u32,
     transactor:         Transactor,
 
@@ -665,7 +601,7 @@ pub struct SendActions {
 
 impl SendActions {
     fn send_actions(
-        axon: Axon,
+        axon: &Axon,
         interval: u32,
         commands: Vec<Command>,
         debug_commands: Vec<DebugCommand>
@@ -712,7 +648,6 @@ impl SendActions {
         Ok(
             AgentSoma::SendActions(
                 SendActions {
-                    axon: axon,
                     interval: interval,
                     transactor: transactor,
 
@@ -722,40 +657,36 @@ impl SendActions {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.transactor.expect(src, result)?;
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.transactor.expect(src, result)?;
 
-                    SendDebug::send_debug(
-                        self.axon,
-                        self.interval,
-                        self.debug_commands
-                    )
-                },
+                SendDebug::send_debug(
+                    axon,
+                    self.interval,
+                    self.debug_commands
+                )
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::SendActions(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct SendDebug {
-    axon:           Axon,
     interval:       u32,
     transactor:     Transactor,
 }
 
 impl SendDebug {
     fn send_debug(
-        axon: Axon,
+        axon: &Axon,
         interval: u32,
         commands: Vec<DebugCommand>
     )
@@ -855,7 +786,6 @@ impl SendDebug {
         Ok(
             AgentSoma::SendDebug(
                 SendDebug {
-                    axon: axon,
                     interval: interval,
                     transactor: transactor,
                 }
@@ -863,56 +793,46 @@ impl SendDebug {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.transactor.expect(src, result)?;
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.transactor.expect(src, result)?;
 
-                    Step::step(self.axon, self.interval)
-                },
+                Step::step(axon, self.interval)
+            },
 
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(AgentSoma::SendDebug(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }
 
 pub struct Step {
-    axon:           Axon,
     interval:       u32,
     transactor:     Transactor,
 }
 
 impl Step {
-    fn first(axon: Axon, interval: u32) -> Result<AgentSoma> {
+    fn first(axon: &Axon, interval: u32) -> Result<AgentSoma> {
         axon.send_req_output(Synapse::Agent, Signal::GameStarted)?;
 
-        Step::step(
-            axon,
-            interval,
-        )
+        Step::step(axon, interval)
     }
-    fn step(axon: Axon, interval: u32)
-        -> Result<AgentSoma>
-    {
+    fn step(axon: &Axon, interval: u32) -> Result<AgentSoma> {
         let mut req = sc2api::Request::new();
 
         req.mut_step().set_count(interval);
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
         Ok(
             AgentSoma::Step(
                 Step {
-                    axon: axon,
                     interval: interval,
                     transactor: transactor,
                 }
@@ -920,147 +840,128 @@ impl Step {
         )
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.on_step(src, result)
-                },
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.on_step(axon, src, result)
+            },
 
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        }
-        else {
-            Ok(AgentSoma::Step(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_step(self, src: Handle, result: ClientResult) -> Result<AgentSoma> {
+    fn on_step(self, axon: &Axon, src: Handle, result: ClientResult)
+        -> Result<AgentSoma>
+    {
         self.transactor.expect(src, result)?;
 
-        Observe::observe(self.axon, self.interval)
+        Observe::observe(axon, self.interval)
     }
 }
 
 pub struct Observe {
-    axon:           Axon,
     interval:       u32,
 }
 
 impl Observe {
-    fn observe(axon: Axon, interval: u32) -> Result<AgentSoma> {
+    fn observe(axon: &Axon, interval: u32) -> Result<AgentSoma> {
         axon.send_req_output(Synapse::Observer, Signal::Observe)?;
 
-        Ok(AgentSoma::Observe(Observe { axon: axon, interval: interval }))
+        Ok(AgentSoma::Observe(Observe { interval: interval }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Observation(frame)) => {
-                    Update::next(self.axon, self.interval, frame)
-                },
-                Impulse::Signal(_, Signal::GameEnded) => {
-                    LeaveGame::leave(self.axon)
-                }
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::Observation(frame)) => {
+                Update::next(axon, self.interval, frame)
+            },
+            Impulse::Signal(_, Signal::GameEnded) => {
+                LeaveGame::leave(axon)
             }
-        }
-        else {
-            Ok(AgentSoma::Observe(self))
+
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct LeaveGame {
-    axon:           Axon,
     transactor:     Transactor,
 }
 
 impl LeaveGame {
-    fn leave(axon: Axon) -> Result<AgentSoma> {
+    fn leave(axon: &Axon) -> Result<AgentSoma> {
         let mut req = sc2api::Request::new();
 
         req.mut_leave_game();
 
-        let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
+        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
-        Ok(
-            AgentSoma::LeaveGame(
-                LeaveGame { axon: axon, transactor: transactor }
-            )
-        )
+        Ok(AgentSoma::LeaveGame(LeaveGame { transactor: transactor }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(src, Signal::ClientResult(result)) => {
-                    self.transactor.expect(src, result)?;
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(src, Signal::ClientResult(result)) => {
+                self.transactor.expect(src, result)?;
 
-                    Reset::reset(self.axon)
-                },
+                Reset::reset(axon)
+            },
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message")
-            }
-        }
-        else {
-            Ok(AgentSoma::LeaveGame(self))
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => bail!("unexpected protocol message")
         }
     }
 }
 
-pub struct Reset {
-    axon:           Axon,
-}
+pub struct Reset;
 
 impl Reset {
-    fn reset(axon: Axon) -> Result<AgentSoma> {
+    fn reset(axon: &Axon) -> Result<AgentSoma> {
         axon.send_req_output(Synapse::Client, Signal::ClientDisconnect)?;
 
-        Ok(AgentSoma::Reset(Reset { axon: axon, }))
+        Ok(AgentSoma::Reset(Reset { }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<AgentSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::ClientError(_)) => {
-                    // client does not close cleanly anyway right now, so just
-                    // ignore the error and wait for ClientClosed.
-                    Ok(AgentSoma::Reset(self))
-                }
-                Impulse::Signal(_, Signal::ClientClosed) => {
-                    self.axon.send_req_input(
-                        Synapse::Controller, Signal::GameEnded
-                    )?;
-                    self.axon.send_req_output(
-                        Synapse::Agent, Signal::GameEnded
-                    )?;
-
-                    Setup::setup(self.axon)
-                },
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => {
-                    bail!("unexpected protocol message")
-                }
+    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
+        -> Result<AgentSoma>
+    {
+        match msg {
+            Impulse::Signal(_, Signal::ClientError(_)) => {
+                // client does not close cleanly anyway right now, so just
+                // ignore the error and wait for ClientClosed.
+                Ok(AgentSoma::Reset(self))
             }
-        }
-        else {
-            Ok(AgentSoma::Reset(self))
+            Impulse::Signal(_, Signal::ClientClosed) => {
+                axon.send_req_input(
+                    Synapse::Controller, Signal::GameEnded
+                )?;
+                axon.send_req_output(
+                    Synapse::Agent, Signal::GameEnded
+                )?;
+
+                Setup::setup()
+            },
+
+            Impulse::Signal(_, msg) => {
+                bail!("unexpected message {:#?}", msg)
+            },
+            _ => {
+                bail!("unexpected protocol message")
+            }
         }
     }
 }
