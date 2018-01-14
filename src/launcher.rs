@@ -1,38 +1,26 @@
-
-use std::collections::{ HashMap };
+use std::collections::HashMap;
 use std::env::home_dir;
-use std::path::{ PathBuf, MAIN_SEPARATOR };
+use std::path::{PathBuf, MAIN_SEPARATOR};
 
-use organelle;
-use organelle::{ Sheath, Neuron, Handle, ResultExt, Impulse, Dendrite };
 use glob::glob;
+use organelle;
+use organelle::{Dendrite, Handle, Impulse, Neuron, ResultExt, Sheath};
 use regex::Regex;
 use uuid::Uuid;
 
-use super::{
-    Result,
-    ErrorKind,
-
-    Signal,
-    Axon,
-    Synapse,
-
-    Rect,
-    PortSet,
-    GamePorts,
-};
-use instance::{ Instance, InstanceSettings, InstanceKind };
+use super::{Axon, ErrorKind, GamePorts, PortSet, Rect, Result, Signal, Synapse};
+use instance::{Instance, InstanceKind, InstanceSettings};
 
 /// settings used to create a launcher
 pub struct LauncherSettings {
     /// installation directory
     ///
     /// auto-detect if not specified
-    pub dir:            Option<PathBuf>,
+    pub dir: Option<PathBuf>,
     /// use Wine to run the game - Linux users
-    pub use_wine:       bool,
+    pub use_wine: bool,
     /// starting point for game ports
-    pub base_port:      u16,
+    pub base_port: u16,
 }
 
 impl Default for LauncherSettings {
@@ -47,13 +35,13 @@ impl Default for LauncherSettings {
 
 /// soma in charge of launching game instances and assigning ports
 pub struct LauncherSoma {
-    exe:                PathBuf,
-    pwd:                Option<PathBuf>,
-    current_port:       u16,
-    use_wine:           bool,
+    exe: PathBuf,
+    pwd: Option<PathBuf>,
+    current_port: u16,
+    use_wine: bool,
 
-    instances:          HashMap<Uuid, Instance>,
-    ports:              Vec<GamePorts>,
+    instances: HashMap<Uuid, Instance>,
+    ports: Vec<GamePorts>,
 }
 
 impl LauncherSoma {
@@ -62,29 +50,26 @@ impl LauncherSoma {
         let dir = {
             if let Some(dir) = settings.dir {
                 dir
-            }
-            else {
+            } else {
                 auto_detect_starcraft(settings.use_wine)?
             }
         };
         let (exe, arch) = select_exe(&dir, settings.use_wine)?;
         let pwd = select_pwd(&dir, arch);
 
-        Ok(
-            Sheath::new(
-                Self {
-                    exe: exe,
-                    pwd: pwd,
-                    current_port: settings.base_port,
-                    use_wine: settings.use_wine,
+        Ok(Sheath::new(
+            Self {
+                exe: exe,
+                pwd: pwd,
+                current_port: settings.base_port,
+                use_wine: settings.use_wine,
 
-                    instances: HashMap::new(),
-                    ports: vec![ ],
-                },
-                vec![ Dendrite::RequireOne(Synapse::Launcher) ],
-                vec![ ]
-            )?
-        )
+                instances: HashMap::new(),
+                ports: vec![],
+            },
+            vec![Dendrite::RequireOne(Synapse::Launcher)],
+            vec![],
+        )?)
     }
 
     /// launch an instance
@@ -93,26 +78,28 @@ impl LauncherSoma {
 
         assert_eq!(src, controller);
 
-        let mut instance = Instance::from_settings(
-            InstanceSettings {
-                kind: {
-                    if self.use_wine {
-                        InstanceKind::Wine
-                    }
-                    else {
-                        InstanceKind::Native
-                    }
-                },
-                exe: Some(self.exe.clone()),
-                pwd: self.pwd.clone(),
-                address: ("127.0.0.1".into(), self.current_port),
-                window_rect: Rect::<u32> { x: 10, y: 10, w: 1024, h: 768 },
-                ports: PortSet {
-                    game_port: self.current_port + 1,
-                    base_port: self.current_port + 2,
+        let mut instance = Instance::from_settings(InstanceSettings {
+            kind: {
+                if self.use_wine {
+                    InstanceKind::Wine
+                } else {
+                    InstanceKind::Native
                 }
-            }
-        )?;
+            },
+            exe: Some(self.exe.clone()),
+            pwd: self.pwd.clone(),
+            address: ("127.0.0.1".into(), self.current_port),
+            window_rect: Rect::<u32> {
+                x: 10,
+                y: 10,
+                w: 1024,
+                h: 768,
+            },
+            ports: PortSet {
+                game_port: self.current_port + 1,
+                base_port: self.current_port + 2,
+            },
+        })?;
 
         self.current_port += 3;
 
@@ -141,7 +128,7 @@ impl LauncherSoma {
                 game_port: self.current_port + 1,
                 base_port: self.current_port + 2,
             },
-            client_ports: vec![ ]
+            client_ports: vec![],
         };
 
         self.current_port += 3;
@@ -161,13 +148,12 @@ impl LauncherSoma {
                 let mut instances = HashMap::new();
 
                 for (uuid, instance) in self.instances.iter() {
-                    instances.insert(
-                        *uuid, (instance.get_url()?, instance.ports)
-                    );
+                    instances
+                        .insert(*uuid, (instance.get_url()?, instance.ports));
                 }
 
                 instances
-            })
+            }),
         );
 
         Ok(())
@@ -179,9 +165,8 @@ impl LauncherSoma {
     }
 
     fn send_ports_pool(&self, axon: &Axon, dest: Handle) -> Result<()> {
-        axon.effector()?.send(
-            dest, Signal::PortsPool(self.ports.clone())
-        );
+        axon.effector()?
+            .send(dest, Signal::PortsPool(self.ports.clone()));
 
         Ok(())
     }
@@ -191,9 +176,11 @@ impl Neuron for LauncherSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> organelle::Result<Self>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> organelle::Result<Self> {
         match msg {
             Impulse::Start => Ok(self),
 
@@ -207,22 +194,17 @@ impl Neuron for LauncherSoma {
                 self.launch(axon, src)
             },
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
-            _ => bail!("unexpected protocol message")
-        }.chain_err(
-            || organelle::ErrorKind::SomaError
-        )
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
+            _ => bail!("unexpected protocol message"),
+        }.chain_err(|| organelle::ErrorKind::SomaError)
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ExeArch {
     X64,
-    X32
+    X32,
 }
-
 
 fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
     if cfg!(windows) {
@@ -231,43 +213,33 @@ fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
 
         if path_x86.is_dir() {
             Ok(path_x86)
-        }
-        else if path.is_dir() {
+        } else if path.is_dir() {
             Ok(path)
-        }
-        else {
+        } else {
             bail!(ErrorKind::ExeNotSpecified)
         }
-    }
-    else if use_wine {
+    } else if use_wine {
         if let Some(home) = home_dir() {
-            let path_x86 = home.join(
-                ".wine/drive_c/Program Files (x86)/StarCraft II"
-            );
+            let path_x86 =
+                home.join(".wine/drive_c/Program Files (x86)/StarCraft II");
             let path = home.join(".wine/drive_c/Program Files/StarCraft II");
 
             if path_x86.is_dir() {
                 Ok(path_x86)
-            }
-            else if path.is_dir() {
+            } else if path.is_dir() {
                 Ok(path)
-            }
-            else {
+            } else {
                 bail!(ErrorKind::ExeNotSpecified)
             }
-        }
-        else {
+        } else {
             bail!(ErrorKind::ExeNotSpecified)
         }
-    }
-    else {
+    } else {
         bail!(ErrorKind::ExeNotSpecified)
     }
 }
 
-fn select_exe(dir: &PathBuf, use_wine: bool)
-    -> Result<(PathBuf, ExeArch)>
-{
+fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
     if cfg!(target_os = "windows") && use_wine {
         bail!("wine not supported on windows")
     }
@@ -275,25 +247,21 @@ fn select_exe(dir: &PathBuf, use_wine: bool)
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR)
+        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
     };
 
     let glob_iter = match glob(
-        &format!(
-            "{}/Versions/Base*/SC2*",
-            dir.to_str().unwrap()
-        )[..]
+        &format!("{}/Versions/Base*/SC2*", dir.to_str().unwrap())[..],
     ) {
         Ok(iter) => iter,
-        Err(_) => bail!("failed to read glob pattern")
+        Err(_) => bail!("failed to read glob pattern"),
     };
 
-    let exe_re = match Regex::new(
-        &format!("Base([0-9]*){}SC2(_x64)?", separator)[..]
-    ) {
-        Ok(re) => re,
-        Err(_) => bail!("failed to parse regex")
-    };
+    let exe_re =
+        match Regex::new(&format!("Base([0-9]*){}SC2(_x64)?", separator)[..]) {
+            Ok(re) => re,
+            Err(_) => bail!("failed to parse regex"),
+        };
 
     let mut current_version = 0;
     let mut current_arch = ExeArch::X32;
@@ -308,7 +276,7 @@ fn select_exe(dir: &PathBuf, use_wine: bool)
                     None => {
                         eprintln!("unable to convert path to string");
                         continue;
-                    }
+                    },
                 };
 
                 match exe_re.captures(&path_str[..]) {
@@ -317,8 +285,8 @@ fn select_exe(dir: &PathBuf, use_wine: bool)
                             Ok(v) => v,
                             Err(_) => {
                                 eprintln!("unable to parse version as int");
-                                continue
-                            }
+                                continue;
+                            },
                         };
 
                         let arch = match caps.get(2) {
@@ -326,10 +294,10 @@ fn select_exe(dir: &PathBuf, use_wine: bool)
                                 "_x64" => ExeArch::X64,
                                 _ => {
                                     eprintln!("unrecognized suffix");
-                                    continue
-                                }
+                                    continue;
+                                },
                             },
-                            None => ExeArch::X32
+                            None => ExeArch::X32,
                         };
 
                         if current_version < v {
@@ -339,29 +307,27 @@ fn select_exe(dir: &PathBuf, use_wine: bool)
                                 if arch == ExeArch::X32 {
                                     exe = Ok((path, arch));
                                 }
-                            }
-                            else {
+                            } else {
                                 exe = Ok((path, arch));
                             }
-                        }
-                        else if current_version == v && !use_wine {
+                        } else if current_version == v && !use_wine {
                             current_arch = match current_arch {
                                 ExeArch::X64 => ExeArch::X64,
                                 ExeArch::X32 => match arch {
                                     ExeArch::X64 => ExeArch::X64,
-                                    _ => ExeArch::X32
-                                }
+                                    _ => ExeArch::X32,
+                                },
                             };
 
                             exe = Ok((path, current_arch));
                         };
-                    }
-                    _ => ()
+                    },
+                    _ => (),
                 }
-            }
-            _ => ()
+            },
+            _ => (),
         };
-    };
+    }
 
     exe
 }
@@ -370,7 +336,7 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR)
+        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
     };
 
     let support_dir = PathBuf::from(
@@ -380,15 +346,14 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
             separator,
             match arch {
                 ExeArch::X64 => "64",
-                ExeArch::X32 => ""
+                ExeArch::X32 => "",
             }
-        )[..]
+        )[..],
     );
 
     if support_dir.is_dir() {
         Some(support_dir)
-    }
-    else {
+    } else {
         None
     }
 }

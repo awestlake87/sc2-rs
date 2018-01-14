@@ -1,5 +1,4 @@
-
-use super::super::{ Result, ErrorKind, FromProto, IntoProto };
+use super::super::{ErrorKind, FromProto, IntoProto, Result};
 
 /// list of known StarCraft II buffs
 #[allow(missing_docs)]
@@ -54,58 +53,54 @@ pub enum Buff {
 impl FromProto<u32> for Buff {
     /// convert from raw protobuf buff id
     fn from_proto(id: u32) -> Result<Self> {
-        Ok(
-            match id {
-                5   => Buff::GravitonBeam,
-                6   => Buff::GhostCloak,
-                7   => Buff::BansheeCloak,
-                8   => Buff::PowerUserWarpable,
-                11  => Buff::QueenSpawnLarvaTimer,
-                12  => Buff::GhostHoldFire,
-                13  => Buff::GhostHoldFireB,
-                16  => Buff::EmpDeCloak,
-                17  => Buff::FungalGrowth,
-                18  => Buff::GuardianShield,
-                20  => Buff::TimeWarpProduction,
-                22  => Buff::NeuralParasite,
-                24  => Buff::StimpackMarauder,
-                25  => Buff::SupplyDrop,
-                27  => Buff::Stimpack,
-                28  => Buff::PsiStorm,
-                29  => Buff::CloakFieldEffect,
-                30  => Buff::Charging,
-                33  => Buff::Slow,
-                36  => Buff::Contaminated,
-                38  => Buff::BlindingCloudStructure,
-                49  => Buff::OracleRevelation,
-                59  => Buff::ViperConsumeStructure,
-                83  => Buff::BlindingCloud,
-                89  => Buff::MedivacSpeedBoost,
-                97  => Buff::Purify,
-                99  => Buff::OracleWeapon,
-                102 => Buff::ImmortalOverload,
-                116 => Buff::Lockon,
-                120 => Buff::SeekerMissile,
-                121 => Buff::TemporalField,
-                122 => Buff::VoidRaySwarmDamageBoost,
-                129 => Buff::OracleStasisTrapTarget,
-                132 => Buff::ParasiticBomb,
-                133 => Buff::ParasiticBombUnitKu,
-                134 => Buff::ParasiticBombSecondaryUnitSearch,
-                137 => Buff::LurkerHoldFireB,
-                145 => Buff::ChannelSnipeCombat,
-                146 => Buff::TempestDisruptionBlastStunBehavior,
-                271 => Buff::CarryMineralFieldMinerals,
-                272 => Buff::CarryHighYieldMineralFieldMinerals,
-                273 => Buff::CarryHarvestableVespeneGeyserGas,
-                274 => Buff::CarryHarvestableVespeneGeyserGasProtoss,
-                275 => Buff::CarryHarvestableVespeneGeyserGasZerg,
+        Ok(match id {
+            5 => Buff::GravitonBeam,
+            6 => Buff::GhostCloak,
+            7 => Buff::BansheeCloak,
+            8 => Buff::PowerUserWarpable,
+            11 => Buff::QueenSpawnLarvaTimer,
+            12 => Buff::GhostHoldFire,
+            13 => Buff::GhostHoldFireB,
+            16 => Buff::EmpDeCloak,
+            17 => Buff::FungalGrowth,
+            18 => Buff::GuardianShield,
+            20 => Buff::TimeWarpProduction,
+            22 => Buff::NeuralParasite,
+            24 => Buff::StimpackMarauder,
+            25 => Buff::SupplyDrop,
+            27 => Buff::Stimpack,
+            28 => Buff::PsiStorm,
+            29 => Buff::CloakFieldEffect,
+            30 => Buff::Charging,
+            33 => Buff::Slow,
+            36 => Buff::Contaminated,
+            38 => Buff::BlindingCloudStructure,
+            49 => Buff::OracleRevelation,
+            59 => Buff::ViperConsumeStructure,
+            83 => Buff::BlindingCloud,
+            89 => Buff::MedivacSpeedBoost,
+            97 => Buff::Purify,
+            99 => Buff::OracleWeapon,
+            102 => Buff::ImmortalOverload,
+            116 => Buff::Lockon,
+            120 => Buff::SeekerMissile,
+            121 => Buff::TemporalField,
+            122 => Buff::VoidRaySwarmDamageBoost,
+            129 => Buff::OracleStasisTrapTarget,
+            132 => Buff::ParasiticBomb,
+            133 => Buff::ParasiticBombUnitKu,
+            134 => Buff::ParasiticBombSecondaryUnitSearch,
+            137 => Buff::LurkerHoldFireB,
+            145 => Buff::ChannelSnipeCombat,
+            146 => Buff::TempestDisruptionBlastStunBehavior,
+            271 => Buff::CarryMineralFieldMinerals,
+            272 => Buff::CarryHighYieldMineralFieldMinerals,
+            273 => Buff::CarryHarvestableVespeneGeyserGas,
+            274 => Buff::CarryHarvestableVespeneGeyserGasProtoss,
+            275 => Buff::CarryHarvestableVespeneGeyserGasZerg,
 
-                _ => bail!(
-                    ErrorKind::InvalidProtobuf(format!("Buff id({})", id))
-                )
-            }
-        )
+            _ => bail!(ErrorKind::InvalidProtobuf(format!("Buff id({})", id))),
+        })
     }
 }
 
@@ -121,9 +116,12 @@ mod tests {
 
     #[test]
     fn test_commutativity() {
-        let test_element = |element: Buff| assert_eq!(
-            element, Buff::from_proto(element.into_proto().unwrap()).unwrap()
-        );
+        let test_element = |element: Buff| {
+            assert_eq!(
+                element,
+                Buff::from_proto(element.into_proto().unwrap()).unwrap()
+            )
+        };
 
         test_element(Buff::GravitonBeam);
         test_element(Buff::GhostCloak);

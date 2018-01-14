@@ -10,11 +10,11 @@
 extern crate error_chain;
 
 extern crate bytes;
-extern crate organelle;
 extern crate ctrlc;
 extern crate futures;
 extern crate glob;
 extern crate nalgebra as na;
+extern crate organelle;
 extern crate protobuf;
 extern crate rand;
 extern crate regex;
@@ -41,65 +41,63 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use futures::sync::mpsc::{ Sender };
+use futures::sync::mpsc::Sender;
 use url::Url;
 use uuid::Uuid;
 
-pub use self::agent::{ AgentSoma };
-pub use self::client::{ ClientRequest, ClientResult };
-pub use self::computer::{ ComputerSoma };
-pub use self::ctrlc_breaker::{ CtrlcBreakerSoma };
+pub use self::agent::AgentSoma;
+pub use self::client::{ClientRequest, ClientResult};
+pub use self::computer::ComputerSoma;
+pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::data::{
+    Ability,
+    AbilityData,
+    Action,
+    ActionTarget,
+    Alliance,
+    Buff,
+    BuffData,
     Color,
-    Rect,
-    Rect2,
+    Difficulty,
+    DisplayType,
+    Effect,
+    GamePorts,
+    GameSettings,
+    ImageData,
+    Map,
+    PlayerSetup,
     Point2,
     Point3,
+    PortSet,
+    PowerSource,
+    Race,
+    Rect,
+    Rect2,
+    Score,
+    SpatialAction,
+    Tag,
+    TerrainInfo,
+    Unit,
+    UnitType,
+    UnitTypeData,
+    Upgrade,
+    UpgradeData,
     Vector2,
     Vector3,
-
-    UnitType,
-    Ability,
-    Upgrade,
-    Buff,
-    Alliance,
-
-    ActionTarget,
-    Tag,
-    ImageData,
     Visibility,
-    BuffData,
-    UpgradeData,
-    AbilityData,
-    Effect,
-    UnitTypeData,
-    Score,
-    Unit,
-    TerrainInfo,
-    PowerSource,
-    DisplayType,
-    SpatialAction,
-    Action,
-    Map,
-    GamePorts,
-    PortSet,
-    PlayerSetup,
-    GameSettings,
-    Race,
-    Difficulty,
 };
 pub use self::frame::{
-    FrameData,
     Command,
     DebugCommand,
     DebugTextTarget,
-    MapState,
+    FrameData,
+    GameData,
     GameEvent,
     GameState,
-    GameData,
+    MapState,
 };
-pub use self::launcher::{ LauncherSoma, LauncherSettings };
-pub use self::melee::{ MeleeSuite, MeleeSettings, MeleeSoma };
+pub use self::launcher::{LauncherSettings, LauncherSoma};
+pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
 
 error_chain! {
     links {
@@ -162,7 +160,10 @@ error_chain! {
     }
 }
 
-trait FromProto<T> where Self: Sized {
+trait FromProto<T>
+where
+    Self: Sized,
+{
     /// convert from protobuf data
     fn from_proto(p: T) -> Result<Self>;
 }
@@ -171,7 +172,10 @@ trait IntoSc2<T> {
     fn into_sc2(self) -> Result<T>;
 }
 
-impl<T, U> IntoSc2<U> for T where U: FromProto<T> {
+impl<T, U> IntoSc2<U> for T
+where
+    U: FromProto<T>,
+{
     fn into_sc2(self) -> Result<U> {
         U::from_proto(self)
     }
@@ -209,7 +213,8 @@ pub enum Signal {
     ClientRequest(ClientRequest),
     /// result of transaction with game instance
     ClientResult(ClientResult),
-    /// internal-use message used to indicate when a transaction has timed out
+    /// internal-use message used to indicate when a transaction has timed
+    /// out
     ClientTimeout(Uuid),
     /// disconnect from the instance
     ClientDisconnect,
@@ -230,7 +235,8 @@ pub enum Signal {
     CreateGame(GameSettings, Vec<PlayerSetup>),
     /// game was created with the given settings
     GameCreated,
-    /// notify agents that game is ready to join with the given player setup
+    /// notify agents that game is ready to join with the given player
+    /// setup
     GameReady(PlayerSetup, Option<GamePorts>),
     /// join an existing game
     JoinGame(GamePorts),

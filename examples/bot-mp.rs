@@ -1,12 +1,11 @@
-
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate serde_derive;
 
-extern crate organelle;
 extern crate docopt;
 extern crate glob;
+extern crate organelle;
 extern crate rand;
 extern crate serde;
 
@@ -15,27 +14,27 @@ extern crate sc2;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use organelle::{ Organelle, Soma, Impulse, ResultExt, Dendrite };
 use docopt::Docopt;
+use organelle::{Dendrite, Impulse, Organelle, ResultExt, Soma};
 use rand::random;
 use sc2::{
-    Result,
-    Signal,
-    Synapse,
+    Ability,
+    ActionTarget,
+    Alliance,
     Axon,
+    Command,
     FrameData,
-    PlayerSetup,
-    Race,
     GameSettings,
     LauncherSettings,
     Map,
-    Command,
-    Ability,
-    UnitType,
+    PlayerSetup,
     Point2,
+    Race,
+    Result,
+    Signal,
+    Synapse,
     Tag,
-    ActionTarget,
-    Alliance,
+    UnitType,
     Vector2,
 };
 
@@ -63,39 +62,36 @@ Options:
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
-    pub flag_dir:                   Option<PathBuf>,
-    pub flag_port:                  Option<u16>,
-    pub flag_map:                   Option<PathBuf>,
-    pub flag_replay_dir:            Option<PathBuf>,
-    pub flag_wine:                  bool,
-    pub flag_version:               bool,
-    pub flag_realtime:              bool,
-    pub flag_step_size:             Option<u32>,
+    pub flag_dir: Option<PathBuf>,
+    pub flag_port: Option<u16>,
+    pub flag_map: Option<PathBuf>,
+    pub flag_replay_dir: Option<PathBuf>,
+    pub flag_wine: bool,
+    pub flag_version: bool,
+    pub flag_realtime: bool,
+    pub flag_step_size: Option<u32>,
 }
 
 pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let default_settings = LauncherSettings::default();
 
-    Ok(
-        LauncherSettings {
-            use_wine: args.flag_wine,
-            dir: args.flag_dir.clone(),
-            base_port: {
-                if let Some(port) = args.flag_port {
-                    port
-                }
-                else {
-                    default_settings.base_port
-                }
+    Ok(LauncherSettings {
+        use_wine: args.flag_wine,
+        dir: args.flag_dir.clone(),
+        base_port: {
+            if let Some(port) = args.flag_port {
+                port
+            } else {
+                default_settings.base_port
             }
-        }
-    )
+        },
+    })
 }
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
-        None => bail!("no map specified")
+        None => bail!("no map specified"),
     };
 
     Ok(GameSettings { map: map })
@@ -112,19 +108,13 @@ pub enum TerranSoma {
 
 impl TerranSoma {
     pub fn organelle(interval: u32) -> Result<Self> {
-        Ok(
-            TerranSoma::Init(
-                Init {
-                    axon: Axon::new(
-                        vec![
-                            Dendrite::RequireOne(Synapse::Agent),
-                        ],
-                        vec![ ],
-                    )?,
-                    interval: interval,
-                }
-            )
-        )
+        Ok(TerranSoma::Init(Init {
+            axon: Axon::new(
+                vec![Dendrite::RequireOne(Synapse::Agent)],
+                vec![],
+            )?,
+            interval: interval,
+        }))
     }
 }
 
@@ -132,23 +122,22 @@ impl Soma for TerranSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, msg: Impulse<Signal, Synapse>)
-        -> organelle::Result<TerranSoma>
-    {
+    fn update(
+        self,
+        msg: Impulse<Signal, Synapse>,
+    ) -> organelle::Result<TerranSoma> {
         match self {
             TerranSoma::Init(state) => state.update(msg),
             TerranSoma::Setup(state) => state.update(msg),
 
             TerranSoma::InGame(state) => state.update(msg),
-        }.chain_err(
-            || organelle::ErrorKind::SomaError
-        )
+        }.chain_err(|| organelle::ErrorKind::SomaError)
     }
 }
 
 pub struct Init {
-    axon:           Axon,
-    interval:       u32,
+    axon: Axon,
+    interval: u32,
 }
 
 impl Init {
@@ -162,41 +151,42 @@ impl Init {
                 },
                 _ => bail!("unexpected protocol message"),
             }
-        }
-        else {
+        } else {
             Ok(TerranSoma::Init(self))
         }
     }
 }
 
 pub struct Setup {
-    axon:           Axon,
-    interval:       u32,
+    axon: Axon,
+    interval: u32,
 }
 
 impl Setup {
     fn setup(axon: Axon, interval: u32) -> Result<TerranSoma> {
-        Ok(TerranSoma::Setup(Setup { axon: axon, interval: interval }))
+        Ok(TerranSoma::Setup(Setup {
+            axon: axon,
+            interval: interval,
+        }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>)-> Result<TerranSoma> {
+    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
         if let Some(msg) = self.axon.update(msg)? {
             match msg {
                 Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
                     self.axon.send_req_input(
                         Synapse::Agent,
-                        Signal::PlayerSetup(
-                            PlayerSetup::Player {
-                                race: Race::Terran
-                            }
-                        )
+                        Signal::PlayerSetup(PlayerSetup::Player {
+                            race: Race::Terran,
+                        }),
                     )?;
 
                     Ok(TerranSoma::Setup(self))
                 },
                 Impulse::Signal(_, Signal::RequestUpdateInterval) => {
                     self.axon.send_req_input(
-                        Synapse::Agent, Signal::UpdateInterval(self.interval)
+                        Synapse::Agent,
+                        Signal::UpdateInterval(self.interval),
                     )?;
 
                     Ok(TerranSoma::Setup(self))
@@ -210,21 +200,23 @@ impl Setup {
                 },
                 _ => bail!("unexpected protocol message"),
             }
-        }
-        else {
+        } else {
             Ok(TerranSoma::Setup(self))
         }
     }
 }
 
 pub struct InGame {
-    axon:           Axon,
-    interval:       u32,
+    axon: Axon,
+    interval: u32,
 }
 
 impl InGame {
     fn start(axon: Axon, interval: u32) -> Result<TerranSoma> {
-        Ok(TerranSoma::InGame(InGame { axon: axon, interval: interval }))
+        Ok(TerranSoma::InGame(InGame {
+            axon: axon,
+            interval: interval,
+        }))
     }
 
     fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
@@ -241,10 +233,9 @@ impl InGame {
                 Impulse::Signal(_, msg) => {
                     bail!("unexpected message {:#?}", msg)
                 },
-                _ => bail!("unexpected protocol message")
+                _ => bail!("unexpected protocol message"),
             }
-        }
-        else {
+        } else {
             Ok(TerranSoma::InGame(self))
         }
     }
@@ -254,10 +245,10 @@ impl InGame {
 
         let agent = self.axon.req_input(Synapse::Agent)?;
 
-        let mut messages: Vec<Signal> = commands.into_iter()
+        let mut messages: Vec<Signal> = commands
+            .into_iter()
             .map(|cmd| Signal::Command(cmd))
-            .collect()
-        ;
+            .collect();
 
         messages.push(Signal::UpdateComplete);
 
@@ -267,7 +258,7 @@ impl InGame {
     }
 
     fn create_commands(&self, frame: &FrameData) -> Result<Vec<Command>> {
-        let mut commands = vec![ ];
+        let mut commands = vec![];
         // if there are marines and the command center is not found, send them
         // scouting.
         if let Some(cmd) = self.scout_with_marines(&frame) {
@@ -277,43 +268,41 @@ impl InGame {
         // build supply depots if they are needed
         if let Some(cmd) = self.try_build_supply_depot(&frame) {
             commands.push(cmd);
-            return Ok(commands)
+            return Ok(commands);
         }
 
         // build terran SCV's if they are needed
         if let Some(cmd) = self.try_build_scv(&frame) {
             commands.push(cmd);
-            return Ok(commands)
+            return Ok(commands);
         }
 
         // build barracks if they are ready to be built
         if let Some(cmd) = self.try_build_barracks(&frame) {
             commands.push(cmd);
-            return Ok(commands)
+            return Ok(commands);
         }
 
         // just keep building marines if possible
         if let Some(cmd) = self.try_build_marine(&frame) {
             commands.push(cmd);
-            return Ok(commands)
+            return Ok(commands);
         }
 
         Ok(commands)
     }
 
     fn find_enemy_structure(&self, frame: &FrameData) -> Option<Tag> {
-        let units = frame.state.filter_units(
-            |u| u.alliance == Alliance::Enemy && (
-                u.unit_type == UnitType::TerranCommandCenter ||
-                u.unit_type == UnitType::TerranSupplyDepot ||
-                u.unit_type == UnitType::TerranBarracks
-            )
-        );
+        let units = frame.state.filter_units(|u| {
+            u.alliance == Alliance::Enemy
+                && (u.unit_type == UnitType::TerranCommandCenter
+                    || u.unit_type == UnitType::TerranSupplyDepot
+                    || u.unit_type == UnitType::TerranBarracks)
+        });
 
         if !units.is_empty() {
             Some(units[0].tag)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -321,45 +310,40 @@ impl InGame {
     fn find_enemy_pos(&self, frame: &FrameData) -> Option<Point2> {
         if frame.data.terrain_info.enemy_start_locations.is_empty() {
             None
-        }
-        else {
+        } else {
             //TODO: should be random I think
             Some(frame.data.terrain_info.enemy_start_locations[0])
         }
     }
 
     fn scout_with_marines(&self, frame: &FrameData) -> Option<Command> {
-        let units = frame.state.filter_units(
-            |u| u.alliance == Alliance::Domestic &&
-                u.unit_type == UnitType::TerranMarine &&
-                u.orders.is_empty()
-        );
+        let units = frame.state.filter_units(|u| {
+            u.alliance == Alliance::Domestic
+                && u.unit_type == UnitType::TerranMarine
+                && u.orders.is_empty()
+        });
 
         for ref u in units {
             match self.find_enemy_structure(frame) {
                 Some(enemy_tag) => {
-                    return Some(
-                        Command::Action {
-                            units: vec![ Rc::clone(u) ],
-                            ability: Ability::Attack,
-                            target: Some(ActionTarget::UnitTag(enemy_tag))
-                        }
-                    )
+                    return Some(Command::Action {
+                        units: vec![Rc::clone(u)],
+                        ability: Ability::Attack,
+                        target: Some(ActionTarget::UnitTag(enemy_tag)),
+                    })
                 },
-                None => ()
+                None => (),
             }
 
             match self.find_enemy_pos(frame) {
                 Some(target_pos) => {
-                    return Some(
-                        Command::Action {
-                            units: vec![ Rc::clone(u) ],
-                            ability: Ability::Smart,
-                            target: Some(ActionTarget::Location(target_pos))
-                        }
-                    )
+                    return Some(Command::Action {
+                        units: vec![Rc::clone(u)],
+                        ability: Ability::Smart,
+                        target: Some(ActionTarget::Location(target_pos)),
+                    })
                 },
-                None => ()
+                None => (),
             }
         }
 
@@ -369,7 +353,7 @@ impl InGame {
     fn try_build_supply_depot(&self, frame: &FrameData) -> Option<Command> {
         // if we are not supply capped, don't build a supply depot
         if frame.state.food_used + 2 <= frame.state.food_cap {
-            return None
+            return None;
         }
 
         // find a random SVC to build a depot
@@ -377,35 +361,39 @@ impl InGame {
     }
 
     fn try_build_scv(&self, frame: &FrameData) -> Option<Command> {
-        let scv_count = frame.state.filter_units(
-            |u| u.unit_type == UnitType::TerranScv
-        ).len();
+        let scv_count = frame
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .len();
 
         if scv_count < TARGET_SCV_COUNT {
             self.try_build_unit(
-                frame, Ability::TrainScv, UnitType::TerranCommandCenter
+                frame,
+                Ability::TrainScv,
+                UnitType::TerranCommandCenter,
             )
-        }
-        else {
+        } else {
             None
         }
     }
 
     fn try_build_barracks(&self, frame: &FrameData) -> Option<Command> {
-        let scv_count = frame.state.filter_units(
-            |u| u.unit_type == UnitType::TerranScv
-        ).len();
+        let scv_count = frame
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .len();
         // wait until we have our quota of SCVs
         if scv_count < TARGET_SCV_COUNT {
-            return None
+            return None;
         }
 
-        let barracks_count = frame.state.filter_units(
-            |u| u.unit_type == UnitType::TerranBarracks
-        ).len();
+        let barracks_count = frame
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranBarracks)
+            .len();
 
         if barracks_count > 0 {
-            return None
+            return None;
         }
 
         self.try_build_structure(frame, Ability::BuildBarracks)
@@ -413,45 +401,47 @@ impl InGame {
 
     fn try_build_marine(&self, frame: &FrameData) -> Option<Command> {
         self.try_build_unit(
-            frame, Ability::TrainMarine, UnitType::TerranBarracks
+            frame,
+            Ability::TrainMarine,
+            UnitType::TerranBarracks,
         )
     }
 
     fn try_build_unit(
-        &self, frame: &FrameData, ability: Ability, unit_type: UnitType
-    )
-        -> Option<Command>
-    {
-        let units = frame.state.filter_units(
-            |u| u.unit_type == unit_type && u.orders.is_empty()
-        );
+        &self,
+        frame: &FrameData,
+        ability: Ability,
+        unit_type: UnitType,
+    ) -> Option<Command> {
+        let units = frame
+            .state
+            .filter_units(|u| u.unit_type == unit_type && u.orders.is_empty());
 
         if units.is_empty() {
             None
-        }
-        else {
-            Some(
-                Command::Action {
-                    units: vec![ Rc::clone(&units[0]) ],
-                    ability: ability,
-                    target: None
-                }
-            )
+        } else {
+            Some(Command::Action {
+                units: vec![Rc::clone(&units[0])],
+                ability: ability,
+                target: None,
+            })
         }
     }
 
-    fn try_build_structure(&self, frame: &FrameData, ability: Ability)
-        -> Option<Command>
-    {
-        let units = frame.state.filter_units(
-            |u| u.alliance == Alliance::Domestic
-        );
+    fn try_build_structure(
+        &self,
+        frame: &FrameData,
+        ability: Ability,
+    ) -> Option<Command> {
+        let units = frame
+            .state
+            .filter_units(|u| u.alliance == Alliance::Domestic);
 
         // if a unit is already building this structure, do nothing
         for u in &units {
             for o in &u.orders {
                 if o.ability == ability {
-                    return None
+                    return None;
                 }
             }
         }
@@ -461,64 +451,46 @@ impl InGame {
 
             let u = random::<usize>() % units.len();
 
-            Some(
-                Command::Action {
-                    units: vec![ Rc::clone(&units[u]) ],
-                    ability: ability,
-                    target: Some(
-                        ActionTarget::Location(
-                            Point2::new(units[u].pos.x, units[u].pos.y)
-                            + r * 5.0
-                        )
-                    )
-                }
-            )
-        }
-        else {
+            Some(Command::Action {
+                units: vec![Rc::clone(&units[u])],
+                ability: ability,
+                target: Some(ActionTarget::Location(
+                    Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0,
+                )),
+            })
+        } else {
             None
         }
     }
 }
 
-quick_main!(
-    || -> sc2::Result<()> {
-        let args: Args = Docopt::new(USAGE)
-            .and_then(|d| d.deserialize())
-            .unwrap_or_else(|e| e.exit())
-        ;
+quick_main!(|| -> sc2::Result<()> {
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.deserialize())
+        .unwrap_or_else(|e| e.exit());
 
-        if args.flag_version {
-            println!("bot-mp version {}", VERSION);
-            return Ok(())
-        }
-
-        let mut organelle = Organelle::new(
-            sc2::MeleeSoma::organelle(
-                sc2::MeleeSettings {
-                    launcher: get_launcher_settings(&args)?,
-                    players: (
-                        sc2::AgentSoma::organelle(
-                            TerranSoma::organelle(
-                                args.flag_step_size.unwrap_or(1)
-                            )?
-                        )?,
-                        sc2::AgentSoma::organelle(
-                            TerranSoma::organelle(
-                                args.flag_step_size.unwrap_or(1)
-                            )?
-                        )?,
-                    ),
-                    suite: sc2::MeleeSuite::EndlessRepeat(
-                        get_game_settings(&args)?
-                    )
-                }
-            )?
-        );
-
-        organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
-
-        organelle.run()?;
-
-        Ok(())
+    if args.flag_version {
+        println!("bot-mp version {}", VERSION);
+        return Ok(());
     }
-);
+
+    let mut organelle =
+        Organelle::new(sc2::MeleeSoma::organelle(sc2::MeleeSettings {
+            launcher: get_launcher_settings(&args)?,
+            players: (
+                sc2::AgentSoma::organelle(TerranSoma::organelle(
+                    args.flag_step_size.unwrap_or(1),
+                )?)?,
+                sc2::AgentSoma::organelle(TerranSoma::organelle(
+                    args.flag_step_size.unwrap_or(1),
+                )?)?,
+            ),
+            suite: sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?),
+        })?);
+
+    organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+
+    organelle.run()?;
+
+    Ok(())
+});

@@ -1,27 +1,26 @@
-
-use std::collections::{ HashMap };
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::{
-    Color,
-    PowerSource,
-    TerrainInfo,
-    Unit,
-    Upgrade,
-    Point2,
-    Point3,
-    Score,
-    UnitType,
-    UnitTypeData,
-    Effect,
     Ability,
     AbilityData,
-    UpgradeData,
+    ActionTarget,
     Buff,
     BuffData,
+    Color,
+    Effect,
+    ImageData,
+    Point2,
+    Point3,
+    PowerSource,
+    Score,
+    TerrainInfo,
+    Unit,
+    UnitType,
+    UnitTypeData,
+    Upgrade,
+    UpgradeData,
     Visibility,
-    ActionTarget,
-    ImageData
 };
 
 /// target for debugging text
@@ -30,7 +29,7 @@ pub enum DebugTextTarget {
     /// screen coordinates for debug text
     Screen(Point2),
     /// world coordinates for debug text
-    World(Point3)
+    World(Point3),
 }
 
 /// a command to issue to the game instance
@@ -43,12 +42,12 @@ pub enum Command {
         /// ability to trigger
         ability: Ability,
         /// ability target
-        target: Option<ActionTarget>
+        target: Option<ActionTarget>,
     },
-    // ToggleAutocast {
-    //     units: Vec<Rc<Unit>>,
-    //     ability: Ability
-    // },
+    /* ToggleAutocast {
+     *     units: Vec<Rc<Unit>>,
+     *     ability: Ability
+     * }, */
 }
 
 /// a debug command for the game
@@ -94,9 +93,8 @@ pub enum DebugCommand {
         radius: f32,
         /// color of the sphere
         color: Color,
-    }
+    },
 }
-
 
 /// an event from the game
 #[derive(Debug, Clone)]
@@ -125,80 +123,81 @@ pub enum GameEvent {
 #[derive(Debug, Clone)]
 pub struct GameData {
     /// data associated with abilities
-    pub ability_data:               HashMap<Ability, AbilityData>,
+    pub ability_data: HashMap<Ability, AbilityData>,
     /// data associated with unit types
-    pub unit_type_data:             HashMap<UnitType, UnitTypeData>,
+    pub unit_type_data: HashMap<UnitType, UnitTypeData>,
     /// data associated with upgrades
-    pub upgrade_data:               HashMap<Upgrade, UpgradeData>,
+    pub upgrade_data: HashMap<Upgrade, UpgradeData>,
     /// data associated buffs
-    pub buff_data:                  HashMap<Buff, BuffData>,
+    pub buff_data: HashMap<Buff, BuffData>,
 
     /// playable area info
-    pub terrain_info:               TerrainInfo,
+    pub terrain_info: TerrainInfo,
 }
 
 /// current state of the map
 #[derive(Debug, Clone)]
 pub struct MapState {
     /// creep image (sample pixels to find tiles with creep)
-    pub creep:                      ImageData,
+    pub creep: ImageData,
     /// visibility image (sample pixels to find visible tiles)
-    pub visibility:                 ImageData,
+    pub visibility: ImageData,
 }
 
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
 pub struct GameState {
     /// the player id associated with the participant
-    pub player_id:                  u32,
+    pub player_id: u32,
     /// the previous game step
-    pub previous_step:              u32,
+    pub previous_step: u32,
     /// the current game step
-    pub current_step:               u32,
+    pub current_step: u32,
     /// position of the center of the camera
-    pub camera_pos:                 Point2,
+    pub camera_pos: Point2,
 
     /// a list of all known units at the moment
-    pub units:                      Vec<Rc<Unit>>,
+    pub units: Vec<Rc<Unit>>,
 
     /// all power sources associated with the current player
-    pub power_sources:              Vec<PowerSource>,
+    pub power_sources: Vec<PowerSource>,
     /// all active effects in vision of the current player
-    pub effects:                    Vec<Effect>,
+    pub effects: Vec<Effect>,
     /// all upgrades
-    pub upgrades:                   Vec<Upgrade>,
+    pub upgrades: Vec<Upgrade>,
 
     /// current mineral count
-    pub minerals:                   u32,
+    pub minerals: u32,
     /// current vespene count
-    pub vespene:                    u32,
+    pub vespene: u32,
     /// the total supply cap given the players max supply
-    pub food_cap:                   u32,
+    pub food_cap: u32,
     /// the total supply used by the player
-    pub food_used:                  u32,
+    pub food_used: u32,
     /// the total supply consumed by army units alone
-    pub food_army:                  u32,
+    pub food_army: u32,
     /// the total supply consumed by workers alone
-    pub food_workers:               u32,
+    pub food_workers: u32,
     /// the number of workers that currently have no orders
-    pub idle_worker_count:          u32,
+    pub idle_worker_count: u32,
     /// the number of army units
-    pub army_count:                 u32,
+    pub army_count: u32,
     /// the number of warp gates owned by the player
-    pub warp_gate_count:            u32,
+    pub warp_gate_count: u32,
     /// the number of larva owned by the player
-    pub larva_count:                u32,
+    pub larva_count: u32,
 
     /// detailed current set of scores
-    pub score:                      Score
+    pub score: Score,
 }
 
 impl GameState {
     /// filter all units based on a custom condition
     pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
-        where F: Fn(&Unit) -> bool
+    where
+        F: Fn(&Unit) -> bool,
     {
-        let mut units = vec![ ];
+        let mut units = vec![];
 
         for unit in &self.units {
             if filter(&unit) {
@@ -240,11 +239,11 @@ impl GameState {
 #[derive(Debug, Clone)]
 pub struct FrameData {
     /// state that updates every frame
-    pub state:          GameState,
+    pub state: GameState,
     /// data that can change on a per game basis
-    pub data:           Rc<GameData>,
+    pub data: Rc<GameData>,
     /// events that have happened since the last update
-    pub events:         Vec<GameEvent>,
+    pub events: Vec<GameEvent>,
     /// current map state
-    pub map:            Rc<MapState>
+    pub map: Rc<MapState>,
 }

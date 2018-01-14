@@ -1,45 +1,40 @@
-
-
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::rc::Rc;
 
 use organelle;
-use organelle::{ ResultExt, Handle, Neuron, Sheath, Impulse, Dendrite };
-use sc2_proto::{ sc2api };
+use organelle::{Dendrite, Handle, Impulse, Neuron, ResultExt, Sheath};
+use sc2_proto::sc2api;
 
 use super::{
-    Result,
-    FromProto,
-    IntoSc2,
-
-    Signal,
-    Synapse,
-    Axon,
-
-    FrameData,
-    GameData,
-    GameState,
-    GameEvent,
-    MapState,
-
-    Buff,
-    BuffData,
-    Upgrade,
-    UpgradeData,
     Ability,
     AbilityData,
+    Action,
+    Alliance,
+    Axon,
+    Buff,
+    BuffData,
+    DisplayType,
+    FrameData,
+    FromProto,
+    GameData,
+    GameEvent,
+    GameState,
+    IntoSc2,
+    MapState,
+    Point2,
+    Result,
+    Signal,
+    SpatialAction,
+    Synapse,
+    Tag,
+    Unit,
     UnitType,
     UnitTypeData,
-    Action,
-    SpatialAction,
-    Unit,
-    Tag,
-    Alliance,
-    Point2,
-    DisplayType,
+    Upgrade,
+    UpgradeData,
 };
-use client::{ ClientRequest, ClientResult, Transactor };
+use client::{ClientRequest, ClientResult, Transactor};
 
 pub enum ObserverSoma {
     Init(Init),
@@ -56,17 +51,11 @@ pub enum ObserverSoma {
 
 impl ObserverSoma {
     pub fn sheath() -> Result<Sheath<Self>> {
-        Ok(
-            Sheath::new(
-                ObserverSoma::Init(Init { }),
-                vec![
-                    Dendrite::RequireOne(Synapse::Observer),
-                ],
-                vec![
-                    Dendrite::RequireOne(Synapse::Client),
-                ],
-            )?
-        )
+        Ok(Sheath::new(
+            ObserverSoma::Init(Init {}),
+            vec![Dendrite::RequireOne(Synapse::Observer)],
+            vec![Dendrite::RequireOne(Synapse::Client)],
+        )?)
     }
 }
 
@@ -74,9 +63,11 @@ impl Neuron for ObserverSoma {
     type Signal = Signal;
     type Synapse = Synapse;
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> organelle::Result<Self>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> organelle::Result<Self> {
         match self {
             ObserverSoma::Init(state) => state.update(axon, msg),
 
@@ -88,24 +79,22 @@ impl Neuron for ObserverSoma {
             ObserverSoma::GameDataReady(state) => state.update(axon, msg),
 
             ObserverSoma::Observe(state) => state.update(axon, msg),
-        }.chain_err(
-            || organelle::ErrorKind::SomaError
-        )
+        }.chain_err(|| organelle::ErrorKind::SomaError)
     }
 }
 
 pub struct Init;
 
 impl Init {
-    fn update(self, _axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        _axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Start => Started::start(),
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
             _ => bail!("unexpected protocol message"),
         }
     }
@@ -115,18 +104,20 @@ pub struct Started;
 
 impl Started {
     fn start() -> Result<ObserverSoma> {
-        Ok(ObserverSoma::Started(Started { }))
+        Ok(ObserverSoma::Started(Started {}))
     }
 
     fn restart(axon: &Axon) -> Result<ObserverSoma> {
         axon.send_req_input(Synapse::Observer, Signal::GameEnded)?;
 
-        Ok(ObserverSoma::Started(Started { }))
+        Ok(ObserverSoma::Started(Started {}))
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Signal(_, Signal::Ready)
             | Impulse::Signal(_, Signal::ClientClosed)
@@ -137,16 +128,16 @@ impl Started {
                 self.on_fetch_game_data(axon, src)
             },
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
-            _ => bail!("unexpected protocol message")
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_fetch_game_data(self, axon: &Axon, src: Handle)
-        -> Result<ObserverSoma>
-    {
+    fn on_fetch_game_data(
+        self,
+        axon: &Axon,
+        src: Handle,
+    ) -> Result<ObserverSoma> {
         assert_eq!(src, axon.req_input(Synapse::Observer)?);
 
         FetchGameData::fetch(axon)
@@ -154,7 +145,7 @@ impl Started {
 }
 
 pub struct FetchGameData {
-    transactor:     Transactor,
+    transactor: Transactor,
 }
 
 impl FetchGameData {
@@ -164,31 +155,32 @@ impl FetchGameData {
 
         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
-        Ok(
-            ObserverSoma::FetchGameData(
-                FetchGameData { transactor: transactor }
-            )
-        )
+        Ok(ObserverSoma::FetchGameData(FetchGameData {
+            transactor: transactor,
+        }))
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Signal(src, Signal::ClientResult(result)) => {
                 self.on_game_data(axon, src, result)
-            }
-
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
             },
-            _ => bail!("unexpected protocol message")
+
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_game_data(self, axon: &Axon, src: Handle, result: ClientResult)
-        -> Result<ObserverSoma>
-    {
+    fn on_game_data(
+        self,
+        axon: &Axon,
+        src: Handle,
+        result: ClientResult,
+    ) -> Result<ObserverSoma> {
         let mut rsp = self.transactor.expect(src, result)?;
 
         let mut unit_type_data = HashMap::new();
@@ -225,18 +217,22 @@ impl FetchGameData {
         }
 
         FetchTerrainData::fetch(
-            axon, unit_type_data, ability_data, upgrade_data, buff_data
+            axon,
+            unit_type_data,
+            ability_data,
+            upgrade_data,
+            buff_data,
         )
     }
 }
 
 pub struct FetchTerrainData {
-    transactor:             Transactor,
+    transactor: Transactor,
 
-    unit_type_data:         HashMap<UnitType, UnitTypeData>,
-    ability_data:           HashMap<Ability, AbilityData>,
-    upgrade_data:           HashMap<Upgrade, UpgradeData>,
-    buff_data:              HashMap<Buff, BuffData>,
+    unit_type_data: HashMap<UnitType, UnitTypeData>,
+    ability_data: HashMap<Ability, AbilityData>,
+    upgrade_data: HashMap<Upgrade, UpgradeData>,
+    buff_data: HashMap<Buff, BuffData>,
 }
 
 impl FetchTerrainData {
@@ -245,133 +241,124 @@ impl FetchTerrainData {
         unit_type_data: HashMap<UnitType, UnitTypeData>,
         ability_data: HashMap<Ability, AbilityData>,
         upgrade_data: HashMap<Upgrade, UpgradeData>,
-        buff_data: HashMap<Buff, BuffData>
-    )
-        -> Result<ObserverSoma>
-    {
+        buff_data: HashMap<Buff, BuffData>,
+    ) -> Result<ObserverSoma> {
         let mut req = sc2api::Request::new();
         req.mut_game_info();
 
         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
-        Ok(
-            ObserverSoma::FetchTerrainData(
-                FetchTerrainData {
-                    transactor: transactor,
+        Ok(ObserverSoma::FetchTerrainData(FetchTerrainData {
+            transactor: transactor,
 
-                    unit_type_data: unit_type_data,
-                    ability_data: ability_data,
-                    upgrade_data: upgrade_data,
-                    buff_data: buff_data,
-                }
-            )
-        )
+            unit_type_data: unit_type_data,
+            ability_data: ability_data,
+            upgrade_data: upgrade_data,
+            buff_data: buff_data,
+        }))
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Signal(src, Signal::ClientResult(rsp)) => {
                 self.on_terrain_info(axon, src, rsp)
             },
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
-            _ => bail!("unexpected protocol message")
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
+            _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_terrain_info(self, axon: &Axon, src: Handle, result: ClientResult)
-        -> Result<ObserverSoma>
-    {
+    fn on_terrain_info(
+        self,
+        axon: &Axon,
+        src: Handle,
+        result: ClientResult,
+    ) -> Result<ObserverSoma> {
         let mut rsp = self.transactor.expect(src, result)?;
 
-        let game_data = Rc::from(
-            GameData {
-                unit_type_data: self.unit_type_data,
-                ability_data: self.ability_data,
-                upgrade_data: self.upgrade_data,
-                buff_data: self.buff_data,
+        let game_data = Rc::from(GameData {
+            unit_type_data: self.unit_type_data,
+            ability_data: self.ability_data,
+            upgrade_data: self.upgrade_data,
+            buff_data: self.buff_data,
 
-                terrain_info: rsp.take_game_info().into_sc2()?
-            }
-        );
+            terrain_info: rsp.take_game_info().into_sc2()?,
+        });
 
         GameDataReady::start(axon, game_data)
     }
 }
 
 struct ObserverData {
-    previous_step:      u32,
-    current_step:       u32,
-    previous_units:     HashMap<Tag, Rc<Unit>>,
-    units:              HashMap<Tag, Rc<Unit>>,
+    previous_step: u32,
+    current_step: u32,
+    previous_units: HashMap<Tag, Rc<Unit>>,
+    units: HashMap<Tag, Rc<Unit>>,
 
-    previous_upgrades:  HashSet<Upgrade>,
-    upgrades:           HashSet<Upgrade>,
+    previous_upgrades: HashSet<Upgrade>,
+    upgrades: HashSet<Upgrade>,
 
-    actions:            Vec<Action>,
-    spatial_actions:    Vec<SpatialAction>,
+    actions: Vec<Action>,
+    spatial_actions: Vec<SpatialAction>,
 
-    game_data:          Rc<GameData>,
+    game_data: Rc<GameData>,
 }
 
 pub struct GameDataReady {
-    data:               ObserverData,
+    data: ObserverData,
 }
 
 impl GameDataReady {
     fn start(axon: &Axon, game_data: Rc<GameData>) -> Result<ObserverSoma> {
         axon.send_req_input(Synapse::Observer, Signal::GameDataReady)?;
 
-        Ok(
-            ObserverSoma::GameDataReady(
-                GameDataReady {
-                    data: ObserverData {
-                        previous_step: 0,
-                        current_step: 0,
-                        previous_units: HashMap::new(),
-                        units: HashMap::new(),
+        Ok(ObserverSoma::GameDataReady(GameDataReady {
+            data: ObserverData {
+                previous_step: 0,
+                current_step: 0,
+                previous_units: HashMap::new(),
+                units: HashMap::new(),
 
-                        previous_upgrades: HashSet::new(),
-                        upgrades: HashSet::new(),
+                previous_upgrades: HashSet::new(),
+                upgrades: HashSet::new(),
 
-                        actions: vec![ ],
-                        spatial_actions: vec![ ],
-                        game_data: game_data,
-                    }
-                }
-            )
-        )
+                actions: vec![],
+                spatial_actions: vec![],
+                game_data: game_data,
+            },
+        }))
     }
 
     fn ready(data: ObserverData) -> Result<ObserverSoma> {
         Ok(ObserverSoma::GameDataReady(GameDataReady { data: data }))
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Signal(src, Signal::Observe) => {
                 assert_eq!(src, axon.req_input(Synapse::Observer)?);
                 Observe::observe(axon, self.data)
             },
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
             _ => bail!("unexpected protocol message"),
         }
     }
 }
 
 pub struct Observe {
-    transactor:     Transactor,
+    transactor: Transactor,
 
-    data:           ObserverData,
+    data: ObserverData,
 }
 
 impl Observe {
@@ -381,39 +368,38 @@ impl Observe {
 
         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 
-        Ok(
-            ObserverSoma::Observe(
-                Observe {
-                    transactor: transactor,
+        Ok(ObserverSoma::Observe(Observe {
+            transactor: transactor,
 
-                    data: data
-                }
-            )
-        )
+            data: data,
+        }))
     }
 
-    fn update(self, axon: &Axon, msg: Impulse<Signal, Synapse>)
-        -> Result<ObserverSoma>
-    {
+    fn update(
+        self,
+        axon: &Axon,
+        msg: Impulse<Signal, Synapse>,
+    ) -> Result<ObserverSoma> {
         match msg {
             Impulse::Signal(src, Signal::ClientResult(result)) => {
                 self.on_observe(axon, src, result)
             },
 
-            Impulse::Signal(_, msg) => {
-                bail!("unexpected message {:#?}", msg)
-            },
+            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
             _ => bail!("unexpected protocol message"),
         }
     }
 
-    fn on_observe(self, axon: &Axon, src: Handle, result: ClientResult)
-        -> Result<ObserverSoma>
-    {
+    fn on_observe(
+        self,
+        axon: &Axon,
+        src: Handle,
+        result: ClientResult,
+    ) -> Result<ObserverSoma> {
         let mut rsp = self.transactor.expect(src, result)?;
 
         if rsp.get_status() != sc2api::Status::in_game {
-            return Started::restart(axon)
+            return Started::restart(axon);
         }
 
         let mut observation = rsp.take_observation().take_observation();
@@ -438,13 +424,12 @@ impl Observe {
 
                     data.units.insert(tag, Rc::from(unit));
                 },
-                _ => ()
+                _ => (),
             }
         }
 
-        data.previous_upgrades = mem::replace(
-            &mut data.upgrades, HashSet::new()
-        );
+        data.previous_upgrades =
+            mem::replace(&mut data.upgrades, HashSet::new());
 
         for u in player_raw.take_upgrade_ids().into_iter() {
             data.upgrades.insert(Upgrade::from_proto(u)?);
@@ -462,7 +447,7 @@ impl Observe {
 
             units: data.units.values().map(|u| Rc::clone(u)).collect(),
             power_sources: {
-                let mut power_sources = vec![ ];
+                let mut power_sources = vec![];
 
                 for p in player_raw.take_power_sources().into_iter() {
                     power_sources.push(p.into());
@@ -471,7 +456,7 @@ impl Observe {
                 power_sources
             },
             upgrades: data.upgrades.iter().map(|u| *u).collect(),
-            effects: vec![ ],
+            effects: vec![],
 
             minerals: player_common.get_minerals(),
             vespene: player_common.get_vespene(),
@@ -518,28 +503,21 @@ impl Observe {
             let fl = action.get_action_feature_layer();
 
             if fl.has_unit_command() {
-                data.spatial_actions.push(
-                    fl.get_unit_command().clone().into_sc2()?
-                );
-            }
-            else if fl.has_camera_move() {
-                data.spatial_actions.push(
-                    fl.get_camera_move().clone().into_sc2()?
-                );
-            }
-            else if fl.has_unit_selection_point() {
-                data.spatial_actions.push(
-                    fl.get_unit_selection_point().clone().into_sc2()?
-                );
-            }
-            else if fl.has_unit_selection_rect() {
-                data.spatial_actions.push(
-                    fl.get_unit_selection_rect().clone().into_sc2()?
-                );
+                data.spatial_actions
+                    .push(fl.get_unit_command().clone().into_sc2()?);
+            } else if fl.has_camera_move() {
+                data.spatial_actions
+                    .push(fl.get_camera_move().clone().into_sc2()?);
+            } else if fl.has_unit_selection_point() {
+                data.spatial_actions
+                    .push(fl.get_unit_selection_point().clone().into_sc2()?);
+            } else if fl.has_unit_selection_rect() {
+                data.spatial_actions
+                    .push(fl.get_unit_selection_rect().clone().into_sc2()?);
             }
         }
 
-        let mut events = vec![ ];
+        let mut events = vec![];
 
         if raw.has_event() {
             let event = raw.get_event();
@@ -549,7 +527,7 @@ impl Observe {
                     Some(ref mut unit) => {
                         events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
                     },
-                    None => ()
+                    None => (),
                 }
             }
         }
@@ -559,40 +537,37 @@ impl Observe {
                 Some(ref prev_unit) => {
                     if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
                         events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                    }
-                    else if unit.build_progress >= 1.0
+                    } else if unit.build_progress >= 1.0
                         && prev_unit.build_progress < 1.0
                     {
-                        events.push(
-                            GameEvent::BuildingCompleted(Rc::clone(unit))
-                        );
+                        events.push(GameEvent::BuildingCompleted(Rc::clone(
+                            unit,
+                        )));
                     }
                 },
                 None => {
-                    if unit.alliance == Alliance::Enemy &&
-                        unit.display_type == DisplayType::Visible
+                    if unit.alliance == Alliance::Enemy
+                        && unit.display_type == DisplayType::Visible
                     {
                         events.push(GameEvent::UnitDetected(Rc::clone(unit)));
-                    }
-                    else {
+                    } else {
                         events.push(GameEvent::UnitCreated(Rc::clone(unit)));
                     }
 
                     events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                }
+                },
             }
         }
 
-        let prev_upgrades = mem::replace(
-            &mut data.previous_upgrades, HashSet::new()
-        );
+        let prev_upgrades =
+            mem::replace(&mut data.previous_upgrades, HashSet::new());
 
         for upgrade in &data.upgrades {
             match prev_upgrades.get(upgrade) {
                 Some(_) => (),
                 None => {
                     events.push(GameEvent::UpgradeCompleted(*upgrade));
-                }
+                },
             }
         }
 
@@ -604,7 +579,7 @@ impl Observe {
         for alert in observation.get_alerts() {
             match *alert {
                 sc2api::Alert::NuclearLaunchDetected => nukes += 1,
-                sc2api::Alert::NydusWormDetected => nydus_worms += 1
+                sc2api::Alert::NydusWormDetected => nydus_worms += 1,
             }
         }
 
@@ -618,19 +593,15 @@ impl Observe {
 
         let mut map_state = raw.take_map_state();
 
-        let frame = Rc::from(
-            FrameData {
-                state: new_state,
-                data: Rc::clone(&data.game_data),
-                events: events,
-                map: Rc::from(
-                    MapState {
-                        creep: map_state.take_creep().into_sc2()?,
-                        visibility: map_state.take_visibility().into_sc2()?
-                    }
-                )
-            }
-        );
+        let frame = Rc::from(FrameData {
+            state: new_state,
+            data: Rc::clone(&data.game_data),
+            events: events,
+            map: Rc::from(MapState {
+                creep: map_state.take_creep().into_sc2()?,
+                visibility: map_state.take_visibility().into_sc2()?,
+            }),
+        });
 
         axon.send_req_input(Synapse::Observer, Signal::Observation(frame))?;
 

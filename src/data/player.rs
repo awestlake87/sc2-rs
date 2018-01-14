@@ -1,8 +1,7 @@
-
-use sc2_proto::sc2api;
 use sc2_proto::common;
+use sc2_proto::sc2api;
 
-use super::super::{ Result, FromProto, IntoProto };
+use super::super::{FromProto, IntoProto, Result};
 
 /// race of the player
 #[allow(missing_docs)]
@@ -16,33 +15,27 @@ pub enum Race {
 
 impl FromProto<common::Race> for Race {
     fn from_proto(race: common::Race) -> Result<Self> {
-        Ok(
-            match race {
-                common::Race::Terran => Race::Terran,
-                common::Race::Zerg => Race::Zerg,
-                common::Race::Protoss => Race::Protoss,
-                common::Race::Random => Race::Random,
-                common::Race::NoRace => panic!(
-                    concat!(
-                        "NoRace value (Library Bug! please let us know that ",
-                        "this can in fact happen!)"
-                    )
-                ),
-            }
-        )
+        Ok(match race {
+            common::Race::Terran => Race::Terran,
+            common::Race::Zerg => Race::Zerg,
+            common::Race::Protoss => Race::Protoss,
+            common::Race::Random => Race::Random,
+            common::Race::NoRace => panic!(concat!(
+                "NoRace value (Library Bug! please let us know that ",
+                "this can in fact happen!)"
+            )),
+        })
     }
 }
 
 impl IntoProto<common::Race> for Race {
     fn into_proto(self) -> Result<common::Race> {
-        Ok(
-            match self {
-                Race::Zerg      => common::Race::Zerg,
-                Race::Terran    => common::Race::Terran,
-                Race::Protoss   => common::Race::Protoss,
-                Race::Random    => common::Race::Random,
-            }
-        )
+        Ok(match self {
+            Race::Zerg => common::Race::Zerg,
+            Race::Terran => common::Race::Terran,
+            Race::Protoss => common::Race::Protoss,
+            Race::Random => common::Race::Random,
+        })
     }
 }
 
@@ -59,23 +52,23 @@ pub enum Difficulty {
     VeryHard,
     CheatVision,
     CheatMoney,
-    CheatInsane
+    CheatInsane,
 }
 
 impl Difficulty {
     /// convert to protobuf data
     pub fn to_proto(&self) -> sc2api::Difficulty {
         match *self {
-            Difficulty::VeryEasy        => sc2api::Difficulty::VeryEasy,
-            Difficulty::Easy            => sc2api::Difficulty::Easy,
-            Difficulty::Medium          => sc2api::Difficulty::Medium,
-            Difficulty::MediumHard      => sc2api::Difficulty::MediumHard,
-            Difficulty::Hard            => sc2api::Difficulty::Hard,
-            Difficulty::Harder          => sc2api::Difficulty::Harder,
-            Difficulty::VeryHard        => sc2api::Difficulty::VeryHard,
-            Difficulty::CheatVision     => sc2api::Difficulty::CheatVision,
-            Difficulty::CheatMoney      => sc2api::Difficulty::CheatMoney,
-            Difficulty::CheatInsane     => sc2api::Difficulty::CheatInsane
+            Difficulty::VeryEasy => sc2api::Difficulty::VeryEasy,
+            Difficulty::Easy => sc2api::Difficulty::Easy,
+            Difficulty::Medium => sc2api::Difficulty::Medium,
+            Difficulty::MediumHard => sc2api::Difficulty::MediumHard,
+            Difficulty::Hard => sc2api::Difficulty::Hard,
+            Difficulty::Harder => sc2api::Difficulty::Harder,
+            Difficulty::VeryHard => sc2api::Difficulty::VeryHard,
+            Difficulty::CheatVision => sc2api::Difficulty::CheatVision,
+            Difficulty::CheatMoney => sc2api::Difficulty::CheatMoney,
+            Difficulty::CheatInsane => sc2api::Difficulty::CheatInsane,
         }
     }
 }
@@ -86,16 +79,15 @@ pub enum PlayerSetup {
     /// add a built-in StarCraft II bot with the given race and difficulty
     Computer {
         /// race of the computer
-        race:           Race,
+        race: Race,
         /// difficulty setting
-        difficulty:     Difficulty
+        difficulty: Difficulty,
     },
     /// add a user-controlled player
     Player {
         /// race of the player
-        race:           Race
+        race: Race,
     },
-
     //Observer,
 }
 

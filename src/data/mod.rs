@@ -18,7 +18,7 @@ use sc2_proto::data;
 use sc2_proto::raw;
 use sc2_proto::sc2api;
 
-use super::{ Result, FromProto, IntoSc2 };
+use super::{FromProto, IntoSc2, Result};
 
 pub use self::ability::*;
 pub use self::action::*;
@@ -43,7 +43,7 @@ pub struct Rect<T> {
     /// width of the rectangle
     pub w: T,
     /// height of the rectangle
-    pub h: T
+    pub h: T,
 }
 
 /// 2D vector used to specify direction
@@ -59,9 +59,9 @@ pub type Point3 = geometry::Point3<f32>;
 #[derive(Debug, Copy, Clone)]
 pub struct Rect2 {
     /// upper left-hand corner
-    pub from:               Point2,
+    pub from: Point2,
     /// lower right-hand corner
-    pub to:                 Point2,
+    pub to: Point2,
 }
 
 /// 2D integer point used to specify a location
@@ -73,9 +73,9 @@ pub type Point2I = na::Vector2<i32>;
 #[derive(Debug, Copy, Clone)]
 pub struct Rect2I {
     /// upper left-hand corner
-    pub from:               Point2I,
+    pub from: Point2I,
     /// lower right-hand corner
-    pub to:                 Point2I,
+    pub to: Point2I,
 }
 
 /// visibility of a point on the terrain
@@ -85,16 +85,16 @@ pub enum Visibility {
     Hidden,
     Fogged,
     Visible,
-    FullHidden
+    FullHidden,
 }
 
 /// data for an ability that is currently available
 #[derive(Debug, Copy, Clone)]
 pub struct AvailableAbility {
     /// the ability that is available
-    pub ability:                Ability,
+    pub ability: Ability,
     /// indicates whether the ability requires a point to invoke
-    pub requires_point:         bool,
+    pub requires_point: bool,
 }
 
 /// target type of the ability
@@ -114,37 +114,38 @@ pub enum AbilityTarget {
 #[derive(Debug, Clone)]
 pub struct AbilityData {
     /// indicates whether the ability is available to the current mods/map
-    pub available:              bool,
+    pub available: bool,
     /// stable ID for the ability
-    pub ability:                Ability,
+    pub ability: Ability,
     /// catalog (game data xml) name of the ability
-    pub link_name:              String,
+    pub link_name: String,
     /// catalog (game data xml) index of the ability
-    pub link_index:             u32,
+    pub link_index: u32,
     /// name of the button for the command card
-    pub button_name:            String,
+    pub button_name: String,
     /// in case the button name is not descriptive
-    pub friendly_name:          String,
+    pub friendly_name: String,
     /// UI hotkey
-    pub hotkey:                 String,
+    pub hotkey: String,
     /// this ability may be represented by this more generic ability
-    pub remaps_to_ability:      Option<Ability>,
+    pub remaps_to_ability: Option<Ability>,
     /// other abilities that can remap to this generic ability
-    pub remaps_from_ability:    Vec<Ability>,
+    pub remaps_from_ability: Vec<Ability>,
     /// type of target that this ability uses
-    pub target:                 Option<AbilityTarget>,
+    pub target: Option<AbilityTarget>,
     /// can be cast in the minimap (unimplemented)
-    pub allow_minimap:          bool,
+    pub allow_minimap: bool,
     /// autocast can be set
-    pub allow_autocast:         bool,
+    pub allow_autocast: bool,
     /// requires placement to construct a building
-    pub is_building:            bool,
-    /// if the ability is placing a building, give the radius of the footprint
-    pub footprint_radius:       f32,
+    pub is_building: bool,
+    /// if the ability is placing a building, give the radius of the
+    /// footprint
+    pub footprint_radius: f32,
     /// placement next to an existing structure (an addon like a Tech Lab)
-    pub is_instant_placement:   bool,
+    pub is_instant_placement: bool,
     /// range unit can cast ability without needing to approach target
-    pub cast_range:             f32,
+    pub cast_range: f32,
 }
 
 impl AbilityData {
@@ -152,60 +153,47 @@ impl AbilityData {
     pub fn get_generalized_ability(&self) -> Ability {
         match self.remaps_to_ability {
             Some(remap) => remap,
-            None  => self.ability
+            None => self.ability,
         }
     }
 }
 
 impl FromProto<data::AbilityData> for AbilityData {
     fn from_proto(mut data: data::AbilityData) -> Result<Self> {
-        Ok(
-            Self {
-                available: data.get_available(),
-                ability: Ability::from_proto(data.get_ability_id())?,
-                link_name: data.take_link_name(),
-                link_index: data.get_link_index(),
-                button_name: data.take_button_name(),
-                friendly_name: data.take_friendly_name(),
-                hotkey: data.take_hotkey(),
-                remaps_to_ability: {
-                    if data.has_remaps_to_ability_id() {
-                        Some(
-                            Ability::from_proto(
-                                data.get_remaps_to_ability_id()
-                            )?
-                        )
-                    }
-                    else {
-                        None
-                    }
+        Ok(Self {
+            available: data.get_available(),
+            ability: Ability::from_proto(data.get_ability_id())?,
+            link_name: data.take_link_name(),
+            link_index: data.get_link_index(),
+            button_name: data.take_button_name(),
+            friendly_name: data.take_friendly_name(),
+            hotkey: data.take_hotkey(),
+            remaps_to_ability: {
+                if data.has_remaps_to_ability_id() {
+                    Some(Ability::from_proto(data.get_remaps_to_ability_id())?)
+                } else {
+                    None
+                }
+            },
+            remaps_from_ability: vec![],
+            target: match data.get_target() {
+                data::AbilityData_Target::None => None,
+                data::AbilityData_Target::Point => Some(AbilityTarget::Point),
+                data::AbilityData_Target::Unit => Some(AbilityTarget::Unit),
+                data::AbilityData_Target::PointOrUnit => {
+                    Some(AbilityTarget::PointOrUnit)
                 },
-                remaps_from_ability: vec![ ],
-                target: match data.get_target() {
-                    data::AbilityData_Target::None => {
-                        None
-                    },
-                    data::AbilityData_Target::Point => {
-                        Some(AbilityTarget::Point)
-                    },
-                    data::AbilityData_Target::Unit => {
-                        Some(AbilityTarget::Unit)
-                    },
-                    data::AbilityData_Target::PointOrUnit => {
-                        Some(AbilityTarget::PointOrUnit)
-                    },
-                    data::AbilityData_Target::PointOrNone => {
-                        Some(AbilityTarget::PointOrNone)
-                    },
+                data::AbilityData_Target::PointOrNone => {
+                    Some(AbilityTarget::PointOrNone)
                 },
-                allow_minimap: data.get_allow_minimap(),
-                allow_autocast: data.get_allow_autocast(),
-                is_building: data.get_is_building(),
-                footprint_radius: data.get_footprint_radius(),
-                is_instant_placement: data.get_is_instant_placement(),
-                cast_range: data.get_cast_range(),
-            }
-        )
+            },
+            allow_minimap: data.get_allow_minimap(),
+            allow_autocast: data.get_allow_autocast(),
+            is_building: data.get_is_building(),
+            footprint_radius: data.get_footprint_radius(),
+            is_instant_placement: data.get_is_instant_placement(),
+            cast_range: data.get_cast_range(),
+        })
     }
 }
 
@@ -213,11 +201,11 @@ impl FromProto<data::AbilityData> for AbilityData {
 #[derive(Debug, Clone)]
 pub struct AvailableUnitAbilities {
     /// the available abilities
-    pub abilities:              Vec<AvailableAbility>,
+    pub abilities: Vec<AvailableAbility>,
     /// the tag of the unit
-    pub unit_tag:               Tag,
+    pub unit_tag: Tag,
     /// the type of the unit
-    pub unit_type:              UnitType,
+    pub unit_type: UnitType,
 }
 
 /// category of unit
@@ -234,26 +222,24 @@ pub enum Attribute {
     Structure,
     Hover,
     Heroic,
-    Summoned
+    Summoned,
 }
 
 impl FromProto<data::Attribute> for Attribute {
     fn from_proto(a: data::Attribute) -> Result<Self> {
-        Ok(
-            match a {
-                data::Attribute::Light => Attribute::Light,
-                data::Attribute::Armored => Attribute::Armored,
-                data::Attribute::Biological => Attribute::Biological,
-                data::Attribute::Mechanical => Attribute::Mechanical,
-                data::Attribute::Robotic => Attribute::Robotic,
-                data::Attribute::Psionic => Attribute::Psionic,
-                data::Attribute::Massive => Attribute::Massive,
-                data::Attribute::Structure => Attribute::Structure,
-                data::Attribute::Hover => Attribute::Hover,
-                data::Attribute::Heroic => Attribute::Heroic,
-                data::Attribute::Summoned => Attribute::Summoned,
-            }
-        )
+        Ok(match a {
+            data::Attribute::Light => Attribute::Light,
+            data::Attribute::Armored => Attribute::Armored,
+            data::Attribute::Biological => Attribute::Biological,
+            data::Attribute::Mechanical => Attribute::Mechanical,
+            data::Attribute::Robotic => Attribute::Robotic,
+            data::Attribute::Psionic => Attribute::Psionic,
+            data::Attribute::Massive => Attribute::Massive,
+            data::Attribute::Structure => Attribute::Structure,
+            data::Attribute::Hover => Attribute::Hover,
+            data::Attribute::Heroic => Attribute::Heroic,
+            data::Attribute::Summoned => Attribute::Summoned,
+        })
     }
 }
 
@@ -261,19 +247,17 @@ impl FromProto<data::Attribute> for Attribute {
 #[derive(Debug, Copy, Clone)]
 pub struct DamageBonus {
     /// affected attribute
-    pub attribute:              Attribute,
+    pub attribute: Attribute,
     /// damage bonus
-    pub bonus:                  f32,
+    pub bonus: f32,
 }
 
 impl FromProto<data::DamageBonus> for DamageBonus {
     fn from_proto(b: data::DamageBonus) -> Result<Self> {
-        Ok(
-            Self {
-                attribute: b.get_attribute().into_sc2()?,
-                bonus: b.get_bonus()
-            }
-        )
+        Ok(Self {
+            attribute: b.get_attribute().into_sc2()?,
+            bonus: b.get_bonus(),
+        })
     }
 }
 
@@ -288,13 +272,11 @@ pub enum WeaponTargetType {
 
 impl FromProto<data::Weapon_TargetType> for WeaponTargetType {
     fn from_proto(target: data::Weapon_TargetType) -> Result<Self> {
-        Ok(
-            match target {
-                data::Weapon_TargetType::Ground => WeaponTargetType::Ground,
-                data::Weapon_TargetType::Air => WeaponTargetType::Air,
-                data::Weapon_TargetType::Any => WeaponTargetType::Any,
-            }
-        )
+        Ok(match target {
+            data::Weapon_TargetType::Ground => WeaponTargetType::Ground,
+            data::Weapon_TargetType::Air => WeaponTargetType::Air,
+            data::Weapon_TargetType::Any => WeaponTargetType::Any,
+        })
     }
 }
 
@@ -302,39 +284,37 @@ impl FromProto<data::Weapon_TargetType> for WeaponTargetType {
 #[derive(Debug, Clone)]
 pub struct Weapon {
     /// weapon's target type
-    pub target_type:            WeaponTargetType,
+    pub target_type: WeaponTargetType,
     /// weapon damage
-    pub damage:                 f32,
+    pub damage: f32,
     /// any damage bonuses that apply to the weapon
-    pub damage_bonus:           Vec<DamageBonus>,
+    pub damage_bonus: Vec<DamageBonus>,
     /// number of hits per attack (eg. Colossus has 2 beams)
-    pub attacks:                u32,
+    pub attacks: u32,
     /// attack range
-    pub range:                  f32,
+    pub range: f32,
     /// time between attacks
-    pub speed:                  f32,
+    pub speed: f32,
 }
 
 impl FromProto<data::Weapon> for Weapon {
     fn from_proto(mut w: data::Weapon) -> Result<Self> {
-        Ok(
-            Self {
-                target_type: w.get_field_type().into_sc2()?,
-                damage: w.get_damage(),
-                damage_bonus: {
-                    let mut bonuses = vec![ ];
+        Ok(Self {
+            target_type: w.get_field_type().into_sc2()?,
+            damage: w.get_damage(),
+            damage_bonus: {
+                let mut bonuses = vec![];
 
-                    for b in w.take_damage_bonus().into_iter() {
-                        bonuses.push(b.into_sc2()?);
-                    }
+                for b in w.take_damage_bonus().into_iter() {
+                    bonuses.push(b.into_sc2()?);
+                }
 
-                    bonuses
-                },
-                attacks: w.get_attacks(),
-                range: w.get_range(),
-                speed: w.get_speed(),
-            }
-        )
+                bonuses
+            },
+            attacks: w.get_attacks(),
+            range: w.get_range(),
+            speed: w.get_speed(),
+        })
     }
 }
 
@@ -344,117 +324,113 @@ impl FromProto<data::Weapon> for Weapon {
 #[derive(Debug, Clone)]
 pub struct UnitTypeData {
     /// stable unit ID
-    pub unit_type:              UnitType,
+    pub unit_type: UnitType,
     /// unit type name (corresponds to the game's catalog)
-    pub name:                   String,
+    pub name: String,
     /// whether this unit is available to the current mods/map
-    pub available:              bool,
+    pub available: bool,
     /// number of cargo slots this unit occupies in a transport
-    pub cargo_size:             u32,
+    pub cargo_size: u32,
     /// cost in minerals to build this unit
-    pub mineral_cost:           u32,
+    pub mineral_cost: u32,
     /// cost in vespene to build this unit
-    pub vespene_cost:           u32,
+    pub vespene_cost: u32,
 
     /// unit attributes (may change based on upgrades)
-    pub attributes:             Vec<Attribute>,
+    pub attributes: Vec<Attribute>,
     /// movement speed of this unit
-    pub movement_speed:         f32,
+    pub movement_speed: f32,
     /// armor of this unit
-    pub armor:                  f32,
+    pub armor: f32,
     /// weapons on this unit
-    pub weapons:                Vec<Weapon>,
+    pub weapons: Vec<Weapon>,
     /// how much food this unit requires
-    pub food_required:          f32,
+    pub food_required: f32,
     /// how much food this unit provides
-    pub food_provided:          f32,
+    pub food_provided: f32,
     /// which ability id creates this unit
-    pub ability:                Ability,
+    pub ability: Ability,
     /// the race this unit belongs to
-    pub race:                   Option<Race>,
+    pub race: Option<Race>,
     /// how long a unit takes to build
-    pub build_time:             f32,
+    pub build_time: f32,
     /// whether this unit can have minerals (mineral patches)
-    pub has_minerals:           bool,
+    pub has_minerals: bool,
     /// whether this unit can have vespene (vespene geysers)
-    pub has_vespene:            bool,
+    pub has_vespene: bool,
 
-    /// units this is equivalent to in terms of satisfying tech requirements
-    pub tech_alias:             Vec<UnitType>,
+    /// units this is equivalent to in terms of satisfying tech
+    /// requirements
+    pub tech_alias: Vec<UnitType>,
     /// units that are morphed variants of the same unit
-    pub unit_alias:             UnitType,
+    pub unit_alias: UnitType,
     /// structure required to build this unit (or any with same tech alias)
-    pub tech_requirement:       UnitType,
+    pub tech_requirement: UnitType,
     /// whether tech requirement is an addon
-    pub require_attached:       bool,
+    pub require_attached: bool,
 }
 
 impl FromProto<data::UnitTypeData> for UnitTypeData {
     fn from_proto(mut data: data::UnitTypeData) -> Result<Self> {
-        Ok(
-            Self {
-                unit_type: data.get_unit_id().into_sc2()?,
-                name: data.get_name().to_string(),
-                available: data.get_available(),
-                cargo_size: data.get_cargo_size(),
-                mineral_cost: data.get_mineral_cost(),
-                vespene_cost: data.get_vespene_cost(),
+        Ok(Self {
+            unit_type: data.get_unit_id().into_sc2()?,
+            name: data.get_name().to_string(),
+            available: data.get_available(),
+            cargo_size: data.get_cargo_size(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
 
-                attributes: {
-                    let mut attributes = vec![ ];
+            attributes: {
+                let mut attributes = vec![];
 
-                    for a in data.take_attributes().into_iter() {
-                        attributes.push(a.into_sc2()?);
-                    }
+                for a in data.take_attributes().into_iter() {
+                    attributes.push(a.into_sc2()?);
+                }
 
-                    attributes
-                },
+                attributes
+            },
 
-                movement_speed: data.get_movement_speed(),
-                armor: data.get_armor(),
-                weapons: {
-                    let mut weapons = vec![ ];
+            movement_speed: data.get_movement_speed(),
+            armor: data.get_armor(),
+            weapons: {
+                let mut weapons = vec![];
 
-                    for w in data.take_weapons().into_iter() {
-                        weapons.push(w.into_sc2()?);
-                    }
+                for w in data.take_weapons().into_iter() {
+                    weapons.push(w.into_sc2()?);
+                }
 
-                    weapons
-                },
-                food_required: data.get_food_required(),
-                food_provided: data.get_food_provided(),
+                weapons
+            },
+            food_required: data.get_food_required(),
+            food_provided: data.get_food_provided(),
 
-                ability: data.get_ability_id().into_sc2()?,
-                race: {
-                    if data.has_race()
-                        && data.get_race() != common::Race::NoRace
-                    {
-                        Some(data.get_race().into_sc2()?)
-                    }
-                    else {
-                        None
-                    }
-                },
-                build_time: data.get_build_time(),
-                has_minerals: data.get_has_minerals(),
-                has_vespene: data.get_has_vespene(),
+            ability: data.get_ability_id().into_sc2()?,
+            race: {
+                if data.has_race() && data.get_race() != common::Race::NoRace {
+                    Some(data.get_race().into_sc2()?)
+                } else {
+                    None
+                }
+            },
+            build_time: data.get_build_time(),
+            has_minerals: data.get_has_minerals(),
+            has_vespene: data.get_has_vespene(),
 
-                tech_alias: {
-                    let mut aliases = vec![ ];
+            tech_alias: {
+                let mut aliases = vec![];
 
-                    for a in data.get_tech_alias() {
-                        aliases.push(UnitType::from_proto(*a)?);
-                    }
+                for a in data.get_tech_alias() {
+                    aliases.push(UnitType::from_proto(*a)?);
+                }
 
-                    aliases
-                },
-                unit_alias: UnitType::from_proto(data.get_unit_alias())?,
-                tech_requirement: UnitType::from_proto(
-                    data.get_tech_requirement()
-                )?,
-                require_attached: data.get_require_attached()
-            }
-        )
+                aliases
+            },
+            unit_alias: UnitType::from_proto(data.get_unit_alias())?,
+            tech_requirement: UnitType::from_proto(
+                data.get_tech_requirement(),
+            )?,
+            require_attached: data.get_require_attached(),
+        })
     }
 }
 
@@ -462,31 +438,29 @@ impl FromProto<data::UnitTypeData> for UnitTypeData {
 #[derive(Debug, Clone)]
 pub struct UpgradeData {
     /// stable upgrade ID
-    pub upgrade:                Upgrade,
+    pub upgrade: Upgrade,
     /// upgrade name (corresponds to the game's catalog)
-    pub name:                   String,
+    pub name: String,
     /// mineral cost of researching this upgrade
-    pub mineral_cost:           u32,
+    pub mineral_cost: u32,
     /// vespene cost of researching this upgrade
-    pub vespene_cost:           u32,
+    pub vespene_cost: u32,
     /// ability that researches this upgrade
-    pub ability:                Ability,
+    pub ability: Ability,
     /// time in game steps to research this upgrade
-    pub research_time:          f32,
+    pub research_time: f32,
 }
 
 impl FromProto<data::UpgradeData> for UpgradeData {
     fn from_proto(mut data: data::UpgradeData) -> Result<Self> {
-        Ok(
-            Self {
-                upgrade: Upgrade::from_proto(data.get_upgrade_id())?,
-                name: data.take_name(),
-                mineral_cost: data.get_mineral_cost(),
-                vespene_cost: data.get_vespene_cost(),
-                ability: Ability::from_proto(data.get_ability_id())?,
-                research_time: data.get_research_time(),
-            }
-        )
+        Ok(Self {
+            upgrade: Upgrade::from_proto(data.get_upgrade_id())?,
+            name: data.take_name(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
+            ability: Ability::from_proto(data.get_ability_id())?,
+            research_time: data.get_research_time(),
+        })
     }
 }
 
@@ -494,19 +468,17 @@ impl FromProto<data::UpgradeData> for UpgradeData {
 #[derive(Debug, Clone)]
 pub struct BuffData {
     /// stable buff ID
-    pub buff:                   Buff,
+    pub buff: Buff,
     /// buff name (corresponds to the game's catalog)
-    pub name:                   String,
+    pub name: String,
 }
 
 impl FromProto<data::BuffData> for BuffData {
     fn from_proto(mut data: data::BuffData) -> Result<Self> {
-        Ok(
-            BuffData {
-                buff: Buff::from_proto(data.get_buff_id())?,
-                name: data.take_name(),
-            }
-        )
+        Ok(BuffData {
+            buff: Buff::from_proto(data.get_buff_id())?,
+            name: data.take_name(),
+        })
     }
 }
 
@@ -514,33 +486,33 @@ impl FromProto<data::BuffData> for BuffData {
 #[derive(Debug, Clone)]
 pub struct EffectData {
     /// stable effect ID
-    pub effect:                 Ability,
+    pub effect: Ability,
     /// effect name (corresponds to game's catalog)
-    pub name:                   String,
+    pub name: String,
     /// a more recognizable name of the effect
-    pub friendly_name:          String,
+    pub friendly_name: String,
     /// size of the circle the effect impacts
-    pub radius:                 f32,
+    pub radius: f32,
 }
 
 /// visuals of a persistent ability on the map (eg. PsiStorm)
 #[derive(Debug, Clone)]
 pub struct Effect {
     /// stable effect ID
-    pub effect:                 Ability,
+    pub effect: Ability,
     /// all the positions that this effect is impacting on the map
-    pub positions:              Vec<Point2>,
+    pub positions: Vec<Point2>,
 }
 
 /// power source information for Protoss
 #[derive(Debug, Copy, Clone)]
 pub struct PowerSource {
     /// unit tag of the power source
-    pub tag:                    Tag,
+    pub tag: Tag,
     /// position of the power source
-    pub pos:                    Point2,
+    pub pos: Point2,
     /// radius of the power source
-    pub radius:                 f32,
+    pub radius: f32,
 }
 
 impl From<raw::PowerSource> for PowerSource {
@@ -560,58 +532,52 @@ impl From<raw::PowerSource> for PowerSource {
 #[derive(Debug, Copy, Clone)]
 pub struct ReplayPlayerInfo {
     /// id of the player
-    pub player_id:              u32,
+    pub player_id: u32,
     /// player ranking
-    pub mmr:                    i32,
+    pub mmr: i32,
     /// player actions per minute
-    pub apm:                    i32,
+    pub apm: i32,
 
     /// actual player race
-    pub race:                   Race,
+    pub race: Race,
     /// selected player race (if Random or None, race will be different)
-    pub race_selected:          Option<Race>,
+    pub race_selected: Option<Race>,
     /// if the player won or lost
-    pub game_result:            Option<GameResult>,
+    pub game_result: Option<GameResult>,
 }
 
 impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
     fn from_proto(info: sc2api::PlayerInfoExtra) -> Result<Self> {
-        Ok(
-            Self {
-                player_id: info.get_player_info().get_player_id(),
+        Ok(Self {
+            player_id: info.get_player_info().get_player_id(),
 
-                race: info.get_player_info().get_race_actual().into_sc2()?,
-                race_selected: {
-                    if info.get_player_info().has_race_requested() {
-                        let proto_race = info.get_player_info()
-                            .get_race_requested()
-                        ;
+            race: info.get_player_info().get_race_actual().into_sc2()?,
+            race_selected: {
+                if info.get_player_info().has_race_requested() {
+                    let proto_race =
+                        info.get_player_info().get_race_requested();
 
-                        if proto_race != common::Race::NoRace {
-                            Some(proto_race.into_sc2()?)
-                        }
-                        else {
-                            None
-                        }
-                    }
-                    else {
+                    if proto_race != common::Race::NoRace {
+                        Some(proto_race.into_sc2()?)
+                    } else {
                         None
                     }
-                },
-
-                mmr: info.get_player_mmr(),
-                apm: info.get_player_apm(),
-
-                game_result: {
-                    if info.has_player_result() {
-                        Some(info.get_player_result().get_result().into_sc2()?)
-                    }
-                    else {
-                        None
-                    }
+                } else {
+                    None
                 }
-            }
-        )
+            },
+
+            mmr: info.get_player_mmr(),
+            apm: info.get_player_apm(),
+
+            game_result: {
+                if info.has_player_result() {
+                    Some(info.get_player_result().get_result().into_sc2()?)
+                } else {
+                    None
+                }
+            },
+        })
     }
 }
 
@@ -619,53 +585,51 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
 #[derive(Debug, Clone)]
 pub struct ReplayInfo {
     /// name of the map
-    pub map_name:               String,
+    pub map_name: String,
     /// path to the map
-    pub map_path:               String,
+    pub map_path: String,
     /// version of the game
-    pub game_version:           String,
+    pub game_version: String,
     /// data version of the game
-    pub data_version:           String,
+    pub data_version: String,
 
     /// duration in seconds
-    pub duration:               f32,
+    pub duration: f32,
     /// duration in game steps
-    pub duration_steps:         u32,
+    pub duration_steps: u32,
 
     /// data build of the game
-    pub data_build:             u32,
+    pub data_build: u32,
     /// required base build of the game
-    pub base_build:             u32,
+    pub base_build: u32,
 
     /// information about specific players
-    pub players:                Vec<ReplayPlayerInfo>
+    pub players: Vec<ReplayPlayerInfo>,
 }
 
 impl FromProto<sc2api::ResponseReplayInfo> for ReplayInfo {
     fn from_proto(mut info: sc2api::ResponseReplayInfo) -> Result<Self> {
-        Ok(
-            Self {
-                map_name: info.take_map_name(),
-                map_path: info.take_local_map_path(),
-                game_version: info.take_game_version(),
-                data_version: info.take_data_version(),
+        Ok(Self {
+            map_name: info.take_map_name(),
+            map_path: info.take_local_map_path(),
+            game_version: info.take_game_version(),
+            data_version: info.take_data_version(),
 
-                duration: info.get_game_duration_seconds(),
-                duration_steps: info.get_game_duration_loops(),
+            duration: info.get_game_duration_seconds(),
+            duration_steps: info.get_game_duration_loops(),
 
-                data_build: info.get_data_build(),
-                base_build: info.get_base_build(),
+            data_build: info.get_data_build(),
+            base_build: info.get_base_build(),
 
-                players: {
-                    let mut player_info = vec![ ];
+            players: {
+                let mut player_info = vec![];
 
-                    for p in info.take_player_info().into_iter() {
-                        player_info.push(p.into_sc2()?);
-                    }
-
-                    player_info
+                for p in info.take_player_info().into_iter() {
+                    player_info.push(p.into_sc2()?);
                 }
-            }
-        )
+
+                player_info
+            },
+        })
     }
 }
