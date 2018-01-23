@@ -1,51 +1,96 @@
-use std::collections::HashMap;
-use std::mem;
+use std::{self, mem};
 
 use futures::prelude::*;
 use futures::unsync;
 use organelle;
 use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
-use url::Url;
-use uuid::Uuid;
 
 use super::{
     Dendrite,
     Error,
-    GamePorts,
     GameSettings,
-    LauncherRequest,
     LauncherSettings,
     LauncherSoma,
     LauncherTerminal,
     PlayerSetup,
-    PortSet,
     Result,
     Synapse,
     Terminal,
 };
 
 #[derive(Debug)]
-pub enum ControllerRequest {
+enum MeleeRequest {
     PlayerSetup(GameSettings, unsync::oneshot::Sender<PlayerSetup>),
 }
 
+/// wrapper around a sender to provide a melee interface
 #[derive(Debug, Clone)]
-pub struct ControllerTerminal {
-    tx: unsync::mpsc::Sender<ControllerRequest>,
+pub struct MeleeTerminal {
+    tx: unsync::mpsc::Sender<MeleeRequest>,
 }
 
-impl ControllerTerminal {
-    pub fn new(tx: unsync::mpsc::Sender<ControllerRequest>) -> Self {
+/// interface to be enforced by melee dendrites
+pub trait MeleeContract: Sized {
+    /// errors from the dendrite
+    type Error: std::error::Error + Send + Into<Error>;
+
+    /// fetch the player setup from the agent
+    fn get_player_setup(
+        self,
+        game: GameSettings,
+    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
+}
+
+/// wrapper around a receiver to provide a controlled interface
+#[derive(Debug)]
+pub struct MeleeDendrite {
+    rx: unsync::mpsc::Receiver<MeleeRequest>,
+}
+
+impl MeleeDendrite {
+    fn new(rx: unsync::mpsc::Receiver<MeleeRequest>) -> Self {
+        Self { rx: rx }
+    }
+
+    /// wrap a dendrite and use the contract to respond to any requests
+    #[async]
+    pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
+    where
+        T: MeleeContract + 'static,
+    {
+        #[async]
+        for req in self.rx.map_err(|_| Error::from("streams cannot fail")) {
+            match req {
+                MeleeRequest::PlayerSetup(game, tx) => {
+                    let result = await!(dendrite.get_player_setup(game))
+                        .map_err(|e| e.into())?;
+
+                    dendrite = result.0;
+                    tx.send(result.1).map_err(|_| {
+                        Error::from("unable to send player setup")
+                    })?;
+                },
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl MeleeTerminal {
+    fn new(tx: unsync::mpsc::Sender<MeleeRequest>) -> Self {
         Self { tx: tx }
     }
+
+    /// get a player setup from the agents
     #[async]
-    fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
         let (tx, rx) = unsync::oneshot::channel();
 
         await!(
             self.tx
-                .send(ControllerRequest::PlayerSetup(game, tx))
+                .send(MeleeRequest::PlayerSetup(game, tx))
                 .map_err(|_| Error::from("unable to request player setup"))
         )?;
 
@@ -71,13 +116,21 @@ pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
     pub suite: MeleeSuite,
 }
 
+/// controller that pits agents against each other
 pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
     launcher: Option<LauncherTerminal>,
-    agents: Vec<Option<ControllerTerminal>>,
+    agents: Vec<Option<MeleeTerminal>>,
 }
 
 impl MeleeSoma {
+    /// create a melee synapse
+    pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
+        let (tx, rx) = unsync::mpsc::channel(1);
+
+        (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
+    }
+
     /// melee soma only works as a controller in a melee organelle
     fn axon(suite: MeleeSuite) -> Result<Axon<Self>> {
         Ok(Axon::new(
@@ -89,7 +142,7 @@ impl MeleeSoma {
             vec![],
             vec![
                 Constraint::One(Synapse::Launcher),
-                Constraint::Variadic(Synapse::Controller),
+                Constraint::Variadic(Synapse::Melee),
             ],
         ))
     }
@@ -127,10 +180,10 @@ impl MeleeSoma {
         let player1 = organelle.add_soma(settings.players.0);
         let player2 = organelle.add_soma(settings.players.1);
 
-        organelle.connect(melee, launcher, Synapse::Launcher);
+        organelle.connect(melee, launcher, Synapse::Launcher)?;
 
-        organelle.connect(melee, player1, Synapse::Controller);
-        organelle.connect(melee, player2, Synapse::Controller);
+        organelle.connect(melee, player1, Synapse::Melee)?;
+        organelle.connect(melee, player2, Synapse::Melee)?;
 
         Ok(organelle)
     }
@@ -148,10 +201,7 @@ impl Soma for MeleeSoma {
                 self.launcher = Some(tx);
                 Ok(self)
             },
-            Impulse::AddTerminal(
-                Synapse::Controller,
-                Terminal::Controller(tx),
-            ) => {
+            Impulse::AddTerminal(Synapse::Melee, Terminal::Melee(tx)) => {
                 self.agents.push(Some(tx));
                 Ok(self)
             },
@@ -191,10 +241,10 @@ impl Soma for MeleeSoma {
 #[async]
 fn run_melee(
     suite: MeleeSuite,
-    launcher: LauncherTerminal,
-    agents: (ControllerTerminal, ControllerTerminal),
+    _launcher: LauncherTerminal,
+    agents: (MeleeTerminal, MeleeTerminal),
 ) -> Result<()> {
-    let (game, suite) = match suite {
+    let (game, _suite) = match suite {
         MeleeSuite::OneAndDone(game) => (game, None),
         MeleeSuite::EndlessRepeat(game) => {
             let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));

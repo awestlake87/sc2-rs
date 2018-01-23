@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env::home_dir;
 use std::mem;
 use std::path::{PathBuf, MAIN_SEPARATOR};
@@ -8,7 +7,6 @@ use futures::unsync;
 use glob::glob;
 use organelle::{Axon, Constraint, Impulse, Soma};
 use regex::Regex;
-use uuid::Uuid;
 
 use super::{
     Dendrite,
@@ -19,20 +17,21 @@ use super::{
     Rect,
     Result,
     Synapse,
-    Terminal,
 };
 use instance::{Instance, InstanceKind, InstanceSettings};
 
+/// sender for launcher
 #[derive(Debug, Clone)]
 pub struct LauncherTerminal {
     tx: unsync::mpsc::Sender<LauncherRequest>,
 }
 
 impl LauncherTerminal {
-    pub fn new(tx: unsync::mpsc::Sender<LauncherRequest>) -> Self {
+    fn new(tx: unsync::mpsc::Sender<LauncherRequest>) -> Self {
         Self { tx: tx }
     }
 
+    /// launch an instance
     #[async]
     pub fn launch(self) -> Result<Instance> {
         let (tx, rx) = unsync::oneshot::channel();
@@ -46,6 +45,7 @@ impl LauncherTerminal {
         await!(rx.map_err(|_| Error::from("unable to receive instance")))
     }
 
+    /// get a set of game ports
     #[async]
     pub fn get_game_ports(self) -> Result<GamePorts> {
         let (tx, rx) = unsync::oneshot::channel();
@@ -61,9 +61,21 @@ impl LauncherTerminal {
 }
 
 #[derive(Debug)]
-pub enum LauncherRequest {
+enum LauncherRequest {
     Launch(unsync::oneshot::Sender<Instance>),
     Ports(unsync::oneshot::Sender<GamePorts>),
+}
+
+/// receiver for launcher
+#[derive(Debug)]
+pub struct LauncherDendrite {
+    rx: unsync::mpsc::Receiver<LauncherRequest>,
+}
+
+impl LauncherDendrite {
+    fn new(rx: unsync::mpsc::Receiver<LauncherRequest>) -> Self {
+        Self { rx: rx }
+    }
 }
 
 /// settings used to create a launcher
@@ -149,12 +161,9 @@ impl Launcher {
     }
 
     #[async]
-    fn listen(
-        mut self,
-        req_rx: unsync::mpsc::Receiver<LauncherRequest>,
-    ) -> Result<()> {
+    fn listen(mut self, dendrite: LauncherDendrite) -> Result<()> {
         #[async]
-        for req in req_rx.map_err(|_| Error::from("streams can't fail")) {
+        for req in dendrite.rx.map_err(|_| Error::from("streams can't fail")) {
             match req {
                 LauncherRequest::Launch(tx) => {
                     tx.send(self.launch()?)
@@ -190,16 +199,23 @@ impl Launcher {
 /// soma in charge of launching game instances and assigning ports
 pub struct LauncherSoma {
     launcher: Option<Launcher>,
-    req_rx: Option<unsync::mpsc::Receiver<LauncherRequest>>,
+    dendrite: Option<LauncherDendrite>,
 }
 
 impl LauncherSoma {
+    /// create a launcher synapse
+    pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
+        let (tx, rx) = unsync::mpsc::channel(1);
+
+        (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
+    }
+
     /// create a launcher from settings
     pub fn axon(settings: LauncherSettings) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 launcher: Some(Launcher::new(settings)?),
-                req_rx: None,
+                dendrite: None,
             },
             vec![Constraint::One(Synapse::Launcher)],
             vec![],
@@ -217,20 +233,20 @@ impl Soma for LauncherSoma {
         match msg {
             Impulse::AddDendrite(
                 Synapse::Launcher,
-                Dendrite::Launcher(req_rx),
+                Dendrite::Launcher(dendrite),
             ) => {
-                self.req_rx = Some(req_rx);
+                self.dendrite = Some(dendrite);
 
                 Ok(self)
             },
             Impulse::Start(tx, handle) => {
                 assert!(self.launcher.is_some());
-                assert!(self.req_rx.is_some());
+                assert!(self.dendrite.is_some());
 
                 handle.spawn(
                     mem::replace(&mut self.launcher, None)
                         .unwrap()
-                        .listen(mem::replace(&mut self.req_rx, None).unwrap())
+                        .listen(mem::replace(&mut self.dendrite, None).unwrap())
                         .or_else(move |e| {
                             tx.send(Impulse::Error(e.into()))
                                 .map(|_| ())

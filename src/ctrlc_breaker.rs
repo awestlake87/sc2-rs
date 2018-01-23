@@ -1,7 +1,6 @@
 use ctrlc;
 use futures::prelude::*;
 use futures::sync;
-use organelle;
 use organelle::{Axon, Impulse, Soma};
 
 use super::{Error, Result, Synapse};

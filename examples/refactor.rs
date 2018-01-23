@@ -9,39 +9,17 @@ extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate organelle;
-extern crate rand;
 extern crate serde;
 extern crate tokio_core;
 
 extern crate sc2;
 
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{Axon, Constraint, Impulse, Organelle, ResultExt, Soma};
-use rand::random;
-use sc2::{
-    Ability,
-    ActionTarget,
-    Alliance,
-    CtrlcBreakerSoma,
-    //Command,
-    Error,
-    //FrameData,
-    GameSettings,
-    LauncherSettings,
-    Map,
-    PlayerSetup,
-    Point2,
-    Race,
-    Result,
-    Synapse,
-    Tag,
-    UnitType,
-    Vector2,
-};
+use organelle::{Axon, Impulse, Organelle, Soma};
+use sc2::{Error, GameSettings, LauncherSettings, Map, Result, Synapse};
 use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");

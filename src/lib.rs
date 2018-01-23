@@ -38,13 +38,7 @@ mod launcher;
 mod melee;
 //mod observer;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
-
-use futures::unsync;
-use url::Url;
-use uuid::Uuid;
 
 pub use self::agent::AgentSoma;
 // pub use self::client::{ClientRequest, ClientResult};
@@ -98,17 +92,18 @@ pub use self::data::{
 //     MapState,
 // };
 pub use self::launcher::{
-    LauncherRequest,
+    LauncherDendrite,
     LauncherSettings,
     LauncherSoma,
     LauncherTerminal,
 };
 pub use self::melee::{
-    ControllerRequest,
-    ControllerTerminal,
+    MeleeContract,
+    MeleeDendrite,
     MeleeSettings,
     MeleeSoma,
     MeleeSuite,
+    MeleeTerminal,
 };
 
 error_chain! {
@@ -207,22 +202,31 @@ trait IntoProto<T> {
     fn into_proto(self) -> Result<T>;
 }
 
+/// the synapses that can be formed between somas
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Synapse {
+    /// launch game instances
     Launcher,
-    Controller,
+    /// coordinate versus games between agents
+    Melee,
 }
 
+/// senders for synapses
 #[derive(Debug)]
 pub enum Terminal {
+    /// launcher sender
     Launcher(LauncherTerminal),
-    Controller(ControllerTerminal),
+    /// melee sender
+    Melee(MeleeTerminal),
 }
 
+/// receivers for synapses
 #[derive(Debug)]
 pub enum Dendrite {
-    Launcher(unsync::mpsc::Receiver<LauncherRequest>),
-    Controller(unsync::mpsc::Receiver<ControllerRequest>),
+    /// launcher receiver
+    Launcher(LauncherDendrite),
+    /// melee receiver
+    Melee(MeleeDendrite),
 }
 
 impl organelle::Synapse for Synapse {
@@ -232,20 +236,14 @@ impl organelle::Synapse for Synapse {
     fn synapse(self) -> (Self::Terminal, Self::Dendrite) {
         match self {
             Synapse::Launcher => {
-                let (tx, rx) = unsync::mpsc::channel(1);
+                let (tx, rx) = LauncherSoma::synapse();
 
-                (
-                    Terminal::Launcher(LauncherTerminal::new(tx)),
-                    Dendrite::Launcher(rx),
-                )
+                (Terminal::Launcher(tx), Dendrite::Launcher(rx))
             },
-            Synapse::Controller => {
-                let (tx, rx) = unsync::mpsc::channel(1);
+            Synapse::Melee => {
+                let (tx, rx) = MeleeSoma::synapse();
 
-                (
-                    Terminal::Controller(ControllerTerminal::new(tx)),
-                    Dendrite::Controller(rx),
-                )
+                (Terminal::Melee(tx), Dendrite::Melee(rx))
             },
         }
     }

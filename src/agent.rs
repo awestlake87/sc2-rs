@@ -1,26 +1,13 @@
-use std::rc::Rc;
-use std::time;
-
 use futures::prelude::*;
-use futures::unsync;
 use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
-use sc2_proto::{debug, sc2api};
 use tokio_core::reactor;
-use url::Url;
 
 use super::{
-    ActionTarget,
-    ControllerRequest,
     Dendrite,
     Error,
-    //Command,
-    //DebugCommand,
-    //DebugTextTarget,
-    //FrameData,
-    GamePorts,
     GameSettings,
-    IntoProto,
-    Map,
+    MeleeContract,
+    MeleeDendrite,
     PlayerSetup,
     Race,
     Result,
@@ -30,24 +17,23 @@ use super::{
 //use client::{ClientRequest, ClientResult, ClientSoma, Transactor};
 //use observer::ObserverSoma;
 
+/// manages a player soma
 pub struct AgentSoma {
-    controller_rx: Option<unsync::mpsc::Receiver<ControllerRequest>>,
+    controller: Option<MeleeDendrite>,
 }
 
 impl AgentSoma {
     fn axon() -> Result<Axon<Self>> {
         Ok(Axon::new(
-            Self {
-                controller_rx: None,
-            },
-            vec![Constraint::One(Synapse::Controller)],
+            Self { controller: None },
+            vec![Constraint::One(Synapse::Melee)],
             vec![],
         ))
     }
 
     /// compose an agent organelle to interact with a controller soma
     pub fn organelle<T>(
-        soma: T,
+        _soma: T,
         handle: reactor::Handle,
     ) -> Result<Organelle<Axon<Self>>>
     where
@@ -59,7 +45,7 @@ impl AgentSoma {
         <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
-        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
+        let organelle = Organelle::new(AgentSoma::axon()?, handle);
 
         // let agent = organelle.get_main_handle();
         // let player = organelle.add_soma(soma);
@@ -93,26 +79,26 @@ impl Soma for AgentSoma {
     #[async(boxed)]
     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddDendrite(
-                Synapse::Controller,
-                Dendrite::Controller(rx),
-            ) => Ok(Self {
-                controller_rx: Some(rx),
-            }),
-            Impulse::Start(tx, handle) => {
-                assert!(self.controller_rx.is_some());
-
-                handle.spawn(run_agent(self.controller_rx.unwrap()).or_else(
-                    |e| {
-                        tx.send(Impulse::Error(e.into()))
-                            .map(|_| ())
-                            .map_err(|_| ())
-                    },
-                ));
-
+            Impulse::AddDendrite(Synapse::Melee, Dendrite::Melee(rx)) => {
                 Ok(Self {
-                    controller_rx: None,
+                    controller: Some(rx),
                 })
+            },
+            Impulse::Start(tx, handle) => {
+                assert!(self.controller.is_some());
+
+                handle.spawn(
+                    self.controller
+                        .unwrap()
+                        .wrap(AgentMeleeDendrite {})
+                        .or_else(|e| {
+                            tx.send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
+                        }),
+                );
+
+                Ok(Self { controller: None })
             },
 
             _ => bail!("unexpected impulse"),
@@ -120,21 +106,15 @@ impl Soma for AgentSoma {
     }
 }
 
-#[async]
-fn run_agent(
-    controller_rx: unsync::mpsc::Receiver<ControllerRequest>,
-) -> Result<()> {
-    #[async]
-    for req in controller_rx.map_err(|_| Error::from("streams can't fail")) {
-        match req {
-            ControllerRequest::PlayerSetup(_, tx) => {
-                tx.send(PlayerSetup::Player { race: Race::Zerg })
-                    .map_err(|_| Error::from("unable to send player setup"))?;
-            },
-        }
-    }
+pub struct AgentMeleeDendrite;
 
-    Ok(())
+impl MeleeContract for AgentMeleeDendrite {
+    type Error = Error;
+
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+        Ok((self, PlayerSetup::Player { race: Race::Zerg }))
+    }
 }
 
 // /// mediates interactions between the player and the game instance
