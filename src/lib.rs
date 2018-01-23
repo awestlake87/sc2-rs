@@ -30,7 +30,7 @@ extern crate uuid;
 mod agent;
 //mod client;
 //mod computer;
-//mod ctrlc_breaker;
+mod ctrlc_breaker;
 mod data;
 //mod frame;
 mod instance;
@@ -49,7 +49,7 @@ use uuid::Uuid;
 pub use self::agent::AgentSoma;
 // pub use self::client::{ClientRequest, ClientResult};
 // pub use self::computer::ComputerSoma;
-// pub use self::ctrlc_breaker::CtrlcBreakerSoma;
+pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::data::{
     Ability,
     AbilityData,
@@ -118,7 +118,8 @@ error_chain! {
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
 
-        FutureCancelled(futures::Canceled) #[doc="a future was canceled"];
+        Ctrlc(ctrlc::Error) #[doc="link to Ctrl-C errors"];
+        FutureCanceled(futures::Canceled) #[doc="link to futures"];
         UrlParseError(url::ParseError) #[doc="link to url parse errors"];
         Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
     }

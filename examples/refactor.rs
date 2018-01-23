@@ -26,6 +26,7 @@ use sc2::{
     Ability,
     ActionTarget,
     Alliance,
+    CtrlcBreakerSoma,
     //Command,
     Error,
     //FrameData,
@@ -163,7 +164,7 @@ quick_main!(|| -> sc2::Result<()> {
         handle.clone(),
     );
 
-    //organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+    organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
 
     core.run(organelle.run(handle))?;
 

@@ -1,49 +1,50 @@
 use ctrlc;
 use futures::prelude::*;
-use futures::sync::mpsc;
+use futures::sync;
 use organelle;
-use organelle::{Impulse, Neuron, Sheath};
+use organelle::{Axon, Impulse, Soma};
 
-use super::{Axon, Result, Signal, Synapse};
+use super::{Error, Result, Synapse};
 
 /// soma that stops the organelle upon Ctrl-C
 pub struct CtrlcBreakerSoma;
 
 impl CtrlcBreakerSoma {
     /// create a new Ctrl-C breaker soma
-    pub fn sheath() -> Result<Sheath<Self>> {
-        Ok(Sheath::new(Self {}, vec![], vec![])?)
-    }
-
-    fn init(self, axon: &Axon) -> organelle::Result<Self> {
-        let (tx, rx) = mpsc::channel(1);
-
-        ctrlc::set_handler(move || {
-            tx.clone().send(()).wait().unwrap();
-        }).unwrap();
-
-        let ctrlc_effector = axon.effector()?.clone();
-
-        axon.effector()?.spawn(rx.for_each(move |_| {
-            ctrlc_effector.stop();
-            Ok(())
-        }));
-
-        Ok(self)
+    pub fn axon() -> Axon<Self> {
+        Axon::new(Self {}, vec![], vec![])
     }
 }
 
-impl Neuron for CtrlcBreakerSoma {
-    type Signal = Signal;
+impl Soma for CtrlcBreakerSoma {
     type Synapse = Synapse;
+    type Error = Error;
+    type Future = Box<Future<Item = Self, Error = Self::Error>>;
 
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<Self> {
-        match msg {
-            Impulse::Start => self.init(axon),
+    #[async(boxed)]
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::Start(tx, handle) => {
+                let (sync_tx, sync_rx) = sync::mpsc::channel(1);
+
+                ctrlc::set_handler(move || {
+                    if let Err(e) = sync_tx.clone().send(()).wait() {
+                        eprintln!("unable to send Ctrl-C signal {:?}", e);
+                    }
+                })?;
+
+                handle.spawn(
+                    sync_rx
+                        .and_then(move |_| {
+                            tx.clone().send(Impulse::Stop).map_err(|_| ())
+                        })
+                        .into_future()
+                        .map(|_| ())
+                        .map_err(|_| ()),
+                );
+
+                Ok(self)
+            },
 
             _ => Ok(self),
         }
