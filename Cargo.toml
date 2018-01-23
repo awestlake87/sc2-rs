@@ -11,31 +11,39 @@ repository = "https://github.com/awestlake87/sc2-rs"
 [dependencies]
 bytes = "0"
 ctrlc = "3"
-error-chain = "0"
-futures = "0"
-glob = "0"
-nalgebra = "0"
-organelle = "0"
-protobuf = "1"
-rand = "0"
-regex = "0"
-sc2-proto = "0"
-tokio-core = "0"
-tokio-timer = "0"
-tokio-tungstenite = "0"
-tungstenite = "0"
-url = "1"
-uuid = { version = "0", features = ["serde", "v4"] }
+error-chain = "0.11"
+futures-await = "0.1"
+glob = "0.2"
+nalgebra = "0.13"
+protobuf = "1.4"
+rand = "0.4"
+regex = "0.2"
+sc2-proto = "0.1"
+tokio-core = "0.1"
+tokio-timer = "0.1"
+tokio-tungstenite = "0.5"
+tungstenite = "0.5"
+url = "1.6"
+uuid = { version = "0.5", features = ["serde", "v4"] }
+
+[dependencies.organelle]
+git = "https://github.com/awestlake87/organelle"
+branch = "renaming"
+
+# [[example]]
+# name = "bot-micro"
+# crate-type = ["bin"]
+# path = "examples/bot-micro.rs"
+
+# [[example]]
+# name = "bot-mp"
+# crate-type = ["bin"]
+# path = "examples/bot-mp.rs"
 
 [[example]]
-name = "bot-micro"
+name = "refactor"
 crate-type = ["bin"]
-path = "examples/bot-micro.rs"
-
-[[example]]
-name = "bot-mp"
-crate-type = ["bin"]
-path = "examples/bot-mp.rs"
+path = "examples/refactor.rs"
 
 [dev-dependencies]
 docopt = "0"

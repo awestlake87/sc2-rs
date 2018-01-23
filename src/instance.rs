@@ -5,7 +5,7 @@ use url::Url;
 
 use super::{ErrorKind, PortSet, Rect, Result};
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum InstanceKind {
     Native,
     Wine,
@@ -21,6 +21,7 @@ pub struct InstanceSettings {
     pub ports: PortSet,
 }
 
+#[derive(Debug)]
 pub struct Instance {
     kind: InstanceKind,
     exe: PathBuf,
