@@ -14,6 +14,10 @@ use super::{
     Error,
     GamePorts,
     GameSettings,
+    LauncherRequest,
+    LauncherSettings,
+    LauncherSoma,
+    LauncherTerminal,
     PlayerSetup,
     PortSet,
     Result,
@@ -21,11 +25,32 @@ use super::{
     Terminal,
 };
 
-use launcher::{InstanceRequest, LauncherSettings, LauncherSoma};
-
 #[derive(Debug)]
 pub enum ControllerRequest {
     PlayerSetup(GameSettings, unsync::oneshot::Sender<PlayerSetup>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ControllerTerminal {
+    tx: unsync::mpsc::Sender<ControllerRequest>,
+}
+
+impl ControllerTerminal {
+    pub fn new(tx: unsync::mpsc::Sender<ControllerRequest>) -> Self {
+        Self { tx: tx }
+    }
+    #[async]
+    fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+        let (tx, rx) = unsync::oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ControllerRequest::PlayerSetup(game, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
 }
 
 /// suite of games to choose from when pitting bots against each other
@@ -48,8 +73,8 @@ pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
 
 pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
-    launcher_tx: Option<unsync::mpsc::Sender<InstanceRequest>>,
-    agents: Vec<Option<unsync::mpsc::Sender<ControllerRequest>>>,
+    launcher: Option<LauncherTerminal>,
+    agents: Vec<Option<ControllerTerminal>>,
 }
 
 impl MeleeSoma {
@@ -58,7 +83,7 @@ impl MeleeSoma {
         Ok(Axon::new(
             Self {
                 suite: Some(suite),
-                launcher_tx: None,
+                launcher: None,
                 agents: vec![],
             },
             vec![],
@@ -120,7 +145,7 @@ impl Soma for MeleeSoma {
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
         match msg {
             Impulse::AddTerminal(Synapse::Launcher, Terminal::Launcher(tx)) => {
-                self.launcher_tx = Some(tx);
+                self.launcher = Some(tx);
                 Ok(self)
             },
             Impulse::AddTerminal(
@@ -131,7 +156,7 @@ impl Soma for MeleeSoma {
                 Ok(self)
             },
             Impulse::Start(tx, handle) => {
-                assert!(self.launcher_tx.is_some());
+                assert!(self.launcher.is_some());
                 assert!(self.suite.is_some());
 
                 if self.agents.len() != 2 {
@@ -143,7 +168,7 @@ impl Soma for MeleeSoma {
                 handle.spawn(
                     run_melee(
                         mem::replace(&mut self.suite, None).unwrap(),
-                        mem::replace(&mut self.launcher_tx, None).unwrap(),
+                        mem::replace(&mut self.launcher, None).unwrap(),
                         (
                             mem::replace(&mut self.agents[0], None).unwrap(),
                             mem::replace(&mut self.agents[1], None).unwrap(),
@@ -166,11 +191,8 @@ impl Soma for MeleeSoma {
 #[async]
 fn run_melee(
     suite: MeleeSuite,
-    launcher_tx: unsync::mpsc::Sender<InstanceRequest>,
-    agents: (
-        unsync::mpsc::Sender<ControllerRequest>,
-        unsync::mpsc::Sender<ControllerRequest>,
-    ),
+    launcher: LauncherTerminal,
+    agents: (ControllerTerminal, ControllerTerminal),
 ) -> Result<()> {
     let (game, suite) = match suite {
         MeleeSuite::OneAndDone(game) => (game, None),
@@ -181,26 +203,8 @@ fn run_melee(
         },
     };
 
-    let (tx1, rx1) = unsync::oneshot::channel();
-    let (tx2, rx2) = unsync::oneshot::channel();
-
-    await!(
-        agents
-            .0
-            .clone()
-            .send(ControllerRequest::PlayerSetup(game.clone(), tx1))
-            .map_err(|_| Error::from("request player 1 setup failed"))
-    )?;
-    await!(
-        agents
-            .1
-            .clone()
-            .send(ControllerRequest::PlayerSetup(game.clone(), tx2))
-            .map_err(|_| Error::from("request player 2 setup failed"))
-    )?;
-
-    let player1 = await!(rx1)?;
-    let player2 = await!(rx2)?;
+    let player1 = await!(agents.0.clone().get_player_setup(game.clone()))?;
+    let player2 = await!(agents.1.clone().get_player_setup(game.clone()))?;
 
     println!("got players: {:#?} {:#?}", player1, player2);
 

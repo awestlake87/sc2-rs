@@ -23,8 +23,45 @@ use super::{
 };
 use instance::{Instance, InstanceKind, InstanceSettings};
 
+#[derive(Debug, Clone)]
+pub struct LauncherTerminal {
+    tx: unsync::mpsc::Sender<LauncherRequest>,
+}
+
+impl LauncherTerminal {
+    pub fn new(tx: unsync::mpsc::Sender<LauncherRequest>) -> Self {
+        Self { tx: tx }
+    }
+
+    #[async]
+    pub fn launch(self) -> Result<Instance> {
+        let (tx, rx) = unsync::oneshot::channel();
+
+        await!(
+            self.tx
+                .send(LauncherRequest::Launch(tx))
+                .map_err(|_| Error::from("unable to send launch request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive instance")))
+    }
+
+    #[async]
+    pub fn get_game_ports(self) -> Result<GamePorts> {
+        let (tx, rx) = unsync::oneshot::channel();
+
+        await!(
+            self.tx
+                .send(LauncherRequest::Ports(tx))
+                .map_err(|_| Error::from("unable to send ports request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive ports")))
+    }
+}
+
 #[derive(Debug)]
-pub enum InstanceRequest {
+pub enum LauncherRequest {
     Launch(unsync::oneshot::Sender<Instance>),
     Ports(unsync::oneshot::Sender<GamePorts>),
 }
@@ -114,16 +151,16 @@ impl Launcher {
     #[async]
     fn listen(
         mut self,
-        req_rx: unsync::mpsc::Receiver<InstanceRequest>,
+        req_rx: unsync::mpsc::Receiver<LauncherRequest>,
     ) -> Result<()> {
         #[async]
         for req in req_rx.map_err(|_| Error::from("streams can't fail")) {
             match req {
-                InstanceRequest::Launch(tx) => {
+                LauncherRequest::Launch(tx) => {
                     tx.send(self.launch()?)
                         .map_err(|_| Error::from("unable to send instance"))?;
                 },
-                InstanceRequest::Ports(tx) => {
+                LauncherRequest::Ports(tx) => {
                     tx.send(self.create_game_ports())
                         .map_err(|_| Error::from("unable to send game ports"))?;
                 },
@@ -153,7 +190,7 @@ impl Launcher {
 /// soma in charge of launching game instances and assigning ports
 pub struct LauncherSoma {
     launcher: Option<Launcher>,
-    req_rx: Option<unsync::mpsc::Receiver<InstanceRequest>>,
+    req_rx: Option<unsync::mpsc::Receiver<LauncherRequest>>,
 }
 
 impl LauncherSoma {

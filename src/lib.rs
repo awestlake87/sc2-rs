@@ -97,8 +97,19 @@ pub use self::data::{
 //     GameState,
 //     MapState,
 // };
-pub use self::launcher::{InstanceRequest, LauncherSettings, LauncherSoma};
-pub use self::melee::{ControllerRequest, MeleeSettings, MeleeSoma, MeleeSuite};
+pub use self::launcher::{
+    LauncherRequest,
+    LauncherSettings,
+    LauncherSoma,
+    LauncherTerminal,
+};
+pub use self::melee::{
+    ControllerRequest,
+    ControllerTerminal,
+    MeleeSettings,
+    MeleeSoma,
+    MeleeSuite,
+};
 
 error_chain! {
     links {
@@ -203,13 +214,13 @@ pub enum Synapse {
 
 #[derive(Debug)]
 pub enum Terminal {
-    Launcher(unsync::mpsc::Sender<InstanceRequest>),
-    Controller(unsync::mpsc::Sender<ControllerRequest>),
+    Launcher(LauncherTerminal),
+    Controller(ControllerTerminal),
 }
 
 #[derive(Debug)]
 pub enum Dendrite {
-    Launcher(unsync::mpsc::Receiver<InstanceRequest>),
+    Launcher(unsync::mpsc::Receiver<LauncherRequest>),
     Controller(unsync::mpsc::Receiver<ControllerRequest>),
 }
 
@@ -222,12 +233,18 @@ impl organelle::Synapse for Synapse {
             Synapse::Launcher => {
                 let (tx, rx) = unsync::mpsc::channel(1);
 
-                (Terminal::Launcher(tx), Dendrite::Launcher(rx))
+                (
+                    Terminal::Launcher(LauncherTerminal::new(tx)),
+                    Dendrite::Launcher(rx),
+                )
             },
             Synapse::Controller => {
                 let (tx, rx) = unsync::mpsc::channel(1);
 
-                (Terminal::Controller(tx), Dendrite::Controller(rx))
+                (
+                    Terminal::Controller(ControllerTerminal::new(tx)),
+                    Dendrite::Controller(rx),
+                )
             },
         }
     }
