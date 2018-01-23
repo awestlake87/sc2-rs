@@ -28,7 +28,7 @@ extern crate url;
 extern crate uuid;
 
 mod agent;
-//mod client;
+mod client;
 //mod computer;
 mod ctrlc_breaker;
 mod data;
@@ -41,7 +41,7 @@ mod melee;
 use std::path::PathBuf;
 
 pub use self::agent::AgentSoma;
-// pub use self::client::{ClientRequest, ClientResult};
+pub use self::client::{ClientDendrite, ClientSoma, ClientTerminal};
 // pub use self::computer::ComputerSoma;
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::data::{
@@ -115,8 +115,10 @@ error_chain! {
 
         Ctrlc(ctrlc::Error) #[doc="link to Ctrl-C errors"];
         FutureCanceled(futures::Canceled) #[doc="link to futures"];
-        UrlParseError(url::ParseError) #[doc="link to url parse errors"];
+        UrlParse(url::ParseError) #[doc="link to url parse errors"];
         Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
+        Timer(tokio_timer::TimerError) #[doc="link to timer errors"];
+        Tungstenite(tungstenite::Error) #[doc="link to tungstenite errors"];
     }
     errors {
         /// exe was not supplied to the coordinator
@@ -209,6 +211,8 @@ pub enum Synapse {
     Launcher,
     /// coordinate versus games between agents
     Melee,
+    /// client to the game instance
+    Client,
 }
 
 /// senders for synapses
@@ -218,6 +222,8 @@ pub enum Terminal {
     Launcher(LauncherTerminal),
     /// melee sender
     Melee(MeleeTerminal),
+    /// client sender
+    Client(ClientTerminal),
 }
 
 /// receivers for synapses
@@ -227,6 +233,8 @@ pub enum Dendrite {
     Launcher(LauncherDendrite),
     /// melee receiver
     Melee(MeleeDendrite),
+    /// client receiver
+    Client(ClientDendrite),
 }
 
 impl organelle::Synapse for Synapse {
@@ -244,6 +252,11 @@ impl organelle::Synapse for Synapse {
                 let (tx, rx) = MeleeSoma::synapse();
 
                 (Terminal::Melee(tx), Dendrite::Melee(rx))
+            },
+            Synapse::Client => {
+                let (tx, rx) = ClientSoma::synapse();
+
+                (Terminal::Client(tx), Dendrite::Client(rx))
             },
         }
     }

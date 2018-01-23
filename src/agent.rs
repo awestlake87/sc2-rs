@@ -1,6 +1,7 @@
 use futures::prelude::*;
 use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
+use url::Url;
 
 use super::{
     Dendrite,
@@ -14,20 +15,24 @@ use super::{
     Synapse,
     Terminal,
 };
-//use client::{ClientRequest, ClientResult, ClientSoma, Transactor};
+use client::{ClientSoma, ClientTerminal};
 //use observer::ObserverSoma;
 
 /// manages a player soma
 pub struct AgentSoma {
     controller: Option<MeleeDendrite>,
+    client: Option<ClientTerminal>,
 }
 
 impl AgentSoma {
     fn axon() -> Result<Axon<Self>> {
         Ok(Axon::new(
-            Self { controller: None },
+            Self {
+                controller: None,
+                client: None,
+            },
             vec![Constraint::One(Synapse::Melee)],
-            vec![],
+            vec![Constraint::One(Synapse::Client)],
         ))
     }
 
@@ -45,9 +50,9 @@ impl AgentSoma {
         <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
-        let organelle = Organelle::new(AgentSoma::axon()?, handle);
+        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
 
-        // let agent = organelle.get_main_handle();
+        let agent = organelle.nucleus();
         // let player = organelle.add_soma(soma);
 
         // // TODO: find out why these explicit annotation is needed.
@@ -55,13 +60,13 @@ impl AgentSoma {
         // system because it will // work when the function is generic
         // across two soma types, but not one         let client =
         //
-        // organelle.add_soma::<Sheath<ClientSoma>>(ClientSoma::sheath()?);
+        let client = organelle.add_soma(ClientSoma::axon()?);
         //         let observer =
 
         // organelle.add_soma::<Sheath<ObserverSoma>>(ObserverSoma::sheath()?);
 
         //         organelle.connect(agent, client, Synapse::InstanceProvider);
-        //         organelle.connect(agent, client, Synapse::Client);
+        organelle.connect(agent, client, Synapse::Client)?;
         //         organelle.connect(observer, client, Synapse::Client);
 
         //         organelle.connect(agent, observer, Synapse::Observer);
@@ -82,23 +87,36 @@ impl Soma for AgentSoma {
             Impulse::AddDendrite(Synapse::Melee, Dendrite::Melee(rx)) => {
                 Ok(Self {
                     controller: Some(rx),
+                    client: self.client,
+                })
+            },
+            Impulse::AddTerminal(Synapse::Client, Terminal::Client(tx)) => {
+                Ok(Self {
+                    controller: self.controller,
+                    client: Some(tx),
                 })
             },
             Impulse::Start(tx, handle) => {
                 assert!(self.controller.is_some());
+                assert!(self.client.is_some());
 
                 handle.spawn(
                     self.controller
                         .unwrap()
-                        .wrap(AgentMeleeDendrite {})
-                        .or_else(|e| {
+                        .wrap(AgentMeleeDendrite {
+                            client: self.client.unwrap(),
+                        })
+                        .or_else(move |e| {
                             tx.send(Impulse::Error(e.into()))
                                 .map(|_| ())
                                 .map_err(|_| ())
                         }),
                 );
 
-                Ok(Self { controller: None })
+                Ok(Self {
+                    controller: None,
+                    client: None,
+                })
             },
 
             _ => bail!("unexpected impulse"),
@@ -106,7 +124,9 @@ impl Soma for AgentSoma {
     }
 }
 
-pub struct AgentMeleeDendrite;
+pub struct AgentMeleeDendrite {
+    client: ClientTerminal,
+}
 
 impl MeleeContract for AgentMeleeDendrite {
     type Error = Error;
@@ -114,6 +134,12 @@ impl MeleeContract for AgentMeleeDendrite {
     #[async(boxed)]
     fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Zerg }))
+    }
+
+    #[async(boxed)]
+    fn connect(self, url: Url) -> Result<Self> {
+        await!(self.client.clone().connect(url))?;
+        Ok(self)
     }
 }
 

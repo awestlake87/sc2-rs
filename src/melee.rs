@@ -1,10 +1,12 @@
-use std::{self, mem};
+use std::{self, mem, time};
 
 use futures::prelude::*;
 use futures::unsync;
 use organelle;
 use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
+use tokio_timer::Timer;
+use url::Url;
 
 use super::{
     Dendrite,
@@ -22,6 +24,7 @@ use super::{
 #[derive(Debug)]
 enum MeleeRequest {
     PlayerSetup(GameSettings, unsync::oneshot::Sender<PlayerSetup>),
+    Connect(Url, unsync::oneshot::Sender<()>),
 }
 
 /// wrapper around a sender to provide a melee interface
@@ -40,6 +43,10 @@ pub trait MeleeContract: Sized {
         self,
         game: GameSettings,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
+
+    /// connect to an instance
+    fn connect(self, url: Url)
+        -> Box<Future<Item = Self, Error = Self::Error>>;
 }
 
 /// wrapper around a receiver to provide a controlled interface
@@ -66,10 +73,15 @@ impl MeleeDendrite {
                     let result = await!(dendrite.get_player_setup(game))
                         .map_err(|e| e.into())?;
 
+                    tx.send(result.1).unwrap();
+
                     dendrite = result.0;
-                    tx.send(result.1).map_err(|_| {
-                        Error::from("unable to send player setup")
-                    })?;
+                },
+                MeleeRequest::Connect(url, tx) => {
+                    dendrite =
+                        await!(dendrite.connect(url)).map_err(|e| e.into())?;
+
+                    tx.send(()).unwrap();
                 },
             }
         }
@@ -83,7 +95,7 @@ impl MeleeTerminal {
         Self { tx: tx }
     }
 
-    /// get a player setup from the agents
+    /// get a player setup from the agent
     #[async]
     pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
         let (tx, rx) = unsync::oneshot::channel();
@@ -91,6 +103,20 @@ impl MeleeTerminal {
         await!(
             self.tx
                 .send(MeleeRequest::PlayerSetup(game, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
+
+    /// tell agent to connect to instance
+    #[async]
+    pub fn connect(self, url: Url) -> Result<()> {
+        let (tx, rx) = unsync::oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::Connect(url, tx))
                 .map_err(|_| Error::from("unable to request player setup"))
         )?;
 
@@ -241,7 +267,7 @@ impl Soma for MeleeSoma {
 #[async]
 fn run_melee(
     suite: MeleeSuite,
-    _launcher: LauncherTerminal,
+    launcher: LauncherTerminal,
     agents: (MeleeTerminal, MeleeTerminal),
 ) -> Result<()> {
     let (game, _suite) = match suite {
@@ -256,139 +282,42 @@ fn run_melee(
     let player1 = await!(agents.0.clone().get_player_setup(game.clone()))?;
     let player2 = await!(agents.1.clone().get_player_setup(game.clone()))?;
 
-    println!("got players: {:#?} {:#?}", player1, player2);
+    let is_pvp = {
+        if player1.is_player() && player2.is_computer() {
+            false
+        } else if player1.is_computer() && player2.is_player() {
+            false
+        } else if player1.is_player() && player2.is_player() {
+            true
+        } else {
+            bail!("invalid player setups")
+        }
+    };
+
+    if is_pvp {
+        // launch both at the same time
+        let instances = {
+            let launch1 = launcher.clone().launch();
+            let launch2 = launcher.clone().launch();
+
+            await!(launch1.join(launch2))?
+        };
+
+        // connect to both at the same time
+        {
+            let connect1 = agents.0.clone().connect(instances.0.get_url()?);
+            let connect2 = agents.1.clone().connect(instances.1.get_url()?);
+
+            await!(connect1.join(connect2))?;
+        }
+
+        println!("YYEEEEEAAAHH");
+    } else {
+        let instance = await!(launcher.clone().launch())?;
+    }
 
     Ok(())
 }
-
-// pub struct Launch {
-//     suite: Option<MeleeSuite>,
-//     launcher: Handle,
-
-//     agents: (Handle, Handle),
-//     clients: (Handle, Handle),
-
-//     game: GameSettings,
-//     players: (PlayerSetup, PlayerSetup),
-//     instances: HashMap<Uuid, (Url, PortSet)>,
-//     ports: Vec<GamePorts>,
-
-//     is_pvp: bool,
-//     instances_requested: u32,
-// }
-
-// impl Launch {
-//     fn launch(
-//         axon: &Axon,
-//         suite: Option<MeleeSuite>,
-//         agents: (Handle, Handle),
-//         clients: (Handle, Handle),
-//         players: (PlayerSetup, PlayerSetup),
-//         game: GameSettings,
-//     ) -> Result<MeleeSoma> {
-//         let is_pvp = {
-//             if players.0.is_player() && players.1.is_computer() {
-//                 false
-//             } else if players.0.is_computer() && players.1.is_player() {
-//                 false
-//             } else if players.0.is_player() && players.1.is_player() {
-//                 true
-//             } else {
-//                 bail!("invalid player setups")
-//             }
-//         };
-
-//         let launcher = axon.req_output(Synapse::Launcher)?;
-//         axon.effector()?.send(launcher, Signal::GetInstancePool);
-//         axon.effector()?.send(launcher, Signal::GetPortsPool);
-
-//         Ok(MeleeSoma::Launch(Launch {
-//             suite: suite,
-//             launcher: launcher,
-
-//             agents: agents,
-//             clients: clients,
-
-//             game: game,
-//             players: players,
-//             instances: HashMap::new(),
-//             ports: vec![],
-
-//             is_pvp: is_pvp,
-//             instances_requested: 0,
-//         }))
-//     }
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<MeleeSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::InstancePool(instances)) => {
-//                 self.on_instance_pool(axon, src, instances)
-//             },
-//             Impulse::Signal(src, Signal::PortsPool(ports)) => {
-//                 self.on_ports_pool(axon, src, ports)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_instance_pool(
-//         mut self,
-//         axon: &Axon,
-//         src: Handle,
-//         instances: HashMap<Uuid, (Url, PortSet)>,
-//     ) -> Result<MeleeSoma> {
-//         assert_eq!(src, self.launcher);
-
-//         self.instances = instances;
-
-//         self.launch_instances(axon)?;
-//         self.try_provide_instances(axon)
-//     }
-
-//     fn on_ports_pool(
-//         mut self,
-//         axon: &Axon,
-//         src: Handle,
-//         ports: Vec<GamePorts>,
-//     ) -> Result<MeleeSoma> {
-//         assert_eq!(src, self.launcher);
-
-//         self.ports = ports;
-
-//         self.launch_instances(axon)?;
-//         self.try_provide_instances(axon)
-//     }
-
-//     fn launch_instances(&mut self, axon: &Axon) -> Result<()> {
-//         if self.is_pvp {
-//             if self.instances.len() < 2 && self.instances_requested < 2 {
-//                 // launch as many instances as needed
-//                 while self.instances_requested < 2 {
-//                     axon.send_req_output(
-//                         Synapse::Launcher,
-//                         Signal::LaunchInstance,
-//                     )?;
-
-//                     self.instances_requested += 1;
-//                 }
-//             }
-//         } else {
-//             if self.instances.len() < 1 && self.instances_requested == 0 {
-//                 axon.send_req_output(
-//                     Synapse::Launcher,
-//                     Signal::LaunchInstance,
-//                 )?;
-//                 self.instances_requested = 1;
-//             }
-//         }
-
-//         Ok(())
-//     }
 
 //     fn try_provide_instances(self, axon: &Axon) -> Result<MeleeSoma> {
 //         if self.is_pvp {
