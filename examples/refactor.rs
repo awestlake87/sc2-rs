@@ -18,8 +18,20 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{Axon, Impulse, Organelle, Soma};
-use sc2::{Error, GameSettings, LauncherSettings, Map, Result, Synapse};
+use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
+use sc2::{
+    AgentContract,
+    AgentDendrite,
+    Dendrite,
+    Error,
+    GameSettings,
+    LauncherSettings,
+    Map,
+    PlayerSetup,
+    Race,
+    Result,
+    Synapse,
+};
 use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -81,11 +93,17 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     Ok(GameSettings { map: map })
 }
 
-pub struct TerranSoma;
+pub struct TerranSoma {
+    agent: Option<AgentDendrite>,
+}
 
 impl TerranSoma {
     pub fn organelle(_interval: u32) -> Result<Axon<Self>> {
-        Ok(Axon::new(Self {}, vec![], vec![]))
+        Ok(Axon::new(
+            Self { agent: None },
+            vec![Constraint::One(Synapse::Agent)],
+            vec![],
+        ))
     }
 }
 
@@ -94,10 +112,37 @@ impl Soma for TerranSoma {
     type Error = Error;
 
     #[async(boxed)]
-    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
+            Impulse::AddDendrite(Synapse::Agent, Dendrite::Agent(rx)) => {
+                self.agent = Some(rx);
+                Ok(self)
+            },
+            Impulse::Start(main_tx, handle) => {
+                handle.spawn(
+                    self.agent.unwrap().wrap(TerranDendrite {}).or_else(
+                        move |e| {
+                            main_tx
+                                .send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
+                        },
+                    ),
+                );
+
+                Ok(Self { agent: None })
+            },
             _ => bail!("unexpected impulse"),
         }
+    }
+}
+
+struct TerranDendrite;
+
+impl AgentContract for TerranDendrite {
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+        Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 }
 

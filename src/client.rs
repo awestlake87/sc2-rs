@@ -1,4 +1,4 @@
-use std::{self, io, mem, time};
+use std::{io, mem, time};
 
 use bytes::{Buf, BufMut};
 use futures::prelude::*;
@@ -30,12 +30,14 @@ enum ClientRequest {
     Request(Request, oneshot::Sender<Result<Response>>),
 }
 
+/// sender for the client soma
 #[derive(Debug, Clone)]
 pub struct ClientTerminal {
     tx: mpsc::Sender<ClientRequest>,
 }
 
 impl ClientTerminal {
+    /// connect to the game instance
     #[async]
     pub fn connect(self, url: Url) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -49,6 +51,7 @@ impl ClientTerminal {
         await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
     }
 
+    /// send a request to the game instance
     #[async]
     pub fn request(self, req: Request) -> Result<Response> {
         let (tx, rx) = oneshot::channel();
@@ -63,50 +66,30 @@ impl ClientTerminal {
     }
 }
 
+/// receiver for the client soma
 #[derive(Debug)]
 pub struct ClientDendrite {
     rx: mpsc::Receiver<ClientRequest>,
 }
 
-impl ClientDendrite {
-    #[async]
-    fn listen(self, handle: reactor::Handle) -> Result<()> {
-        let mut rx = self.rx;
-
-        loop {
-            let (req, stream) = await!(
-                stream_next(rx)
-                    .map_err(|_| Error::from("unable to receive next item"))
-            )?;
-
-            rx = match req {
-                Some(ClientRequest::Connect(url, tx)) => {
-                    await!(connect(url, handle.clone(), tx, stream))?
-                },
-                None => break,
-                _ => bail!("unexpected req {:?}", req),
-            }
-        }
-
-        Ok(())
-    }
-}
-
+/// soma used to communicate with the game instance
 pub struct ClientSoma {
-    dendrite: Option<ClientDendrite>,
+    dendrites: Vec<ClientDendrite>,
 }
 
 impl ClientSoma {
+    /// create a client synapse
     pub fn synapse() -> (ClientTerminal, ClientDendrite) {
         let (tx, rx) = mpsc::channel(10);
 
         (ClientTerminal { tx: tx }, ClientDendrite { rx: rx })
     }
 
+    /// create a new client
     pub fn axon() -> Result<Axon<Self>> {
         Ok(Axon::new(
-            Self { dendrite: None },
-            vec![Constraint::One(Synapse::Client)],
+            Self { dendrites: vec![] },
+            vec![Constraint::Variadic(Synapse::Client)],
             vec![],
         ))
     }
@@ -120,27 +103,32 @@ impl Soma for ClientSoma {
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
             Impulse::AddDendrite(Synapse::Client, Dendrite::Client(rx)) => {
-                self.dendrite = Some(rx);
+                self.dendrites.push(rx);
 
                 Ok(self)
             },
-            Impulse::Start(tx, handle) => {
-                assert!(self.dendrite.is_some());
-
+            Impulse::Start(main_tx, handle) => {
                 let listen_handle = handle.clone();
 
-                handle.spawn(
-                    mem::replace(&mut self.dendrite, None)
-                        .unwrap()
-                        .listen(listen_handle)
-                        .or_else(move |e| {
-                            tx.send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
+                let (tx, rx) = mpsc::channel(10);
 
-                Ok(self)
+                for d in self.dendrites {
+                    handle.spawn(
+                        tx.clone()
+                            .send_all(d.rx.map_err(|_| unreachable!()))
+                            .map(|_| ())
+                            .map_err(|_| ()),
+                    );
+                }
+
+                handle.spawn(listen(rx, listen_handle).or_else(move |e| {
+                    main_tx
+                        .send(Impulse::Error(e.into()))
+                        .map(|_| ())
+                        .map_err(|_| ())
+                }));
+
+                Ok(Self { dendrites: vec![] })
             },
 
             _ => bail!("unexpected impulse"),
@@ -149,11 +137,34 @@ impl Soma for ClientSoma {
 }
 
 #[async]
+fn listen(
+    mut rx: mpsc::Receiver<ClientRequest>,
+    handle: reactor::Handle,
+) -> Result<()> {
+    loop {
+        let (req, stream) = await!(
+            stream_next(rx)
+                .map_err(|_| Error::from("unable to receive next item"))
+        )?;
+
+        rx = match req {
+            Some(ClientRequest::Connect(url, tx)) => {
+                await!(connect(url, handle.clone(), tx, stream))?
+            },
+            None => break,
+            _ => bail!("unexpected req {:?}", req),
+        }
+    }
+
+    Ok(())
+}
+
+#[async]
 fn connect(
     url: Url,
     handle: reactor::Handle,
     tx: oneshot::Sender<()>,
-    mut rx: mpsc::Receiver<ClientRequest>,
+    rx: mpsc::Receiver<ClientRequest>,
 ) -> Result<mpsc::Receiver<ClientRequest>> {
     const NUM_RETRIES: u32 = 10;
 
@@ -188,7 +199,7 @@ fn connect(
     if let Some((send, recv)) = client {
         tx.send(())
             .map_err(|_| Error::from("unable to send connect ack"))?;
-        await!(run_client(rx, send, recv, timer))
+        await!(run_client(rx, send, recv))
     } else {
         bail!("unable to connect")
     }
@@ -260,7 +271,6 @@ fn run_client(
     mut rx: mpsc::Receiver<ClientRequest>,
     send: mpsc::Sender<tungstenite::Message>,
     recv: mpsc::Sender<oneshot::Sender<Result<Response>>>,
-    timer: Timer,
 ) -> Result<mpsc::Receiver<ClientRequest>> {
     loop {
         let (req, stream) = await!(

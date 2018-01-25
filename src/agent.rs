@@ -1,4 +1,5 @@
 use futures::prelude::*;
+use futures::unsync::{mpsc, oneshot};
 use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2_proto::sc2api;
 use tokio_core::reactor;
@@ -20,12 +21,14 @@ use super::{
     Terminal,
 };
 use client::{ClientSoma, ClientTerminal};
-//use observer::ObserverSoma;
+use observer::{ObserverControlTerminal, ObserverSoma};
 
 /// manages a player soma
 pub struct AgentSoma {
     controller: Option<MeleeDendrite>,
     client: Option<ClientTerminal>,
+    observer: Option<ObserverControlTerminal>,
+    agent: Option<AgentTerminal>,
 }
 
 impl AgentSoma {
@@ -34,15 +37,21 @@ impl AgentSoma {
             Self {
                 controller: None,
                 client: None,
+                observer: None,
+                agent: None,
             },
             vec![Constraint::One(Synapse::Melee)],
-            vec![Constraint::One(Synapse::Client)],
+            vec![
+                Constraint::One(Synapse::Client),
+                Constraint::One(Synapse::ObserverControl),
+                Constraint::One(Synapse::Agent),
+            ],
         ))
     }
 
     /// compose an agent organelle to interact with a controller soma
     pub fn organelle<T>(
-        _soma: T,
+        soma: T,
         handle: reactor::Handle,
     ) -> Result<Organelle<Axon<Self>>>
     where
@@ -57,24 +66,15 @@ impl AgentSoma {
         let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
 
         let agent = organelle.nucleus();
-        // let player = organelle.add_soma(soma);
+        let player = organelle.add_soma(soma);
 
-        // // TODO: find out why these explicit annotation is needed.
-        // it's // possible that it's a bug in the rust type
-        // system because it will // work when the function is generic
-        // across two soma types, but not one         let client =
-        //
         let client = organelle.add_soma(ClientSoma::axon()?);
-        //         let observer =
+        let observer = organelle.add_soma(ObserverSoma::axon()?);
 
-        // organelle.add_soma::<Sheath<ObserverSoma>>(ObserverSoma::sheath()?);
-
-        //         organelle.connect(agent, client, Synapse::InstanceProvider);
         organelle.connect(agent, client, Synapse::Client)?;
-        //         organelle.connect(observer, client, Synapse::Client);
-
-        //         organelle.connect(agent, observer, Synapse::Observer);
-        //         organelle.connect(agent, player, Synapse::Agent);
+        organelle.connect(observer, client, Synapse::Client)?;
+        organelle.connect(agent, observer, Synapse::ObserverControl)?;
+        organelle.connect(agent, player, Synapse::Agent)?;
 
         Ok(organelle)
     }
@@ -85,29 +85,39 @@ impl Soma for AgentSoma {
     type Error = Error;
 
     #[async(boxed)]
-    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
             Impulse::AddDendrite(Synapse::Melee, Dendrite::Melee(rx)) => {
-                Ok(Self {
-                    controller: Some(rx),
-                    client: self.client,
-                })
+                self.controller = Some(rx);
+
+                Ok(self)
             },
             Impulse::AddTerminal(Synapse::Client, Terminal::Client(tx)) => {
-                Ok(Self {
-                    controller: self.controller,
-                    client: Some(tx),
-                })
+                self.client = Some(tx);
+
+                Ok(self)
+            },
+            Impulse::AddTerminal(
+                Synapse::ObserverControl,
+                Terminal::ObserverControl(tx),
+            ) => {
+                self.observer = Some(tx);
+
+                Ok(self)
+            },
+            Impulse::AddTerminal(Synapse::Agent, Terminal::Agent(tx)) => {
+                self.agent = Some(tx);
+
+                Ok(self)
             },
             Impulse::Start(tx, handle) => {
-                assert!(self.controller.is_some());
-                assert!(self.client.is_some());
-
                 handle.spawn(
                     self.controller
                         .unwrap()
                         .wrap(AgentMeleeDendrite {
                             client: self.client.unwrap(),
+                            observer: self.observer.unwrap(),
+                            agent: self.agent.unwrap(),
                         })
                         .or_else(move |e| {
                             tx.send(Impulse::Error(e.into()))
@@ -119,6 +129,8 @@ impl Soma for AgentSoma {
                 Ok(Self {
                     controller: None,
                     client: None,
+                    observer: None,
+                    agent: None,
                 })
             },
 
@@ -129,14 +141,21 @@ impl Soma for AgentSoma {
 
 pub struct AgentMeleeDendrite {
     client: ClientTerminal,
+    observer: ObserverControlTerminal,
+    agent: AgentTerminal,
 }
 
 impl MeleeContract for AgentMeleeDendrite {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player { race: Race::Zerg }))
+    fn get_player_setup(
+        self,
+        game: GameSettings,
+    ) -> Result<(Self, PlayerSetup)> {
+        let setup = await!(self.agent.clone().get_player_setup(game))?;
+
+        Ok((self, setup))
     }
 
     #[async(boxed)]
@@ -193,9 +212,7 @@ impl MeleeContract for AgentMeleeDendrite {
 
         req.mut_create_game().set_realtime(false);
 
-        let rsp = await!(self.client.clone().request(req))?;
-
-        println!("rsp: {:#?}", rsp);
+        await!(self.client.clone().request(req))?;
 
         Ok(self)
     }
@@ -249,182 +266,86 @@ impl MeleeContract for AgentMeleeDendrite {
             options.set_score(true);
         }
 
-        let rsp = await!(self.client.clone().request(req))?;
+        await!(self.client.clone().request(req))?;
 
-        println!("rsp: {:#?}", rsp);
+        Ok(self)
+    }
+
+    #[async(boxed)]
+    fn run_game(self) -> Result<Self> {
+        await!(self.observer.clone().reset())?;
 
         Ok(self)
     }
 }
 
-//     fn create_game(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         settings: GameSettings,
-//         players: Vec<PlayerSetup>,
-//     ) -> Result<AgentSoma> {
-//         assert_eq!(src, axon.req_input(Synapse::Controller)?);
+#[derive(Debug)]
+enum AgentRequest {
+    PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
+}
 
-//         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+#[derive(Debug, Clone)]
+pub struct AgentTerminal {
+    tx: mpsc::Sender<AgentRequest>,
+}
 
-//         Ok(AgentSoma::CreateGame(CreateGame {
-//             transactor: transactor,
-//         }))
-//     }
+impl AgentTerminal {
+    #[async]
+    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+        let (tx, rx) = oneshot::channel();
 
-//     fn on_game_ready(
-//         self,
-//         axon: &Axon,
-//         setup: PlayerSetup,
-//         ports: Option<GamePorts>,
-//     ) -> Result<AgentSoma> {
-//         let this_soma = axon.effector()?.this_soma();
+        await!(
+            self.tx
+                .send(AgentRequest::PlayerSetup(game, tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send player setup request"
+                ))
+        )?;
 
-//         axon.effector()?
-//             .send(this_soma, Signal::GameReady(setup, ports));
+        await!(rx.map_err(|_| Error::from("unable to recv player setup")))
+    }
+}
 
-//         Ok(AgentSoma::GameCreated(GameCreated {}))
-//     }
-// }
+pub trait AgentContract: Sized {
+    fn get_player_setup(
+        self,
+        game: GameSettings,
+    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Error>>;
+}
 
-// pub struct CreateGame {
-//     transactor: Transactor,
-// }
+#[derive(Debug)]
+pub struct AgentDendrite {
+    rx: mpsc::Receiver<AgentRequest>,
+}
 
-// impl CreateGame {
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.transactor.expect(src, result)?;
+impl AgentDendrite {
+    #[async]
+    pub fn wrap<T: AgentContract + 'static>(self, mut player: T) -> Result<()> {
+        #[async]
+        for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                AgentRequest::PlayerSetup(game, tx) => {
+                    let result = await!(player.get_player_setup(game))?;
 
-//                 GameCreated::game_created(axon)
-//             },
+                    player = result.0;
 
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
+                    tx.send(result.1).map_err(|_| {
+                        Error::from("unable to get player setup")
+                    })?;
+                },
+            }
+        }
 
-// pub struct GameCreated;
+        Ok(())
+    }
+}
 
-// impl GameCreated {
-//     fn game_created(axon: &Axon) -> Result<AgentSoma> {
-//         axon.send_req_input(Synapse::Controller, Signal::GameCreated)?;
+pub fn synapse() -> (AgentTerminal, AgentDendrite) {
+    let (tx, rx) = mpsc::channel(10);
 
-//         Ok(AgentSoma::GameCreated(GameCreated {}))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
-//                 JoinGame::join_game(axon, setup, ports)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
-
-// pub struct JoinGame {
-//     transactor: Transactor,
-// }
-
-// impl JoinGame {
-//     fn join_game(
-//         axon: &Axon,
-//         setup: PlayerSetup,
-//         ports: Option<GamePorts>,
-//     ) -> Result<AgentSoma> {
-//         let mut req = sc2api::Request::new();
-
-//         match setup {
-//             PlayerSetup::Computer { race, .. } => {
-//                 req.mut_join_game().set_race(race.into_proto()?);
-//             },
-//             PlayerSetup::Player { race, .. } => {
-//                 req.mut_join_game().set_race(race.into_proto()?);
-//             }, //_ => req.mut_join_game().set_race(common::Race::NoRace)
-//         };
-
-//         if let Some(ports) = ports {
-//             req.mut_join_game()
-//                 .set_shared_port(ports.shared_port as i32);
-
-//             {
-//                 let s = req.mut_join_game().mut_server_ports();
-
-//                 s.set_game_port(ports.server_ports.game_port as i32);
-//                 s.set_base_port(ports.server_ports.base_port as i32);
-//             }
-
-//             {
-//                 let client_ports = req.mut_join_game().mut_client_ports();
-
-//                 for c in &ports.client_ports {
-//                     let mut p = sc2api::PortSet::new();
-
-//                     p.set_game_port(c.game_port as i32);
-//                     p.set_base_port(c.base_port as i32);
-
-//                     client_ports.push(p);
-//                 }
-//             }
-//         }
-
-//         {
-//             let options = req.mut_join_game().mut_options();
-
-//             options.set_raw(true);
-//             options.set_score(true);
-//         }
-
-//         let transactor = Transactor::send(
-//             axon,
-//             ClientRequest::with_timeout(req, time::Duration::from_secs(60)),
-//         )?;
-
-//         Ok(AgentSoma::JoinGame(JoinGame {
-//             transactor: transactor,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.on_join_game(axon, src, result)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_join_game(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         result: ClientResult,
-//     ) -> Result<AgentSoma> {
-//         self.transactor.expect(src, result)?;
-
-//         FetchGameData::fetch(axon)
-//     }
-// }
+    (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
+}
 
 // pub struct FetchGameData;
 

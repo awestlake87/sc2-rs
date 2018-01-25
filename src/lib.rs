@@ -36,11 +36,17 @@ mod data;
 mod instance;
 mod launcher;
 mod melee;
-//mod observer;
+mod observer;
 
 use std::path::PathBuf;
 
-pub use self::agent::AgentSoma;
+pub use self::agent::{
+    synapse,
+    AgentContract,
+    AgentDendrite,
+    AgentSoma,
+    AgentTerminal,
+};
 pub use self::client::{ClientDendrite, ClientSoma, ClientTerminal};
 // pub use self::computer::ComputerSoma;
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
@@ -81,16 +87,6 @@ pub use self::data::{
     Vector3,
     Visibility,
 };
-// pub use self::frame::{
-//     Command,
-//     DebugCommand,
-//     DebugTextTarget,
-//     FrameData,
-//     GameData,
-//     GameEvent,
-//     GameState,
-//     MapState,
-// };
 pub use self::launcher::{
     LauncherDendrite,
     LauncherSettings,
@@ -105,6 +101,24 @@ pub use self::melee::{
     MeleeSuite,
     MeleeTerminal,
 };
+pub use self::observer::{
+    ObserverControlDendrite,
+    ObserverControlTerminal,
+    ObserverDendrite,
+    ObserverSoma,
+    ObserverTerminal,
+};
+
+// pub use self::frame::{
+//     Command,
+//     DebugCommand,
+//     DebugTextTarget,
+//     FrameData,
+//     GameData,
+//     GameEvent,
+//     GameState,
+//     MapState,
+// };
 
 error_chain! {
     links {
@@ -213,6 +227,12 @@ pub enum Synapse {
     Melee,
     /// client to the game instance
     Client,
+    /// observer controller
+    ObserverControl,
+    /// observer
+    Observer,
+    /// agent
+    Agent,
 }
 
 /// senders for synapses
@@ -224,6 +244,12 @@ pub enum Terminal {
     Melee(MeleeTerminal),
     /// client sender
     Client(ClientTerminal),
+    /// observer control sender
+    ObserverControl(ObserverControlTerminal),
+    /// observer sender
+    Observer(ObserverTerminal),
+    /// agent sender
+    Agent(AgentTerminal),
 }
 
 /// receivers for synapses
@@ -235,6 +261,12 @@ pub enum Dendrite {
     Melee(MeleeDendrite),
     /// client receiver
     Client(ClientDendrite),
+    /// observer control receiver
+    ObserverControl(ObserverControlDendrite),
+    /// observer receiver
+    Observer(ObserverDendrite),
+    /// agent receiver
+    Agent(AgentDendrite),
 }
 
 impl organelle::Synapse for Synapse {
@@ -257,6 +289,21 @@ impl organelle::Synapse for Synapse {
                 let (tx, rx) = ClientSoma::synapse();
 
                 (Terminal::Client(tx), Dendrite::Client(rx))
+            },
+            Synapse::ObserverControl => {
+                let (tx, rx) = observer::control_synapse();
+
+                (Terminal::ObserverControl(tx), Dendrite::ObserverControl(rx))
+            },
+            Synapse::Observer => {
+                let (tx, rx) = observer::synapse();
+
+                (Terminal::Observer(tx), Dendrite::Observer(rx))
+            },
+            Synapse::Agent => {
+                let (tx, rx) = agent::synapse();
+
+                (Terminal::Agent(tx), Dendrite::Agent(rx))
             },
         }
     }

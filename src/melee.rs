@@ -1,11 +1,10 @@
-use std::{self, mem, time};
+use std::{self, mem};
 
 use futures::prelude::*;
-use futures::unsync;
+use futures::unsync::{mpsc, oneshot};
 use organelle;
 use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
-use tokio_timer::Timer;
 use url::Url;
 
 use super::{
@@ -21,178 +20,6 @@ use super::{
     Synapse,
     Terminal,
 };
-
-#[derive(Debug)]
-enum MeleeRequest {
-    PlayerSetup(GameSettings, unsync::oneshot::Sender<PlayerSetup>),
-    Connect(Url, unsync::oneshot::Sender<()>),
-
-    CreateGame(GameSettings, Vec<PlayerSetup>, unsync::oneshot::Sender<()>),
-    JoinGame(PlayerSetup, Option<GamePorts>, unsync::oneshot::Sender<()>),
-}
-
-/// wrapper around a sender to provide a melee interface
-#[derive(Debug, Clone)]
-pub struct MeleeTerminal {
-    tx: unsync::mpsc::Sender<MeleeRequest>,
-}
-
-/// interface to be enforced by melee dendrites
-pub trait MeleeContract: Sized {
-    /// errors from the dendrite
-    type Error: std::error::Error + Send + Into<Error>;
-
-    /// fetch the player setup from the agent
-    fn get_player_setup(
-        self,
-        game: GameSettings,
-    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
-
-    /// connect to an instance
-    fn connect(self, url: Url)
-        -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    /// create a game
-    fn create_game(
-        self,
-        game: GameSettings,
-        players: Vec<PlayerSetup>,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    /// join a game
-    fn join_game(
-        self,
-        setup: PlayerSetup,
-        ports: Option<GamePorts>,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>;
-}
-
-/// wrapper around a receiver to provide a controlled interface
-#[derive(Debug)]
-pub struct MeleeDendrite {
-    rx: unsync::mpsc::Receiver<MeleeRequest>,
-}
-
-impl MeleeDendrite {
-    fn new(rx: unsync::mpsc::Receiver<MeleeRequest>) -> Self {
-        Self { rx: rx }
-    }
-
-    /// wrap a dendrite and use the contract to respond to any requests
-    #[async]
-    pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
-    where
-        T: MeleeContract + 'static,
-    {
-        #[async]
-        for req in self.rx.map_err(|_| Error::from("streams cannot fail")) {
-            match req {
-                MeleeRequest::PlayerSetup(game, tx) => {
-                    let result = await!(dendrite.get_player_setup(game))
-                        .map_err(|e| e.into())?;
-
-                    tx.send(result.1).unwrap();
-
-                    dendrite = result.0;
-                },
-                MeleeRequest::Connect(url, tx) => {
-                    dendrite =
-                        await!(dendrite.connect(url)).map_err(|e| e.into())?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::CreateGame(game, players, tx) => {
-                    dendrite = await!(
-                        dendrite
-                            .create_game(game, players)
-                            .map_err(|e| e.into())
-                    )?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::JoinGame(setup, ports, tx) => {
-                    dendrite = await!(
-                        dendrite.join_game(setup, ports).map_err(|e| e.into())
-                    )?;
-
-                    tx.send(()).unwrap();
-                },
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl MeleeTerminal {
-    fn new(tx: unsync::mpsc::Sender<MeleeRequest>) -> Self {
-        Self { tx: tx }
-    }
-
-    /// get a player setup from the agent
-    #[async]
-    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(MeleeRequest::PlayerSetup(game, tx))
-                .map_err(|_| Error::from("unable to request player setup"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
-    }
-
-    /// tell agent to connect to instance
-    #[async]
-    pub fn connect(self, url: Url) -> Result<()> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(MeleeRequest::Connect(url, tx))
-                .map_err(|_| Error::from("unable to request player setup"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
-    }
-
-    /// tell agent to create a game
-    #[async]
-    pub fn create_game(
-        self,
-        game: GameSettings,
-        players: Vec<PlayerSetup>,
-    ) -> Result<()> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(MeleeRequest::CreateGame(game, players, tx))
-                .map_err(|_| Error::from("unable to create game"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to create game")))
-    }
-
-    /// tell agent to join a game
-    #[async]
-    pub fn join_game(
-        self,
-        setup: PlayerSetup,
-        ports: Option<GamePorts>,
-    ) -> Result<()> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(MeleeRequest::JoinGame(setup, ports, tx))
-                .map_err(|_| Error::from("unable to join game"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to create game")))
-    }
-}
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {
@@ -222,7 +49,7 @@ pub struct MeleeSoma {
 impl MeleeSoma {
     /// create a melee synapse
     pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
-        let (tx, rx) = unsync::mpsc::channel(1);
+        let (tx, rx) = mpsc::channel(1);
 
         (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
     }
@@ -300,7 +127,7 @@ impl Soma for MeleeSoma {
                 self.agents.push(Some(tx));
                 Ok(self)
             },
-            Impulse::Start(tx, handle) => {
+            Impulse::Start(main_tx, handle) => {
                 assert!(self.launcher.is_some());
                 assert!(self.suite.is_some());
 
@@ -310,6 +137,8 @@ impl Soma for MeleeSoma {
 
                 assert!(self.agents[0].is_some() && self.agents[1].is_some());
 
+                let main_tx2 = main_tx.clone();
+
                 handle.spawn(
                     run_melee(
                         mem::replace(&mut self.suite, None).unwrap(),
@@ -318,8 +147,10 @@ impl Soma for MeleeSoma {
                             mem::replace(&mut self.agents[0], None).unwrap(),
                             mem::replace(&mut self.agents[1], None).unwrap(),
                         ),
+                        main_tx2,
                     ).or_else(move |e| {
-                        tx.send(Impulse::Error(e.into()))
+                        main_tx
+                            .send(Impulse::Error(e.into()))
                             .map(|_| ())
                             .map_err(|_| ())
                     }),
@@ -338,6 +169,7 @@ fn run_melee(
     suite: MeleeSuite,
     launcher: LauncherTerminal,
     agents: (MeleeTerminal, MeleeTerminal),
+    main_tx: mpsc::Sender<Impulse<Synapse>>,
 ) -> Result<()> {
     let (game, _suite) = match suite {
         MeleeSuite::OneAndDone(game) => (game, None),
@@ -399,11 +231,222 @@ fn run_melee(
 
             await!(join1.join(join2))?;
         }
+
+        {
+            let run1 = agents.0.clone().run_game();
+            let run2 = agents.1.clone().run_game();
+
+            await!(run1.join(run2))?;
+        }
+
+        // just quit for now
+        await!(
+            main_tx
+                .send(Impulse::Stop)
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to stop"))
+        )?;
     } else {
-        let instance = await!(launcher.clone().launch())?;
+        unimplemented!();
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+enum MeleeRequest {
+    PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
+    Connect(Url, oneshot::Sender<()>),
+
+    CreateGame(GameSettings, Vec<PlayerSetup>, oneshot::Sender<()>),
+    JoinGame(PlayerSetup, Option<GamePorts>, oneshot::Sender<()>),
+    RunGame(oneshot::Sender<()>),
+}
+
+/// wrapper around a sender to provide a melee interface
+#[derive(Debug, Clone)]
+pub struct MeleeTerminal {
+    tx: mpsc::Sender<MeleeRequest>,
+}
+
+/// interface to be enforced by melee dendrites
+pub trait MeleeContract: Sized {
+    /// errors from the dendrite
+    type Error: std::error::Error + Send + Into<Error>;
+
+    /// fetch the player setup from the agent
+    fn get_player_setup(
+        self,
+        game: GameSettings,
+    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
+
+    /// connect to an instance
+    fn connect(self, url: Url)
+        -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// create a game
+    fn create_game(
+        self,
+        game: GameSettings,
+        players: Vec<PlayerSetup>,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// join a game
+    fn join_game(
+        self,
+        setup: PlayerSetup,
+        ports: Option<GamePorts>,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// run the game
+    fn run_game(self) -> Box<Future<Item = Self, Error = Self::Error>>;
+}
+
+/// wrapper around a receiver to provide a controlled interface
+#[derive(Debug)]
+pub struct MeleeDendrite {
+    rx: mpsc::Receiver<MeleeRequest>,
+}
+
+impl MeleeDendrite {
+    fn new(rx: mpsc::Receiver<MeleeRequest>) -> Self {
+        Self { rx: rx }
+    }
+
+    /// wrap a dendrite and use the contract to respond to any requests
+    #[async]
+    pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
+    where
+        T: MeleeContract + 'static,
+    {
+        #[async]
+        for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                MeleeRequest::PlayerSetup(game, tx) => {
+                    let result = await!(dendrite.get_player_setup(game))
+                        .map_err(|e| e.into())?;
+
+                    tx.send(result.1).unwrap();
+
+                    dendrite = result.0;
+                },
+                MeleeRequest::Connect(url, tx) => {
+                    dendrite =
+                        await!(dendrite.connect(url)).map_err(|e| e.into())?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::CreateGame(game, players, tx) => {
+                    dendrite = await!(
+                        dendrite
+                            .create_game(game, players)
+                            .map_err(|e| e.into())
+                    )?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::JoinGame(setup, ports, tx) => {
+                    dendrite = await!(
+                        dendrite.join_game(setup, ports).map_err(|e| e.into())
+                    )?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::RunGame(tx) => {
+                    dendrite =
+                        await!(dendrite.run_game().map_err(|e| e.into()))?;
+
+                    tx.send(()).unwrap();
+                },
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl MeleeTerminal {
+    fn new(tx: mpsc::Sender<MeleeRequest>) -> Self {
+        Self { tx: tx }
+    }
+
+    /// get a player setup from the agent
+    #[async]
+    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::PlayerSetup(game, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
+
+    /// tell agent to connect to instance
+    #[async]
+    pub fn connect(self, url: Url) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::Connect(url, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
+
+    /// tell agent to create a game
+    #[async]
+    pub fn create_game(
+        self,
+        game: GameSettings,
+        players: Vec<PlayerSetup>,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::CreateGame(game, players, tx))
+                .map_err(|_| Error::from("unable to create game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to create game")))
+    }
+
+    /// tell agent to join a game
+    #[async]
+    pub fn join_game(
+        self,
+        setup: PlayerSetup,
+        ports: Option<GamePorts>,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::JoinGame(setup, ports, tx))
+                .map_err(|_| Error::from("unable to join game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to join game")))
+    }
+
+    /// run the game to completion
+    #[async]
+    pub fn run_game(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::RunGame(tx))
+                .map_err(|_| Error::from("unable to run game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to run game")))
+    }
 }
 
 // /// MeleeSoma state that pits players against the built-in AI
