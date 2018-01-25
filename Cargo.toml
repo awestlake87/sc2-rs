@@ -27,8 +27,7 @@ url = "1.6"
 uuid = { version = "0.5", features = ["serde", "v4"] }
 
 [dependencies.organelle]
-git = "https://github.com/awestlake87/organelle"
-branch = "renaming"
+path = "../organelle"
 
 # [[example]]
 # name = "bot-micro"

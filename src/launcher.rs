@@ -226,7 +226,6 @@ impl LauncherSoma {
 impl Soma for LauncherSoma {
     type Synapse = Synapse;
     type Error = Error;
-    type Future = Box<Future<Item = Self, Error = Self::Error>>;
 
     #[async(boxed)]
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {

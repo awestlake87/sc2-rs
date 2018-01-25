@@ -1,12 +1,16 @@
 use futures::prelude::*;
 use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
+use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
 
 use super::{
     Dendrite,
     Error,
+    GamePorts,
     GameSettings,
+    IntoProto,
+    Map,
     MeleeContract,
     MeleeDendrite,
     PlayerSetup,
@@ -79,7 +83,6 @@ impl AgentSoma {
 impl Soma for AgentSoma {
     type Synapse = Synapse;
     type Error = Error;
-    type Future = Box<Future<Item = Self, Error = Self::Error>>;
 
     #[async(boxed)]
     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
@@ -141,237 +144,118 @@ impl MeleeContract for AgentMeleeDendrite {
         await!(self.client.clone().connect(url))?;
         Ok(self)
     }
+
+    #[async(boxed)]
+    fn create_game(
+        self,
+        settings: GameSettings,
+        players: Vec<PlayerSetup>,
+    ) -> Result<Self> {
+        let mut req = sc2api::Request::new();
+
+        match settings.map {
+            Map::LocalMap(ref path) => {
+                req.mut_create_game().mut_local_map().set_map_path(
+                    match path.clone().into_os_string().into_string() {
+                        Ok(s) => s,
+                        Err(_) => bail!("invalid path string"),
+                    },
+                );
+            },
+            Map::BlizzardMap(ref map) => {
+                req.mut_create_game().set_battlenet_map_name(map.clone());
+            },
+        };
+
+        for player in players {
+            let mut setup = sc2api::PlayerSetup::new();
+
+            match player {
+                PlayerSetup::Computer {
+                    difficulty, race, ..
+                } => {
+                    setup.set_field_type(sc2api::PlayerType::Computer);
+
+                    setup.set_difficulty(difficulty.to_proto());
+                    setup.set_race(race.into_proto()?);
+                },
+                PlayerSetup::Player { race, .. } => {
+                    setup.set_field_type(sc2api::PlayerType::Participant);
+
+                    setup.set_race(race.into_proto()?);
+                }, /*PlayerSetup::Observer => {
+                    setup.set_field_type(sc2api::PlayerType::Observer);
+                }*/
+            }
+
+            req.mut_create_game().mut_player_setup().push(setup);
+        }
+
+        req.mut_create_game().set_realtime(false);
+
+        let rsp = await!(self.client.clone().request(req))?;
+
+        println!("rsp: {:#?}", rsp);
+
+        Ok(self)
+    }
+
+    #[async(boxed)]
+    fn join_game(
+        self,
+        setup: PlayerSetup,
+        ports: Option<GamePorts>,
+    ) -> Result<Self> {
+        let mut req = sc2api::Request::new();
+
+        match setup {
+            PlayerSetup::Computer { race, .. } => {
+                req.mut_join_game().set_race(race.into_proto()?);
+            },
+            PlayerSetup::Player { race, .. } => {
+                req.mut_join_game().set_race(race.into_proto()?);
+            }, //_ => req.mut_join_game().set_race(common::Race::NoRace)
+        };
+
+        if let Some(ports) = ports {
+            req.mut_join_game()
+                .set_shared_port(ports.shared_port as i32);
+
+            {
+                let s = req.mut_join_game().mut_server_ports();
+
+                s.set_game_port(ports.server_ports.game_port as i32);
+                s.set_base_port(ports.server_ports.base_port as i32);
+            }
+
+            {
+                let client_ports = req.mut_join_game().mut_client_ports();
+
+                for c in &ports.client_ports {
+                    let mut p = sc2api::PortSet::new();
+
+                    p.set_game_port(c.game_port as i32);
+                    p.set_base_port(c.base_port as i32);
+
+                    client_ports.push(p);
+                }
+            }
+        }
+
+        {
+            let options = req.mut_join_game().mut_options();
+
+            options.set_raw(true);
+            options.set_score(true);
+        }
+
+        let rsp = await!(self.client.clone().request(req))?;
+
+        println!("rsp: {:#?}", rsp);
+
+        Ok(self)
+    }
 }
-
-// /// mediates interactions between the player and the game instance
-// pub enum AgentSoma {
-//     /// initialize the axon
-//     Init(Init),
-//     /// perform setup queries
-//     Setup(Setup),
-
-//     /// order the game instance to create a game
-//     CreateGame(CreateGame),
-//     /// game has been created
-//     GameCreated(GameCreated),
-//     /// join an existing game
-//     JoinGame(JoinGame),
-
-//     /// order the observer to fetch game data
-//     FetchGameData(FetchGameData),
-//     /// query the request interval from the player soma
-//     StepperSetup(StepperSetup),
-
-//     /// broadcast game updates to the player soma
-//     Update(Update),
-//     /// send any actions for this step to the game instance
-//     SendActions(SendActions),
-//     /// send any debug actions for this step to the game instance
-//     SendDebug(SendDebug),
-//     /// step the game instance
-//     Step(Step),
-//     /// order the observer to observe the game state
-//     Observe(Observe),
-
-//     /// leave the current game
-//     LeaveGame(LeaveGame),
-//     /// reset the client and re-enter setup state
-//     Reset(Reset),
-// }
-
-// impl AgentSoma {
-//     fn sheath() -> Result<Sheath<Self>> {
-//         Ok(Sheath::new(
-//             AgentSoma::Init(Init {}),
-//             vec![
-//                 Dendrite::RequireOne(Synapse::Controller),
-//                 Dendrite::RequireOne(Synapse::InstanceProvider),
-//             ],
-//             vec![
-//                 Dendrite::RequireOne(Synapse::Client),
-//                 Dendrite::RequireOne(Synapse::Agent),
-//                 Dendrite::RequireOne(Synapse::InstanceProvider),
-//                 Dendrite::RequireOne(Synapse::Observer),
-//             ],
-//         )?)
-//     }
-
-//     /// compose an agent organelle to interact with a controller soma
-//     pub fn organelle<T>(soma: T) -> Result<Organelle<Sheath<Self>>>
-//     where
-//         T: Soma + 'static,
-
-//         T::Signal: From<Signal>,
-//         T::Synapse: From<Synapse>,
-
-//         Signal: From<T::Signal>,
-//         Synapse: From<T::Synapse>,
-//     {
-//         let mut organelle = Organelle::new(AgentSoma::sheath()?);
-
-//         let agent = organelle.get_main_handle();
-//         let player = organelle.add_soma(soma);
-
-//         // TODO: find out why these explicit annotation is needed. it's
-//         // possible that it's a bug in the rust type system because it will
-// // work when the function is generic across two soma types, but not
-// one         let client =
-//             organelle.add_soma::<Sheath<ClientSoma>>(ClientSoma::sheath()?);
-//         let observer =
-//
-// organelle.add_soma::<Sheath<ObserverSoma>>(ObserverSoma::sheath()?);
-
-//         organelle.connect(agent, client, Synapse::InstanceProvider);
-//         organelle.connect(agent, client, Synapse::Client);
-//         organelle.connect(observer, client, Synapse::Client);
-
-//         organelle.connect(agent, observer, Synapse::Observer);
-//         organelle.connect(agent, player, Synapse::Agent);
-
-//         Ok(organelle)
-//     }
-// }
-
-// impl Neuron for AgentSoma {
-//     type Signal = Signal;
-//     type Synapse = Synapse;
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> organelle::Result<Self> {
-//         match self {
-//             AgentSoma::Init(state) => state.update(axon, msg),
-//             AgentSoma::Setup(state) => state.update(axon, msg),
-
-//             AgentSoma::CreateGame(state) => state.update(axon, msg),
-//             AgentSoma::GameCreated(state) => state.update(axon, msg),
-//             AgentSoma::JoinGame(state) => state.update(axon, msg),
-
-//             AgentSoma::StepperSetup(state) => state.update(axon, msg),
-//             AgentSoma::FetchGameData(state) => state.update(axon, msg),
-
-//             AgentSoma::Update(state) => state.update(axon, msg),
-//             AgentSoma::SendActions(state) => state.update(axon, msg),
-//             AgentSoma::SendDebug(state) => state.update(axon, msg),
-//             AgentSoma::Step(state) => state.update(axon, msg),
-//             AgentSoma::Observe(state) => state.update(axon, msg),
-
-//             AgentSoma::LeaveGame(state) => state.update(axon, msg),
-//             AgentSoma::Reset(state) => state.update(axon, msg),
-//         }.chain_err(|| organelle::ErrorKind::SomaError)
-//     }
-// }
-
-// pub struct Init;
-
-// impl Init {
-//     fn update(
-//         self,
-//         _axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Start => Setup::setup(),
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
-
-// pub struct Setup;
-
-// impl Setup {
-//     fn setup() -> Result<AgentSoma> {
-//         Ok(AgentSoma::Setup(Setup {}))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::Ready) => self.on_ready(axon, src),
-
-//             Impulse::Signal(src, Signal::RequestPlayerSetup(settings)) => {
-//                 self.on_req_player_setup(axon, src, settings)
-//             },
-//             Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
-//                 self.on_player_setup(axon, src, setup)
-//             },
-
-//             Impulse::Signal(src, Signal::ProvideInstance(instance, url)) => {
-//                 self.provide_instance(axon, src, instance, url)
-//             },
-//             Impulse::Signal(src, Signal::CreateGame(settings, players)) => {
-//                 self.create_game(axon, src, settings, players)
-//             },
-//             Impulse::Signal(_, Signal::GameReady(setup, ports)) => {
-//                 self.on_game_ready(axon, setup, ports)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_ready(self, axon: &Axon, src: Handle) -> Result<AgentSoma> {
-//         assert_eq!(src, axon.req_output(Synapse::Client)?);
-
-//         axon.send_req_input(Synapse::Controller, Signal::Ready)?;
-
-//         Ok(AgentSoma::Setup(self))
-//     }
-
-//     fn on_req_player_setup(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         settings: GameSettings,
-//     ) -> Result<AgentSoma> {
-//         assert_eq!(src, axon.req_input(Synapse::Controller)?);
-
-//         axon.send_req_output(
-//             Synapse::Agent,
-//             Signal::RequestPlayerSetup(settings),
-//         )?;
-
-//         Ok(AgentSoma::Setup(self))
-//     }
-
-//     fn on_player_setup(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         setup: PlayerSetup,
-//     ) -> Result<AgentSoma> {
-//         assert_eq!(src, axon.req_output(Synapse::Agent)?);
-
-// axon.send_req_input(Synapse::Controller,
-// Signal::PlayerSetup(setup))?;
-
-//         Ok(AgentSoma::Setup(self))
-//     }
-
-//     fn provide_instance(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         instance: Handle,
-//         url: Url,
-//     ) -> Result<AgentSoma> {
-//         assert_eq!(src, axon.req_input(Synapse::InstanceProvider)?);
-
-//         axon.send_req_output(
-//             Synapse::InstanceProvider,
-//             Signal::ProvideInstance(instance, url),
-//         )?;
-
-//         Ok(AgentSoma::Setup(self))
-//     }
 
 //     fn create_game(
 //         self,
@@ -381,48 +265,6 @@ impl MeleeContract for AgentMeleeDendrite {
 //         players: Vec<PlayerSetup>,
 //     ) -> Result<AgentSoma> {
 //         assert_eq!(src, axon.req_input(Synapse::Controller)?);
-
-//         let mut req = sc2api::Request::new();
-
-//         match settings.map {
-//             Map::LocalMap(ref path) => {
-//                 req.mut_create_game().mut_local_map().set_map_path(
-//                     match path.clone().into_os_string().into_string() {
-//                         Ok(s) => s,
-//                         Err(_) => bail!("invalid path string"),
-//                     },
-//                 );
-//             },
-//             Map::BlizzardMap(ref map) => {
-//                 req.mut_create_game().set_battlenet_map_name(map.clone());
-//             },
-//         };
-
-//         for player in players {
-//             let mut setup = sc2api::PlayerSetup::new();
-
-//             match player {
-//                 PlayerSetup::Computer {
-//                     difficulty, race, ..
-//                 } => {
-//                     setup.set_field_type(sc2api::PlayerType::Computer);
-
-//                     setup.set_difficulty(difficulty.to_proto());
-//                     setup.set_race(race.into_proto()?);
-//                 },
-//                 PlayerSetup::Player { race, .. } => {
-//                     setup.set_field_type(sc2api::PlayerType::Participant);
-
-//                     setup.set_race(race.into_proto()?);
-//                 }, /*PlayerSetup::Observer => {
-//                     setup.set_field_type(sc2api::PlayerType::Observer);
-//                 }*/
-//             }
-
-//             req.mut_create_game().mut_player_setup().push(setup);
-//         }
-
-//         req.mut_create_game().set_realtime(false);
 
 //         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
 

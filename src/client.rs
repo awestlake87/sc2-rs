@@ -1,12 +1,15 @@
-use std::{self, mem, time};
+use std::{self, io, mem, time};
 
+use bytes::{Buf, BufMut};
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
+use protobuf::{self, parse_from_reader, Message};
 use sc2_proto::sc2api::{Request, Response};
 use tokio_core::reactor;
 use tokio_timer::Timer;
 use tokio_tungstenite::connect_async;
+use tungstenite;
 use url::Url;
 
 use super::{Dendrite, Error, Result, Synapse};
@@ -24,6 +27,7 @@ fn stream_next<T: Stream>(
 #[derive(Debug)]
 enum ClientRequest {
     Connect(Url, oneshot::Sender<()>),
+    Request(Request, oneshot::Sender<Result<Response>>),
 }
 
 #[derive(Debug, Clone)]
@@ -39,10 +43,23 @@ impl ClientTerminal {
         await!(
             self.tx
                 .send(ClientRequest::Connect(url, tx))
-                .map_err(|_| Error::from("unable to send client request"))
+                .map_err(|_| Error::from("unable to send connect"))
         )?;
 
         await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
+    }
+
+    #[async]
+    pub fn request(self, req: Request) -> Result<Response> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ClientRequest::Request(req, tx))
+                .map_err(|_| Error::from("unable to send request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive response")))?
     }
 }
 
@@ -64,7 +81,7 @@ impl ClientDendrite {
 
             rx = match req {
                 Some(ClientRequest::Connect(url, tx)) => {
-                    await!(run_client(url, handle.clone(), tx, stream))?
+                    await!(connect(url, handle.clone(), tx, stream))?
                 },
                 None => break,
                 _ => bail!("unexpected req {:?}", req),
@@ -98,7 +115,6 @@ impl ClientSoma {
 impl Soma for ClientSoma {
     type Synapse = Synapse;
     type Error = Error;
-    type Future = Box<Future<Item = Self, Error = Self::Error>>;
 
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
@@ -133,15 +149,17 @@ impl Soma for ClientSoma {
 }
 
 #[async]
-fn run_client(
+fn connect(
     url: Url,
     handle: reactor::Handle,
     tx: oneshot::Sender<()>,
-    rx: mpsc::Receiver<ClientRequest>,
+    mut rx: mpsc::Receiver<ClientRequest>,
 ) -> Result<mpsc::Receiver<ClientRequest>> {
     const NUM_RETRIES: u32 = 10;
 
     let timer = Timer::default();
+
+    let mut client = None;
 
     for i in 0..NUM_RETRIES {
         let url = url.clone();
@@ -153,33 +171,136 @@ fn run_client(
             (NUM_RETRIES - 1) - i
         );
 
-        if let Err(_) = await!(
+        match await!(
             timer
                 .sleep(time::Duration::from_secs(5))
                 .map_err(|e| e.into())
                 .and_then(|_| attempt_connect(url, handle))
         ) {
-            println!("connect failed. retrying in 5s");
-        } else {
-            tx.send(()).map_err(|_| Error::from("unable to send"))?;
-            break;
+            Err(_) => println!("connect failed. retrying in 5s"),
+            Ok((send, recv)) => {
+                client = Some((send, recv));
+                break;
+            },
+        }
+    }
+
+    if let Some((send, recv)) = client {
+        tx.send(())
+            .map_err(|_| Error::from("unable to send connect ack"))?;
+        await!(run_client(rx, send, recv, timer))
+    } else {
+        bail!("unable to connect")
+    }
+}
+
+#[async]
+fn attempt_connect(
+    url: Url,
+    handle: reactor::Handle,
+) -> Result<
+    (
+        mpsc::Sender<tungstenite::Message>,
+        mpsc::Sender<oneshot::Sender<Result<Response>>>,
+    ),
+> {
+    let (send_tx, send_rx) = mpsc::channel(10);
+    let (recv_tx, recv_rx) =
+        mpsc::channel::<oneshot::Sender<Result<Response>>>(10);
+
+    let handle = handle.clone();
+
+    await!(connect_async(url, handle.remote().clone()).and_then(
+        move |(ws_stream, _)| {
+            let (sink, stream) = ws_stream.split();
+
+            handle.spawn(
+                sink.send_all(
+                    send_rx
+                        .map_err(|_| -> tungstenite::Error { unreachable!() }),
+                ).map(|_| ())
+                    .map_err(|_| ()),
+            );
+            handle.spawn(
+                stream
+                    .map_err(|e| panic!("client error {:?}", e))
+                    .zip(recv_rx)
+                    .for_each(|(msg, tx)| {
+                        if let tungstenite::Message::Binary(buf) = msg {
+                            let cursor = io::Cursor::new(buf);
+
+                            match parse_from_reader::<Response>(&mut cursor.reader())
+                            {
+                                Err(e) => {
+                                    if let Err(_) = tx.send(Err(e.into())) {
+                                        // keep going
+                                    }
+                                },
+                                Ok(rsp) => {
+                                    if let Err(_) = tx.send(Ok(rsp)) {
+                                        // keep going
+                                    }
+                                },
+                            }
+                        }
+
+                        Ok(())
+                    }),
+            );
+
+            Ok(())
+        }
+    )).map_err(|e| Error::from(e))?;
+
+    Ok((send_tx, recv_tx))
+}
+
+#[async]
+fn run_client(
+    mut rx: mpsc::Receiver<ClientRequest>,
+    send: mpsc::Sender<tungstenite::Message>,
+    recv: mpsc::Sender<oneshot::Sender<Result<Response>>>,
+    timer: Timer,
+) -> Result<mpsc::Receiver<ClientRequest>> {
+    loop {
+        let (req, stream) = await!(
+            stream_next(rx)
+                .map_err(|_| Error::from("unable to receive next item"))
+        )?;
+
+        rx = stream;
+
+        match req {
+            Some(ClientRequest::Request(req, tx)) => {
+                let buf = Vec::new();
+                let mut writer = buf.writer();
+
+                {
+                    let mut cos = protobuf::CodedOutputStream::new(&mut writer);
+
+                    req.write_to(&mut cos)?;
+                    cos.flush()?;
+                }
+                await!(
+                    send.clone()
+                        .send(tungstenite::Message::Binary(writer.into_inner()))
+                        .map_err(|_| Error::from("unable to send request"))
+                )?;
+                await!(
+                    recv.clone()
+                        .send(tx)
+                        .map_err(|_| Error::from("unable to send responder"))
+                )?;
+            },
+
+            None => break,
+
+            _ => bail!("unexpected request"),
         }
     }
 
     Ok(rx)
 }
-
-#[async]
-fn attempt_connect(url: Url, handle: reactor::Handle) -> Result<()> {
-    await!(connect_async(url, handle.remote().clone()).and_then(
-        move |(ws_stream, _)| {
-            let (sink, stream) = ws_stream.split();
-
-            Ok(())
-        }
-    )).map_err(|e| e.into())
-}
-
 // #[derive(PartialEq, Copy, Clone, Debug)]
 // enum ClientMessageKind {
 //     Unknown,
@@ -204,33 +325,6 @@ fn attempt_connect(url: Url, handle: reactor::Handle) -> Result<()> {
 //     Ping,
 //     Debug,
 // }
-
-// /// a request to send to the game instance
-// #[derive(Debug)]
-// pub struct ClientRequest {
-//     transaction: Uuid,
-//     request: Request,
-//     timeout: time::Duration,
-//     kind: ClientMessageKind,
-// }
-
-// impl ClientRequest {
-//     /// create a new request with the default timeout
-//     pub fn new(request: Request) -> Self {
-//         Self::with_timeout(request, time::Duration::from_secs(5))
-//     }
-
-//     /// create a new request with a custom timeout
-//     pub fn with_timeout(request: Request, timeout: time::Duration) -> Self {
-//         let kind = Self::get_kind(&request);
-
-//         Self {
-//             transaction: Uuid::new_v4(),
-//             request: request,
-//             timeout: timeout,
-//             kind: kind,
-//         }
-//     }
 
 //     fn get_kind(req: &Request) -> ClientMessageKind {
 //         if req.has_create_game() {
@@ -278,35 +372,7 @@ fn attempt_connect(url: Url, handle: reactor::Handle) -> Result<()> {
 //         }
 //     }
 // }
-
-// /// a successful response from the game instance
-// #[derive(Debug)]
-// pub struct ClientResponse {
-//     transaction: Uuid,
-//     response: Response,
-//     kind: ClientMessageKind,
-// }
-
-// /// the result of a transaction with the game instance
-// #[derive(Debug)]
-// pub enum ClientResult {
-//     /// transaction succeeded
-//     Success(ClientResponse),
-//     /// transaction timed out
-//     Timeout(Uuid),
-// }
-
 // impl ClientResult {
-//     fn success(transaction: Uuid, response: Response) -> Self {
-//         let kind = Self::get_kind(&response);
-
-//         ClientResult::Success(ClientResponse {
-//             transaction: transaction,
-//             response: response,
-//             kind: kind,
-//         })
-//     }
-
 //     fn get_kind(rsp: &Response) -> ClientMessageKind {
 //         if rsp.has_create_game() {
 //             ClientMessageKind::CreateGame
@@ -353,160 +419,6 @@ fn attempt_connect(url: Url, handle: reactor::Handle) -> Result<()> {
 //         }
 //     }
 // }
-
-// const NUM_RETRIES: u32 = 10;
-
-// pub enum ClientSoma {
-//     Init(Init),
-//     AwaitInstance(AwaitInstance),
-//     Connect(Connect),
-
-//     Open(Open),
-
-//     Disconnect(Disconnect),
-// }
-
-// impl ClientSoma {
-//     pub fn sheath() -> Result<Sheath<ClientSoma>> {
-//         Ok(Sheath::new(
-//             ClientSoma::Init(Init {}),
-//             vec![
-//                 Dendrite::RequireOne(Synapse::InstanceProvider),
-//                 Dendrite::Variadic(Synapse::Client),
-//             ],
-//             vec![],
-//         )?)
-//     }
-// }
-
-// impl Neuron for ClientSoma {
-//     type Signal = Signal;
-//     type Synapse = Synapse;
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> organelle::Result<Self> {
-//         match self {
-//             ClientSoma::Init(state) => state.update(axon, msg),
-//             ClientSoma::AwaitInstance(state) => state.update(axon, msg),
-//             ClientSoma::Connect(state) => state.update(axon, msg),
-//             ClientSoma::Open(state) => state.update(axon, msg),
-//             ClientSoma::Disconnect(state) => state.update(axon, msg),
-//         }.chain_err(|| organelle::ErrorKind::SomaError)
-//     }
-// }
-
-// pub struct Init {}
-
-// impl Init {
-//     fn update(
-//         self,
-//         _: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<ClientSoma> {
-//         match msg {
-//             Impulse::Start => self.start(),
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn start(self) -> Result<ClientSoma> {
-//         AwaitInstance::await()
-//     }
-// }
-
-// pub struct AwaitInstance {}
-
-// impl AwaitInstance {
-//     fn await() -> Result<ClientSoma> {
-//         Ok(ClientSoma::AwaitInstance(AwaitInstance {}))
-//     }
-
-//     fn reset(axon: &Axon) -> Result<ClientSoma> {
-//         for c in axon.var_input(Synapse::Client)? {
-//             axon.effector()?.send(*c, Signal::ClientClosed);
-//         }
-
-//         Self::await()
-//     }
-
-//     fn reset_error(axon: &Axon, e: Rc<Error>) -> Result<ClientSoma> {
-//         for c in axon.var_input(Synapse::Client)? {
-//             axon.effector()?.send_in_order(
-//                 *c,
-// vec![Signal::ClientError(Rc::clone(&e)),
-// Signal::ClientClosed],             );
-//         }
-
-//         Self::await()
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<ClientSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ProvideInstance(instance, url)) => {
-//                 self.assign_instance(axon, src, instance, url)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn assign_instance(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         _: Uuid,
-//         url: Url,
-//     ) -> Result<ClientSoma> {
-//         assert_eq!(src, axon.req_input(Synapse::InstanceProvider)?);
-
-//         Connect::connect(axon, url)
-//     }
-// }
-
-// pub struct Connect {
-//     timer: Timer,
-//     retries: u32,
-// }
-
-// impl Connect {
-//     fn connect(axon: &Axon, url: Url) -> Result<ClientSoma> {
-//         let this_soma = axon.effector()?.this_soma();
-//         axon.effector()?
-//             .send(this_soma, Signal::ClientAttemptConnect(url));
-
-//         Ok(ClientSoma::Connect(Connect {
-//             timer: Timer::default(),
-//             retries: NUM_RETRIES,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<ClientSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientAttemptConnect(url)) => {
-//                 self.attempt_connect(axon, src, url)
-//             },
-//             Impulse::Signal(src, Signal::ClientConnected(sender)) => {
-//                 self.on_connected(axon, src, sender)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
 
 //     fn attempt_connect(
 //         mut self,
