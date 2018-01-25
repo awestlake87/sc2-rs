@@ -10,7 +10,7 @@ use url::Url;
 use super::{Error, Result};
 use data::{GamePorts, GameSettings, PlayerSetup};
 use launcher::{LauncherSettings, LauncherSoma, LauncherTerminal};
-use synapse::{Dendrite, Synapse, Terminal};
+use synapses::{Dendrite, Synapse, Terminal};
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {

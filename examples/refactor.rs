@@ -22,11 +22,12 @@ use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use sc2::{
     AgentContract,
     AgentDendrite,
-    Dendrite,
     Error,
     LauncherSettings,
+    PlayerDendrite,
+    PlayerSynapse,
+    PlayerTerminal,
     Result,
-    Synapse,
 };
 use sc2::data::{GameSettings, Map, PlayerSetup, Race};
 use tokio_core::reactor;
@@ -98,23 +99,31 @@ impl TerranSoma {
     pub fn organelle(_interval: u32) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self { agent: None },
-            vec![Constraint::One(Synapse::Agent)],
-            vec![],
+            vec![Constraint::One(PlayerSynapse::Agent)],
+            vec![Constraint::One(PlayerSynapse::Observer)],
         ))
     }
 }
 
 impl Soma for TerranSoma {
-    type Synapse = Synapse;
+    type Synapse = PlayerSynapse;
     type Error = Error;
 
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddDendrite(Synapse::Agent, Dendrite::Agent(rx)) => {
+            Impulse::AddDendrite(
+                PlayerSynapse::Agent,
+                PlayerDendrite::Agent(rx),
+            ) => {
                 self.agent = Some(rx);
                 Ok(self)
             },
+            Impulse::AddTerminal(
+                PlayerSynapse::Observer,
+                PlayerTerminal::Observer(_),
+            ) => Ok(self),
+
             Impulse::Start(main_tx, handle) => {
                 handle.spawn(
                     self.agent.unwrap().wrap(TerranDendrite {}).or_else(

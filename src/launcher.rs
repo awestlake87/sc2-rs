@@ -11,7 +11,7 @@ use regex::Regex;
 use super::{Error, ErrorKind, Result};
 use data::{GamePorts, PortSet, Rect};
 use instance::{Instance, InstanceKind, InstanceSettings};
-use synapse::{Dendrite, Synapse};
+use synapses::{Dendrite, Synapse};
 
 /// sender for launcher
 #[derive(Debug, Clone)]

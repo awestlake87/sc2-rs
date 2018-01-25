@@ -1,10 +1,11 @@
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
+use tokio_core::reactor;
 
 use super::{Error, Result};
 use client::ClientTerminal;
-use synapse::{Dendrite, Synapse, Terminal};
+use synapses::{Dendrite, Synapse, Terminal};
 
 pub struct ObserverSoma {
     client: Option<ClientTerminal>,
@@ -78,9 +79,11 @@ impl Soma for ObserverSoma {
                 }
 
                 let task = ObserverTask {
+                    handle: handle.clone(),
                     controller: self.controller.unwrap(),
                     client: self.client.unwrap(),
-                    requests: rx,
+                    request_tx: tx,
+                    request_rx: rx,
                 };
 
                 handle.spawn(task.run().or_else(move |e| {
@@ -103,9 +106,11 @@ impl Soma for ObserverSoma {
 }
 
 struct ObserverTask {
+    handle: reactor::Handle,
     controller: ObserverControlDendrite,
     client: ClientTerminal,
-    requests: mpsc::Receiver<ObserverRequest>,
+    request_tx: mpsc::Sender<ObserverRequest>,
+    request_rx: mpsc::Receiver<ObserverRequest>,
 }
 
 impl ObserverTask {
@@ -114,7 +119,7 @@ impl ObserverTask {
         let queue = self.controller
             .rx
             .map(|req| Either::Control(req))
-            .select(self.requests.map(|req| Either::Request(req)));
+            .select(self.request_rx.map(|req| Either::Request(req)));
 
         #[async]
         for req in queue.map_err(|_| -> Error { unreachable!() }) {

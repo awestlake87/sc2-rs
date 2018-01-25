@@ -102,3 +102,95 @@ impl organelle::Synapse for Synapse {
         }
     }
 }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub enum PlayerSynapse {
+    Agent,
+    Observer,
+}
+
+#[derive(Debug)]
+pub enum PlayerTerminal {
+    Agent(AgentTerminal),
+    Observer(ObserverTerminal),
+}
+
+#[derive(Debug)]
+pub enum PlayerDendrite {
+    Agent(AgentDendrite),
+    Observer(ObserverDendrite),
+}
+
+impl organelle::Synapse for PlayerSynapse {
+    type Terminal = PlayerTerminal;
+    type Dendrite = PlayerDendrite;
+
+    fn synapse(self) -> (Self::Terminal, Self::Dendrite) {
+        match self {
+            PlayerSynapse::Agent => {
+                let (tx, rx) = agent::synapse();
+
+                (PlayerTerminal::Agent(tx), PlayerDendrite::Agent(rx))
+            },
+            PlayerSynapse::Observer => {
+                let (tx, rx) = observer::synapse();
+
+                (PlayerTerminal::Observer(tx), PlayerDendrite::Observer(rx))
+            },
+        }
+    }
+}
+
+impl From<PlayerSynapse> for Synapse {
+    fn from(synapse: PlayerSynapse) -> Self {
+        match synapse {
+            PlayerSynapse::Agent => Synapse::Agent,
+            PlayerSynapse::Observer => Synapse::Observer,
+        }
+    }
+}
+impl From<Synapse> for PlayerSynapse {
+    fn from(synapse: Synapse) -> Self {
+        match synapse {
+            Synapse::Agent => PlayerSynapse::Agent,
+            Synapse::Observer => PlayerSynapse::Observer,
+            _ => panic!("invalid conversion from internal sc2 synapse"),
+        }
+    }
+}
+
+impl From<PlayerTerminal> for Terminal {
+    fn from(terminal: PlayerTerminal) -> Self {
+        match terminal {
+            PlayerTerminal::Agent(tx) => Terminal::Agent(tx),
+            PlayerTerminal::Observer(tx) => Terminal::Observer(tx),
+        }
+    }
+}
+impl From<Terminal> for PlayerTerminal {
+    fn from(terminal: Terminal) -> Self {
+        match terminal {
+            Terminal::Agent(tx) => PlayerTerminal::Agent(tx),
+            Terminal::Observer(tx) => PlayerTerminal::Observer(tx),
+            _ => panic!("invalid conversion from internal sc2 terminal"),
+        }
+    }
+}
+
+impl From<PlayerDendrite> for Dendrite {
+    fn from(dendrite: PlayerDendrite) -> Self {
+        match dendrite {
+            PlayerDendrite::Agent(rx) => Dendrite::Agent(rx),
+            PlayerDendrite::Observer(rx) => Dendrite::Observer(rx),
+        }
+    }
+}
+impl From<Dendrite> for PlayerDendrite {
+    fn from(dendrite: Dendrite) -> Self {
+        match dendrite {
+            Dendrite::Agent(rx) => PlayerDendrite::Agent(rx),
+            Dendrite::Observer(rx) => PlayerDendrite::Observer(rx),
+            _ => panic!("invalid conversion from internal sc2 dendrite"),
+        }
+    }
+}

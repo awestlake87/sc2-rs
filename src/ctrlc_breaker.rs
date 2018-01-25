@@ -4,7 +4,7 @@ use futures::sync;
 use organelle::{Axon, Impulse, Soma};
 
 use super::{Error, Result};
-use synapse::Synapse;
+use synapses::Synapse;
 
 /// soma that stops the organelle upon Ctrl-C
 pub struct CtrlcBreakerSoma;

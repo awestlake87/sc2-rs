@@ -13,7 +13,7 @@ use tungstenite;
 use url::Url;
 
 use super::{Error, Result};
-use synapse::{Dendrite, Synapse};
+use synapses::{Dendrite, Synapse};
 
 fn stream_next<T: Stream>(
     stream: T,

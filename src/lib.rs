@@ -36,21 +36,15 @@ mod instance;
 mod launcher;
 mod melee;
 mod observer;
-mod synapse;
+mod synapses;
 
 pub mod data;
 
-pub use self::agent::{
-    synapse,
-    AgentContract,
-    AgentDendrite,
-    AgentSoma,
-    AgentTerminal,
-};
+pub use self::agent::{AgentContract, AgentDendrite, AgentSoma, AgentTerminal};
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;
 pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
-pub use self::synapse::{Dendrite, Synapse, Terminal};
+pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
 
 // pub use self::frame::{
 //     Command,

@@ -10,7 +10,7 @@ use client::{ClientSoma, ClientTerminal};
 use data::{GamePorts, GameSettings, Map, PlayerSetup};
 use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma};
-use synapse::{Dendrite, Synapse, Terminal};
+use synapses::{Dendrite, Synapse, Terminal};
 
 /// manages a player soma
 pub struct AgentSoma {
@@ -63,7 +63,9 @@ impl AgentSoma {
         organelle.connect(agent, client, Synapse::Client)?;
         organelle.connect(observer, client, Synapse::Client)?;
         organelle.connect(agent, observer, Synapse::ObserverControl)?;
+
         organelle.connect(agent, player, Synapse::Agent)?;
+        organelle.connect(player, observer, Synapse::Observer)?;
 
         Ok(organelle)
     }
