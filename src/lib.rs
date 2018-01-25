@@ -31,14 +31,14 @@ mod agent;
 mod client;
 //mod computer;
 mod ctrlc_breaker;
-mod data;
 //mod frame;
 mod instance;
 mod launcher;
 mod melee;
 mod observer;
+mod synapse;
 
-use std::path::PathBuf;
+pub mod data;
 
 pub use self::agent::{
     synapse,
@@ -47,67 +47,10 @@ pub use self::agent::{
     AgentSoma,
     AgentTerminal,
 };
-pub use self::client::{ClientDendrite, ClientSoma, ClientTerminal};
-// pub use self::computer::ComputerSoma;
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
-pub use self::data::{
-    Ability,
-    AbilityData,
-    Action,
-    ActionTarget,
-    Alliance,
-    Buff,
-    BuffData,
-    Color,
-    Difficulty,
-    DisplayType,
-    Effect,
-    GamePorts,
-    GameSettings,
-    ImageData,
-    Map,
-    PlayerSetup,
-    Point2,
-    Point3,
-    PortSet,
-    PowerSource,
-    Race,
-    Rect,
-    Rect2,
-    Score,
-    SpatialAction,
-    Tag,
-    TerrainInfo,
-    Unit,
-    UnitType,
-    UnitTypeData,
-    Upgrade,
-    UpgradeData,
-    Vector2,
-    Vector3,
-    Visibility,
-};
-pub use self::launcher::{
-    LauncherDendrite,
-    LauncherSettings,
-    LauncherSoma,
-    LauncherTerminal,
-};
-pub use self::melee::{
-    MeleeContract,
-    MeleeDendrite,
-    MeleeSettings,
-    MeleeSoma,
-    MeleeSuite,
-    MeleeTerminal,
-};
-pub use self::observer::{
-    ObserverControlDendrite,
-    ObserverControlTerminal,
-    ObserverDendrite,
-    ObserverSoma,
-    ObserverTerminal,
-};
+pub use self::launcher::LauncherSettings;
+pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
+pub use self::synapse::{Dendrite, Synapse, Terminal};
 
 // pub use self::frame::{
 //     Command,
@@ -119,6 +62,8 @@ pub use self::observer::{
 //     GameState,
 //     MapState,
 // };
+
+use std::path::PathBuf;
 
 error_chain! {
     links {
@@ -217,197 +162,3 @@ trait IntoProto<T> {
     /// convert into protobuf data
     fn into_proto(self) -> Result<T>;
 }
-
-/// the synapses that can be formed between somas
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum Synapse {
-    /// launch game instances
-    Launcher,
-    /// coordinate versus games between agents
-    Melee,
-    /// client to the game instance
-    Client,
-    /// observer controller
-    ObserverControl,
-    /// observer
-    Observer,
-    /// agent
-    Agent,
-}
-
-/// senders for synapses
-#[derive(Debug)]
-pub enum Terminal {
-    /// launcher sender
-    Launcher(LauncherTerminal),
-    /// melee sender
-    Melee(MeleeTerminal),
-    /// client sender
-    Client(ClientTerminal),
-    /// observer control sender
-    ObserverControl(ObserverControlTerminal),
-    /// observer sender
-    Observer(ObserverTerminal),
-    /// agent sender
-    Agent(AgentTerminal),
-}
-
-/// receivers for synapses
-#[derive(Debug)]
-pub enum Dendrite {
-    /// launcher receiver
-    Launcher(LauncherDendrite),
-    /// melee receiver
-    Melee(MeleeDendrite),
-    /// client receiver
-    Client(ClientDendrite),
-    /// observer control receiver
-    ObserverControl(ObserverControlDendrite),
-    /// observer receiver
-    Observer(ObserverDendrite),
-    /// agent receiver
-    Agent(AgentDendrite),
-}
-
-impl organelle::Synapse for Synapse {
-    type Terminal = Terminal;
-    type Dendrite = Dendrite;
-
-    fn synapse(self) -> (Self::Terminal, Self::Dendrite) {
-        match self {
-            Synapse::Launcher => {
-                let (tx, rx) = LauncherSoma::synapse();
-
-                (Terminal::Launcher(tx), Dendrite::Launcher(rx))
-            },
-            Synapse::Melee => {
-                let (tx, rx) = MeleeSoma::synapse();
-
-                (Terminal::Melee(tx), Dendrite::Melee(rx))
-            },
-            Synapse::Client => {
-                let (tx, rx) = ClientSoma::synapse();
-
-                (Terminal::Client(tx), Dendrite::Client(rx))
-            },
-            Synapse::ObserverControl => {
-                let (tx, rx) = observer::control_synapse();
-
-                (Terminal::ObserverControl(tx), Dendrite::ObserverControl(rx))
-            },
-            Synapse::Observer => {
-                let (tx, rx) = observer::synapse();
-
-                (Terminal::Observer(tx), Dendrite::Observer(rx))
-            },
-            Synapse::Agent => {
-                let (tx, rx) = agent::synapse();
-
-                (Terminal::Agent(tx), Dendrite::Agent(rx))
-            },
-        }
-    }
-}
-
-// /// the messages that can be sent between Sc2 capable
-// #[derive(Debug)]
-// pub enum Signal {
-//     /// get instances pool
-//     GetInstancePool,
-//     /// get the ports pool
-//     GetPortsPool,
-//     /// launch an instance
-//     LaunchInstance,
-//     /// the pool of instances to choose from
-//     InstancePool(HashMap<Uuid, (Url, PortSet)>),
-//     /// the pool of game ports to choose from (num_instances / 2)
-//     PortsPool(Vec<GamePorts>),
-
-//     /// allow a soma to take complete control of an instance
-//     ProvideInstance(Uuid, Url),
-
-//     /// attempt to connect to instance
-//     ClientAttemptConnect(Url),
-//     /// internal-use client successfully connected to instance
-//     ClientConnected(Sender<tungstenite::Message>),
-//     /// internal-use client received a message
-//     ClientReceive(tungstenite::Message),
-//     /// send some request to the game instance
-//     ClientRequest(ClientRequest),
-//     /// result of transaction with game instance
-//     ClientResult(ClientResult),
-//     /// internal-use message used to indicate when a transaction has timed
-//     /// out
-//     ClientTimeout(Uuid),
-//     /// disconnect from the instance
-//     ClientDisconnect,
-//     /// client has closed
-//     ClientClosed,
-//     /// client encountered a websocket error
-//     ClientError(Rc<Error>),
-
-//     /// agent is ready for a game to begin
-//     Ready,
-
-//     /// request player setup
-//     RequestPlayerSetup(GameSettings),
-//     /// respond with player setup
-//     PlayerSetup(PlayerSetup),
-
-//     /// create a game with the given settings and list of participants
-//     CreateGame(GameSettings, Vec<PlayerSetup>),
-//     /// game was created with the given settings
-//     GameCreated,
-//     /// notify agents that game is ready to join with the given player
-//     /// setup
-//     GameReady(PlayerSetup, Option<GamePorts>),
-//     /// join an existing game
-//     JoinGame(GamePorts),
-//     /// fetch the game data
-//     FetchGameData,
-//     /// game data ready
-//     GameDataReady,
-//     /// request update interval from player
-//     RequestUpdateInterval,
-//     /// respond with update interval in game steps
-//     UpdateInterval(u32),
-//     /// game started
-//     GameStarted,
-
-//     /// observe the game state
-//     Observe,
-//     /// current game state
-//     Observation(Rc<FrameData>),
-//     /// issue a command to the game instance
-//     Command(Command),
-//     /// issue a debug command to the game instance
-//     DebugCommand(DebugCommand),
-//     /// notify the stepper that the soma is done updating
-//     UpdateComplete,
-
-//     /// game ended
-//     GameEnded,
-// }
-
-// #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-// /// defines the roles that govern how connections between somas are made
-// pub enum Synapse {
-//     /// launches new game instances or kills them
-//     Launcher,
-//     /// broadcasts idle instances
-//     InstancePool,
-//     /// provides instances to clients
-//     InstanceProvider,
-
-//     /// controls agents or observer
-//     Controller,
-//     /// provides agent interface to bots
-//     Agent,
-//     /// provides client interface to agents or observers
-//     Client,
-//     /// observes game state
-//     Observer,
-// }
-
-// /// type alias for an Sc2 Axon
-// pub type Axon = organelle::Axon<Signal, Synapse>;

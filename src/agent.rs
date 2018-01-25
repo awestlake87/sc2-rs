@@ -5,23 +5,12 @@ use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
 
-use super::{
-    Dendrite,
-    Error,
-    GamePorts,
-    GameSettings,
-    IntoProto,
-    Map,
-    MeleeContract,
-    MeleeDendrite,
-    PlayerSetup,
-    Race,
-    Result,
-    Synapse,
-    Terminal,
-};
+use super::{Error, IntoProto, Result};
 use client::{ClientSoma, ClientTerminal};
+use data::{GamePorts, GameSettings, Map, PlayerSetup};
+use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma};
+use synapse::{Dendrite, Synapse, Terminal};
 
 /// manages a player soma
 pub struct AgentSoma {

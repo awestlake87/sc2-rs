@@ -15,6 +15,7 @@ error-chain = "0.11"
 futures-await = "0.1"
 glob = "0.2"
 nalgebra = "0.13"
+organelle = "0.6"
 protobuf = "1.4"
 rand = "0.4"
 regex = "0.2"
@@ -25,9 +26,6 @@ tokio-tungstenite = "0.5"
 tungstenite = "0.5"
 url = "1.6"
 uuid = { version = "0.5", features = ["serde", "v4"] }
-
-[dependencies.organelle]
-path = "../organelle"
 
 # [[example]]
 # name = "bot-micro"

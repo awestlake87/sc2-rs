@@ -7,19 +7,10 @@ use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
 use url::Url;
 
-use super::{
-    Dendrite,
-    Error,
-    GamePorts,
-    GameSettings,
-    LauncherSettings,
-    LauncherSoma,
-    LauncherTerminal,
-    PlayerSetup,
-    Result,
-    Synapse,
-    Terminal,
-};
+use super::{Error, Result};
+use data::{GamePorts, GameSettings, PlayerSetup};
+use launcher::{LauncherSettings, LauncherSoma, LauncherTerminal};
+use synapse::{Dendrite, Synapse, Terminal};
 
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {
@@ -39,6 +30,13 @@ pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
     pub suite: MeleeSuite,
 }
 
+/// create a melee synapse
+pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
+    let (tx, rx) = mpsc::channel(1);
+
+    (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
+}
+
 /// controller that pits agents against each other
 pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
@@ -47,13 +45,6 @@ pub struct MeleeSoma {
 }
 
 impl MeleeSoma {
-    /// create a melee synapse
-    pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
-        let (tx, rx) = mpsc::channel(1);
-
-        (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
-    }
-
     /// melee soma only works as a controller in a melee organelle
     fn axon(suite: MeleeSuite) -> Result<Axon<Self>> {
         Ok(Axon::new(

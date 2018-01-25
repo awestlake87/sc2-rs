@@ -1,9 +1,10 @@
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
-use organelle::{self, Axon, Constraint, Impulse, Soma};
+use organelle::{Axon, Constraint, Impulse, Soma};
 
-use super::{Dendrite, Error, Result, Synapse, Terminal};
+use super::{Error, Result};
 use client::ClientTerminal;
+use synapse::{Dendrite, Synapse, Terminal};
 
 pub struct ObserverSoma {
     client: Option<ClientTerminal>,

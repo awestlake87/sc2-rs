@@ -8,17 +8,10 @@ use glob::glob;
 use organelle::{Axon, Constraint, Impulse, Soma};
 use regex::Regex;
 
-use super::{
-    Dendrite,
-    Error,
-    ErrorKind,
-    GamePorts,
-    PortSet,
-    Rect,
-    Result,
-    Synapse,
-};
+use super::{Error, ErrorKind, Result};
+use data::{GamePorts, PortSet, Rect};
 use instance::{Instance, InstanceKind, InstanceSettings};
+use synapse::{Dendrite, Synapse};
 
 /// sender for launcher
 #[derive(Debug, Clone)]
@@ -76,6 +69,13 @@ impl LauncherDendrite {
     fn new(rx: unsync::mpsc::Receiver<LauncherRequest>) -> Self {
         Self { rx: rx }
     }
+}
+
+/// create a launcher synapse
+pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
+    let (tx, rx) = unsync::mpsc::channel(1);
+
+    (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
 }
 
 /// settings used to create a launcher
@@ -203,13 +203,6 @@ pub struct LauncherSoma {
 }
 
 impl LauncherSoma {
-    /// create a launcher synapse
-    pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
-        let (tx, rx) = unsync::mpsc::channel(1);
-
-        (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
-    }
-
     /// create a launcher from settings
     pub fn axon(settings: LauncherSettings) -> Result<Axon<Self>> {
         Ok(Axon::new(

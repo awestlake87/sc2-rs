@@ -1,4 +1,4 @@
-use std::{io, mem, time};
+use std::{io, time};
 
 use bytes::{Buf, BufMut};
 use futures::prelude::*;
@@ -12,7 +12,8 @@ use tokio_tungstenite::connect_async;
 use tungstenite;
 use url::Url;
 
-use super::{Dendrite, Error, Result, Synapse};
+use super::{Error, Result};
+use synapse::{Dendrite, Synapse};
 
 fn stream_next<T: Stream>(
     stream: T,
@@ -72,19 +73,19 @@ pub struct ClientDendrite {
     rx: mpsc::Receiver<ClientRequest>,
 }
 
+/// create a client synapse
+pub fn synapse() -> (ClientTerminal, ClientDendrite) {
+    let (tx, rx) = mpsc::channel(10);
+
+    (ClientTerminal { tx: tx }, ClientDendrite { rx: rx })
+}
+
 /// soma used to communicate with the game instance
 pub struct ClientSoma {
     dendrites: Vec<ClientDendrite>,
 }
 
 impl ClientSoma {
-    /// create a client synapse
-    pub fn synapse() -> (ClientTerminal, ClientDendrite) {
-        let (tx, rx) = mpsc::channel(10);
-
-        (ClientTerminal { tx: tx }, ClientDendrite { rx: rx })
-    }
-
     /// create a new client
     pub fn axon() -> Result<Axon<Self>> {
         Ok(Axon::new(

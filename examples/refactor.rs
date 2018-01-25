@@ -24,14 +24,11 @@ use sc2::{
     AgentDendrite,
     Dendrite,
     Error,
-    GameSettings,
     LauncherSettings,
-    Map,
-    PlayerSetup,
-    Race,
     Result,
     Synapse,
 };
+use sc2::data::{GameSettings, Map, PlayerSetup, Race};
 use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
