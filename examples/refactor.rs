@@ -165,6 +165,13 @@ impl AgentContract for TerranDendrite {
     fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
+
+    #[async(boxed)]
+    fn step(self) -> Result<Self> {
+        println!("stepping player");
+
+        Ok(self)
+    }
 }
 
 quick_main!(|| -> sc2::Result<()> {

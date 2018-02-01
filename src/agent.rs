@@ -270,6 +270,15 @@ impl MeleeContract for AgentMeleeDendrite {
     fn run_game(self) -> Result<Self> {
         await!(self.observer.clone().reset())?;
 
+        loop {
+            let mut req = sc2api::Request::new();
+            req.mut_step().set_count(1);
+
+            await!(self.client.clone().request(req))?;
+
+            await!(self.agent.clone().step())?;
+        }
+
         Ok(self)
     }
 }
@@ -277,6 +286,7 @@ impl MeleeContract for AgentMeleeDendrite {
 #[derive(Debug)]
 enum AgentRequest {
     PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
+    Step(oneshot::Sender<()>),
 }
 
 #[derive(Debug, Clone)]
@@ -299,6 +309,20 @@ impl AgentTerminal {
         )?;
 
         await!(rx.map_err(|_| Error::from("unable to recv player setup")))
+    }
+
+    #[async]
+    pub fn step(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(AgentRequest::Step(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send step request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv step response")))
     }
 }
 
@@ -338,6 +362,12 @@ impl AgentDendrite {
                     tx.send(result.1).map_err(|_| {
                         Error::from("unable to get player setup")
                     })?;
+                },
+                AgentRequest::Step(tx) => {
+                    player = await!(player.step().map_err(|e| e.into()))?;
+
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to step player"))?;
                 },
             }
         }
