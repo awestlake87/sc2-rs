@@ -1,3 +1,6 @@
+use std;
+
+use futures::future;
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
@@ -78,17 +81,18 @@ impl Soma for AgentSoma {
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddDendrite(Synapse::Melee, Dendrite::Melee(rx)) => {
+            Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(rx)) => {
                 self.controller = Some(rx);
 
                 Ok(self)
             },
-            Impulse::AddTerminal(Synapse::Client, Terminal::Client(tx)) => {
+            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
                 self.client = Some(tx);
 
                 Ok(self)
             },
             Impulse::AddTerminal(
+                _,
                 Synapse::ObserverControl,
                 Terminal::ObserverControl(tx),
             ) => {
@@ -96,12 +100,12 @@ impl Soma for AgentSoma {
 
                 Ok(self)
             },
-            Impulse::AddTerminal(Synapse::Agent, Terminal::Agent(tx)) => {
+            Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
                 self.agent = Some(tx);
 
                 Ok(self)
             },
-            Impulse::Start(tx, handle) => {
+            Impulse::Start(_, tx, handle) => {
                 handle.spawn(
                     self.controller
                         .unwrap()
@@ -299,10 +303,19 @@ impl AgentTerminal {
 }
 
 pub trait AgentContract: Sized {
+    type Error: std::error::Error + Send + Into<Error>;
+
     fn get_player_setup(
         self,
         game: GameSettings,
-    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Error>>;
+    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
+
+    fn step(self) -> Box<Future<Item = Self, Error = Self::Error>>
+    where
+        Self: 'static,
+    {
+        Box::new(future::ok(self))
+    }
 }
 
 #[derive(Debug)]
@@ -317,7 +330,8 @@ impl AgentDendrite {
         for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
             match req {
                 AgentRequest::PlayerSetup(game, tx) => {
-                    let result = await!(player.get_player_setup(game))?;
+                    let result = await!(player.get_player_setup(game))
+                        .map_err(|e| e.into())?;
 
                     player = result.0;
 

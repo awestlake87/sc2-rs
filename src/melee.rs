@@ -110,15 +110,19 @@ impl Soma for MeleeSoma {
     #[async(boxed)]
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
         match msg {
-            Impulse::AddTerminal(Synapse::Launcher, Terminal::Launcher(tx)) => {
+            Impulse::AddTerminal(
+                _,
+                Synapse::Launcher,
+                Terminal::Launcher(tx),
+            ) => {
                 self.launcher = Some(tx);
                 Ok(self)
             },
-            Impulse::AddTerminal(Synapse::Melee, Terminal::Melee(tx)) => {
+            Impulse::AddTerminal(_, Synapse::Melee, Terminal::Melee(tx)) => {
                 self.agents.push(Some(tx));
                 Ok(self)
             },
-            Impulse::Start(main_tx, handle) => {
+            Impulse::Start(_, main_tx, handle) => {
                 assert!(self.launcher.is_some());
                 assert!(self.suite.is_some());
 

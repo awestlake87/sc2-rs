@@ -23,7 +23,7 @@ impl Soma for CtrlcBreakerSoma {
     #[async(boxed)]
     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::Start(tx, handle) => {
+            Impulse::Start(_, tx, handle) => {
                 let (sync_tx, sync_rx) = sync::mpsc::channel(1);
 
                 ctrlc::set_handler(move || {

@@ -103,12 +103,12 @@ impl Soma for ClientSoma {
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddDendrite(Synapse::Client, Dendrite::Client(rx)) => {
+            Impulse::AddDendrite(_, Synapse::Client, Dendrite::Client(rx)) => {
                 self.dendrites.push(rx);
 
                 Ok(self)
             },
-            Impulse::Start(main_tx, handle) => {
+            Impulse::Start(_, main_tx, handle) => {
                 let listen_handle = handle.clone();
 
                 let (tx, rx) = mpsc::channel(10);

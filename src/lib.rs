@@ -44,6 +44,7 @@ pub use self::agent::{AgentContract, AgentDendrite, AgentSoma, AgentTerminal};
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;
 pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
+pub use self::observer::ObserverTerminal;
 pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
 
 // pub use self::frame::{

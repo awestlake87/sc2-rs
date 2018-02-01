@@ -18,12 +18,13 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
+use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2::{
     AgentContract,
     AgentDendrite,
     Error,
     LauncherSettings,
+    ObserverTerminal,
     PlayerDendrite,
     PlayerSynapse,
     PlayerTerminal,
@@ -93,12 +94,16 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 
 pub struct TerranSoma {
     agent: Option<AgentDendrite>,
+    observer: Option<ObserverTerminal>,
 }
 
 impl TerranSoma {
     pub fn organelle(_interval: u32) -> Result<Axon<Self>> {
         Ok(Axon::new(
-            Self { agent: None },
+            Self {
+                agent: None,
+                observer: None,
+            },
             vec![Constraint::One(PlayerSynapse::Agent)],
             vec![Constraint::One(PlayerSynapse::Observer)],
         ))
@@ -110,21 +115,26 @@ impl Soma for TerranSoma {
     type Error = Error;
 
     #[async(boxed)]
-    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
             Impulse::AddDendrite(
+                _,
                 PlayerSynapse::Agent,
                 PlayerDendrite::Agent(rx),
-            ) => {
-                self.agent = Some(rx);
-                Ok(self)
-            },
+            ) => Ok(Self {
+                agent: Some(rx),
+                ..self
+            }),
             Impulse::AddTerminal(
+                _,
                 PlayerSynapse::Observer,
-                PlayerTerminal::Observer(_),
-            ) => Ok(self),
+                PlayerTerminal::Observer(tx),
+            ) => Ok(Self {
+                observer: Some(tx),
+                ..self
+            }),
 
-            Impulse::Start(main_tx, handle) => {
+            Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
                     self.agent.unwrap().wrap(TerranDendrite {}).or_else(
                         move |e| {
@@ -136,7 +146,10 @@ impl Soma for TerranSoma {
                     ),
                 );
 
-                Ok(Self { agent: None })
+                Ok(Self {
+                    agent: None,
+                    observer: None,
+                })
             },
             _ => bail!("unexpected impulse"),
         }
@@ -146,6 +159,8 @@ impl Soma for TerranSoma {
 struct TerranDendrite;
 
 impl AgentContract for TerranDendrite {
+    type Error = Error;
+
     #[async(boxed)]
     fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
@@ -193,6 +208,10 @@ quick_main!(|| -> sc2::Result<()> {
     );
 
     organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
+    organelle.add_soma(visualizer::Soma::organelle(
+        visualizer::Settings::default(),
+        handle.clone(),
+    )?);
 
     core.run(organelle.run(handle))?;
 

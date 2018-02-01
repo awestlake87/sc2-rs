@@ -224,6 +224,7 @@ impl Soma for LauncherSoma {
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
         match msg {
             Impulse::AddDendrite(
+                _,
                 Synapse::Launcher,
                 Dendrite::Launcher(dendrite),
             ) => {
@@ -231,7 +232,7 @@ impl Soma for LauncherSoma {
 
                 Ok(self)
             },
-            Impulse::Start(tx, handle) => {
+            Impulse::Start(_, tx, handle) => {
                 assert!(self.launcher.is_some());
                 assert!(self.dendrite.is_some());
 

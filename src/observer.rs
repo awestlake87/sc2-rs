@@ -43,12 +43,13 @@ impl Soma for ObserverSoma {
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddTerminal(Synapse::Client, Terminal::Client(tx)) => {
+            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
                 self.client = Some(tx);
 
                 Ok(self)
             },
             Impulse::AddDendrite(
+                _,
                 Synapse::ObserverControl,
                 Dendrite::ObserverControl(rx),
             ) => {
@@ -56,13 +57,17 @@ impl Soma for ObserverSoma {
 
                 Ok(self)
             },
-            Impulse::AddDendrite(Synapse::Observer, Dendrite::Observer(rx)) => {
+            Impulse::AddDendrite(
+                _,
+                Synapse::Observer,
+                Dendrite::Observer(rx),
+            ) => {
                 self.users.push(rx);
 
                 Ok(self)
             },
 
-            Impulse::Start(main_tx, handle) => {
+            Impulse::Start(_, main_tx, handle) => {
                 assert!(self.controller.is_some());
                 assert!(self.client.is_some());
 
