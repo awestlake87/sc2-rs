@@ -29,6 +29,7 @@ extern crate uuid;
 
 mod agent;
 mod client;
+mod action;
 //mod computer;
 mod ctrlc_breaker;
 //mod frame;
@@ -40,6 +41,7 @@ mod synapses;
 
 pub mod data;
 
+pub use self::action::ActionTerminal;
 pub use self::agent::{AgentContract, AgentDendrite, AgentSoma, AgentTerminal};
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;

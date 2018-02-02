@@ -14,12 +14,6 @@ pub struct ObserverSoma {
 }
 
 impl ObserverSoma {
-    pub fn synapse() -> (ObserverTerminal, ObserverDendrite) {
-        let (tx, rx) = mpsc::channel(10);
-
-        (ObserverTerminal { tx: tx }, ObserverDendrite { rx: rx })
-    }
-
     pub fn axon() -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
@@ -87,7 +81,6 @@ impl Soma for ObserverSoma {
                     handle: handle.clone(),
                     controller: self.controller.unwrap(),
                     client: self.client.unwrap(),
-                    request_tx: tx,
                     request_rx: rx,
                 };
 
@@ -114,7 +107,6 @@ struct ObserverTask {
     handle: reactor::Handle,
     controller: ObserverControlDendrite,
     client: ClientTerminal,
-    request_tx: mpsc::Sender<ObserverRequest>,
     request_rx: mpsc::Receiver<ObserverRequest>,
 }
 

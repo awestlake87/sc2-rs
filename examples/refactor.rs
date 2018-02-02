@@ -20,6 +20,7 @@ use docopt::Docopt;
 use futures::prelude::*;
 use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2::{
+    ActionTerminal,
     AgentContract,
     AgentDendrite,
     Error,
@@ -95,6 +96,7 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 pub struct TerranSoma {
     agent: Option<AgentDendrite>,
     observer: Option<ObserverTerminal>,
+    action: Option<ActionTerminal>,
 }
 
 impl TerranSoma {
@@ -103,9 +105,13 @@ impl TerranSoma {
             Self {
                 agent: None,
                 observer: None,
+                action: None,
             },
             vec![Constraint::One(PlayerSynapse::Agent)],
-            vec![Constraint::One(PlayerSynapse::Observer)],
+            vec![
+                Constraint::One(PlayerSynapse::Observer),
+                Constraint::One(PlayerSynapse::Action),
+            ],
         ))
     }
 }
@@ -133,6 +139,14 @@ impl Soma for TerranSoma {
                 observer: Some(tx),
                 ..self
             }),
+            Impulse::AddTerminal(
+                _,
+                PlayerSynapse::Action,
+                PlayerTerminal::Action(tx),
+            ) => Ok(Self {
+                action: Some(tx),
+                ..self
+            }),
 
             Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
@@ -149,6 +163,7 @@ impl Soma for TerranSoma {
                 Ok(Self {
                     agent: None,
                     observer: None,
+                    action: None,
                 })
             },
             _ => bail!("unexpected impulse"),

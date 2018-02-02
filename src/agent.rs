@@ -9,6 +9,7 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
+use action::ActionSoma;
 use client::{ClientSoma, ClientTerminal};
 use data::{GamePorts, GameSettings, Map, PlayerSetup};
 use melee::{MeleeContract, MeleeDendrite};
@@ -62,13 +63,17 @@ impl AgentSoma {
 
         let client = organelle.add_soma(ClientSoma::axon()?);
         let observer = organelle.add_soma(ObserverSoma::axon()?);
+        let action = organelle.add_soma(ActionSoma::axon()?);
 
         organelle.connect(agent, client, Synapse::Client)?;
         organelle.connect(observer, client, Synapse::Client)?;
+        organelle.connect(action, client, Synapse::Client)?;
+
         organelle.connect(agent, observer, Synapse::ObserverControl)?;
 
         organelle.connect(agent, player, Synapse::Agent)?;
         organelle.connect(player, observer, Synapse::Observer)?;
+        organelle.connect(player, action, Synapse::Action)?;
 
         Ok(organelle)
     }
@@ -274,9 +279,13 @@ impl MeleeContract for AgentMeleeDendrite {
             let mut req = sc2api::Request::new();
             req.mut_step().set_count(1);
 
-            await!(self.client.clone().request(req))?;
+            let rsp = await!(self.client.clone().request(req))?;
 
-            await!(self.agent.clone().step())?;
+            if rsp.get_status() != sc2api::Status::in_game {
+                break;
+            } else {
+                await!(self.agent.clone().step())?;
+            }
         }
 
         Ok(self)
@@ -381,128 +390,6 @@ pub fn synapse() -> (AgentTerminal, AgentDendrite) {
 
     (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
 }
-
-// pub struct FetchGameData;
-
-// impl FetchGameData {
-//     fn fetch(axon: &Axon) -> Result<AgentSoma> {
-//         axon.send_req_output(Synapse::Observer, Signal::FetchGameData)?;
-
-//         Ok(AgentSoma::FetchGameData(FetchGameData {}))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(_, Signal::GameDataReady) => {
-//                 StepperSetup::setup(axon)
-//             },
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
-
-// pub struct StepperSetup {
-//     stepper: Handle,
-// }
-
-// impl StepperSetup {
-//     fn setup(axon: &Axon) -> Result<AgentSoma> {
-//         let stepper = axon.req_output(Synapse::Agent)?;
-
-//         axon.effector()?
-//             .send(stepper, Signal::RequestUpdateInterval);
-
-//         Ok(AgentSoma::StepperSetup(StepperSetup { stepper: stepper }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::UpdateInterval(interval)) => {
-//                 self.on_update_interval(axon, src, interval)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_update_interval(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         interval: u32,
-//     ) -> Result<AgentSoma> {
-//         if src == self.stepper {
-//             Step::first(axon, interval)
-//         } else {
-//             bail!("unexpected source of update interval: {}", src)
-//         }
-//     }
-// }
-
-// pub struct Update {
-//     interval: u32,
-//     commands: Vec<Command>,
-//     debug_commands: Vec<DebugCommand>,
-// }
-
-// impl Update {
-//     fn next(
-//         axon: &Axon,
-//         interval: u32,
-//         frame: Rc<FrameData>,
-//     ) -> Result<AgentSoma> {
-//         axon.send_req_output(Synapse::Agent, Signal::Observation(frame))?;
-
-//         Ok(AgentSoma::Update(Update {
-//             interval: interval,
-//             commands: vec![],
-//             debug_commands: vec![],
-//         }))
-//     }
-
-//     fn update(
-//         mut self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(_, Signal::Command(cmd)) => {
-//                 self.commands.push(cmd);
-//                 Ok(AgentSoma::Update(self))
-//             },
-//             Impulse::Signal(_, Signal::DebugCommand(cmd)) => {
-//                 self.debug_commands.push(cmd);
-//                 Ok(AgentSoma::Update(self))
-//             },
-
-//             Impulse::Signal(_, Signal::UpdateComplete) => {
-//                 self.on_update_complete(axon)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_update_complete(self, axon: &Axon) -> Result<AgentSoma> {
-//         SendActions::send_actions(
-//             axon,
-//             self.interval,
-//             self.commands,
-//             self.debug_commands,
-//         )
-//     }
-// }
 
 // pub struct SendActions {
 //     interval: u32,
