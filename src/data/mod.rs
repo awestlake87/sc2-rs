@@ -9,6 +9,7 @@ mod player;
 mod score;
 mod unit;
 mod upgrade;
+mod observation;
 
 use na;
 use na::geometry;
@@ -25,6 +26,7 @@ pub use self::action::*;
 pub use self::buff::*;
 pub use self::game::*;
 pub use self::image::*;
+pub use self::observation::*;
 pub use self::player::*;
 pub use self::score::*;
 pub use self::unit::*;

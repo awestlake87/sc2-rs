@@ -1,10 +1,29 @@
+use std::collections::{HashMap, HashSet};
+use std::mem;
+use std::rc::Rc;
+
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
+use sc2_proto::sc2api;
 use tokio_core::reactor;
 
-use super::{Error, Result};
+use super::{Error, FromProto, IntoSc2, Result};
 use client::ClientTerminal;
+use data::{
+    Action,
+    Alliance,
+    DisplayType,
+    GameEvent,
+    GameState,
+    MapState,
+    Observation,
+    Point2,
+    SpatialAction,
+    Tag,
+    Unit,
+    Upgrade,
+};
 use synapses::{Dendrite, Synapse, Terminal};
 
 pub struct ObserverSoma {
@@ -77,12 +96,12 @@ impl Soma for ObserverSoma {
                     );
                 }
 
-                let task = ObserverTask {
-                    handle: handle.clone(),
-                    controller: self.controller.unwrap(),
-                    client: self.client.unwrap(),
-                    request_rx: rx,
-                };
+                let task = ObserverTask::new(
+                    handle.clone(),
+                    self.controller.unwrap(),
+                    self.client.unwrap(),
+                    rx,
+                );
 
                 handle.spawn(task.run().or_else(move |e| {
                     main_tx
@@ -105,18 +124,61 @@ impl Soma for ObserverSoma {
 
 struct ObserverTask {
     handle: reactor::Handle,
-    controller: ObserverControlDendrite,
+    controller: Option<ObserverControlDendrite>,
     client: ClientTerminal,
-    request_rx: mpsc::Receiver<ObserverRequest>,
+    request_rx: Option<mpsc::Receiver<ObserverRequest>>,
+
+    previous_step: u32,
+    current_step: u32,
+    previous_units: HashMap<Tag, Rc<Unit>>,
+    units: HashMap<Tag, Rc<Unit>>,
+
+    previous_upgrades: HashSet<Upgrade>,
+    upgrades: HashSet<Upgrade>,
+
+    actions: Vec<Action>,
+    spatial_actions: Vec<SpatialAction>,
 }
 
 impl ObserverTask {
+    fn new(
+        handle: reactor::Handle,
+        controller: ObserverControlDendrite,
+        client: ClientTerminal,
+        request_rx: mpsc::Receiver<ObserverRequest>,
+    ) -> Self {
+        Self {
+            handle: handle,
+            controller: Some(controller),
+            client: client,
+            request_rx: Some(request_rx),
+
+            previous_step: 0,
+            current_step: 0,
+            previous_units: HashMap::new(),
+            units: HashMap::new(),
+
+            previous_upgrades: HashSet::new(),
+            upgrades: HashSet::new(),
+
+            actions: vec![],
+            spatial_actions: vec![],
+        }
+    }
+
     #[async]
-    fn run(self) -> Result<()> {
-        let queue = self.controller
+    fn run(mut self) -> Result<()> {
+        let queue = mem::replace(&mut self.controller, None)
+            .unwrap()
             .rx
             .map(|req| Either::Control(req))
-            .select(self.request_rx.map(|req| Either::Request(req)));
+            .select(
+                mem::replace(&mut self.request_rx, None)
+                    .unwrap()
+                    .map(|req| Either::Request(req)),
+            );
+
+        let mut observation = None;
 
         #[async]
         for req in queue.map_err(|_| -> Error { unreachable!() }) {
@@ -125,24 +187,250 @@ impl ObserverTask {
                     tx.send(())
                         .map_err(|_| Error::from("unable to ack reset"))?;
                 },
-                Either::Request(req) => {
-                    println!("observer got request {:#?}", req);
+                Either::Control(ObserverControlRequest::Step(tx)) => {
+                    observation = None;
+                    tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
+                },
+
+                Either::Request(ObserverRequest::Observe(tx)) => {
+                    if observation.is_none() {
+                        let (observer, new_observation) =
+                            await!(self.get_observation())?;
+
+                        self = observer;
+                        observation = Some(new_observation);
+                    }
+
+                    tx.send(Rc::clone(observation.as_ref().unwrap()))
+                        .map_err(|_| {
+                            Error::from("unable to return observation")
+                        })?;
                 },
             }
         }
 
         Ok(())
     }
+
+    #[async]
+    fn get_observation(mut self) -> Result<(Self, Rc<Observation>)> {
+        let mut req = sc2api::Request::new();
+        req.mut_observation();
+
+        let mut rsp = await!(self.client.clone().request(req))?;
+
+        let mut observation = rsp.take_observation().take_observation();
+
+        self.previous_step = self.current_step;
+        self.current_step = observation.get_game_loop();
+        let is_new_frame = self.current_step != self.previous_step;
+
+        let player_common = observation.take_player_common();
+        let mut raw = observation.take_raw_data();
+        let mut player_raw = raw.take_player();
+
+        self.previous_units = mem::replace(&mut self.units, HashMap::new());
+        for unit in raw.take_units().into_iter() {
+            match Unit::from_proto(unit) {
+                Ok(mut unit) => {
+                    let tag = unit.tag;
+
+                    unit.last_seen_game_loop = self.current_step;
+
+                    self.units.insert(tag, Rc::from(unit));
+                },
+                _ => (),
+            }
+        }
+
+        self.previous_upgrades =
+            mem::replace(&mut self.upgrades, HashSet::new());
+
+        for u in player_raw.take_upgrade_ids().into_iter() {
+            self.upgrades.insert(Upgrade::from_proto(u)?);
+        }
+
+        let new_state = GameState {
+            player_id: player_common.get_player_id(),
+            previous_step: self.previous_step,
+            current_step: self.current_step,
+            camera_pos: {
+                let camera = player_raw.get_camera();
+
+                Point2::new(camera.get_x(), camera.get_y())
+            },
+
+            units: self.units.values().map(|u| Rc::clone(u)).collect(),
+            power_sources: {
+                let mut power_sources = vec![];
+
+                for p in player_raw.take_power_sources().into_iter() {
+                    power_sources.push(p.into());
+                }
+
+                power_sources
+            },
+            upgrades: self.upgrades.iter().map(|u| *u).collect(),
+            effects: vec![],
+
+            minerals: player_common.get_minerals(),
+            vespene: player_common.get_vespene(),
+            food_used: player_common.get_food_used(),
+            food_cap: player_common.get_food_cap(),
+            food_army: player_common.get_food_army(),
+            food_workers: player_common.get_food_workers(),
+            idle_worker_count: player_common.get_idle_worker_count(),
+            army_count: player_common.get_army_count(),
+            warp_gate_count: player_common.get_warp_gate_count(),
+            larva_count: player_common.get_larva_count(),
+
+            score: observation.take_score().into_sc2()?,
+        };
+
+        if is_new_frame {
+            self.actions.clear();
+            self.spatial_actions.clear();
+        }
+
+        for action in rsp.get_observation().get_actions() {
+            if !action.has_action_raw() {
+                continue;
+            }
+
+            let raw = action.get_action_raw();
+            if !raw.has_unit_command() {
+                continue;
+            }
+
+            let cmd = raw.get_unit_command();
+            if !cmd.has_ability_id() {
+                continue;
+            }
+
+            self.actions.push(cmd.clone().into_sc2()?);
+        }
+
+        for action in rsp.get_observation().get_actions() {
+            if !action.has_action_feature_layer() {
+                continue;
+            }
+
+            let fl = action.get_action_feature_layer();
+
+            if fl.has_unit_command() {
+                self.spatial_actions
+                    .push(fl.get_unit_command().clone().into_sc2()?);
+            } else if fl.has_camera_move() {
+                self.spatial_actions
+                    .push(fl.get_camera_move().clone().into_sc2()?);
+            } else if fl.has_unit_selection_point() {
+                self.spatial_actions
+                    .push(fl.get_unit_selection_point().clone().into_sc2()?);
+            } else if fl.has_unit_selection_rect() {
+                self.spatial_actions
+                    .push(fl.get_unit_selection_rect().clone().into_sc2()?);
+            }
+        }
+
+        let mut events = vec![];
+
+        if raw.has_event() {
+            let event = raw.get_event();
+
+            for tag in event.get_dead_units() {
+                match self.previous_units.get(tag) {
+                    Some(ref mut unit) => {
+                        events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
+                    },
+                    None => (),
+                }
+            }
+        }
+
+        for ref unit in self.units.values() {
+            match self.previous_units.get(&unit.tag) {
+                Some(ref prev_unit) => {
+                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
+                        events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                    } else if unit.build_progress >= 1.0
+                        && prev_unit.build_progress < 1.0
+                    {
+                        events.push(GameEvent::BuildingCompleted(Rc::clone(
+                            unit,
+                        )));
+                    }
+                },
+                None => {
+                    if unit.alliance == Alliance::Enemy
+                        && unit.display_type == DisplayType::Visible
+                    {
+                        events.push(GameEvent::UnitDetected(Rc::clone(unit)));
+                    } else {
+                        events.push(GameEvent::UnitCreated(Rc::clone(unit)));
+                    }
+
+                    events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                },
+            }
+        }
+
+        let prev_upgrades =
+            mem::replace(&mut self.previous_upgrades, HashSet::new());
+
+        for upgrade in &self.upgrades {
+            match prev_upgrades.get(upgrade) {
+                Some(_) => (),
+                None => {
+                    events.push(GameEvent::UpgradeCompleted(*upgrade));
+                },
+            }
+        }
+
+        self.previous_upgrades = prev_upgrades;
+
+        let mut nukes = 0;
+        let mut nydus_worms = 0;
+
+        for alert in observation.get_alerts() {
+            match *alert {
+                sc2api::Alert::NuclearLaunchDetected => nukes += 1,
+                sc2api::Alert::NydusWormDetected => nydus_worms += 1,
+            }
+        }
+
+        if nukes > 0 {
+            events.push(GameEvent::NukesDetected(nukes));
+        }
+
+        if nydus_worms > 0 {
+            events.push(GameEvent::NydusWormsDetected(nydus_worms));
+        }
+
+        let mut map_state = raw.take_map_state();
+
+        Ok((
+            self,
+            Rc::from(Observation {
+                state: new_state,
+                events: events,
+                map: Rc::from(MapState {
+                    creep: map_state.take_creep().into_sc2()?,
+                    visibility: map_state.take_visibility().into_sc2()?,
+                }),
+            }),
+        ))
+    }
 }
 
 #[derive(Debug)]
 enum ObserverControlRequest {
     Reset(oneshot::Sender<()>),
+    Step(oneshot::Sender<()>),
 }
 
 #[derive(Debug)]
 enum ObserverRequest {
-
+    Observe(oneshot::Sender<Rc<Observation>>),
 }
 
 enum Either {
@@ -167,6 +455,20 @@ impl ObserverControlTerminal {
         )?;
 
         await!(rx.map_err(|_| Error::from("unable to recv reset ack")))
+    }
+
+    #[async]
+    pub fn step(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverControlRequest::Step(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send step"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv step ack")))
     }
 }
 #[derive(Debug)]
@@ -605,209 +907,5 @@ pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
 //             return Started::restart(axon);
 //         }
 
-//         let mut observation = rsp.take_observation().take_observation();
-
-//         let mut data = self.data;
-
-//         data.previous_step = data.current_step;
-//         data.current_step = observation.get_game_loop();
-//         let is_new_frame = data.current_step != data.previous_step;
-
-//         let player_common = observation.take_player_common();
-//         let mut raw = observation.take_raw_data();
-//         let mut player_raw = raw.take_player();
-
-//         data.previous_units = mem::replace(&mut data.units, HashMap::new());
-//         for unit in raw.take_units().into_iter() {
-//             match Unit::from_proto(unit) {
-//                 Ok(mut unit) => {
-//                     let tag = unit.tag;
-
-//                     unit.last_seen_game_loop = data.current_step;
-
-//                     data.units.insert(tag, Rc::from(unit));
-//                 },
-//                 _ => (),
-//             }
-//         }
-
-//         data.previous_upgrades =
-//             mem::replace(&mut data.upgrades, HashSet::new());
-
-//         for u in player_raw.take_upgrade_ids().into_iter() {
-//             data.upgrades.insert(Upgrade::from_proto(u)?);
-//         }
-
-//         let new_state = GameState {
-//             player_id: player_common.get_player_id(),
-//             previous_step: data.previous_step,
-//             current_step: data.current_step,
-//             camera_pos: {
-//                 let camera = player_raw.get_camera();
-
-//                 Point2::new(camera.get_x(), camera.get_y())
-//             },
-
-//             units: data.units.values().map(|u| Rc::clone(u)).collect(),
-//             power_sources: {
-//                 let mut power_sources = vec![];
-
-//                 for p in player_raw.take_power_sources().into_iter() {
-//                     power_sources.push(p.into());
-//                 }
-
-//                 power_sources
-//             },
-//             upgrades: data.upgrades.iter().map(|u| *u).collect(),
-//             effects: vec![],
-
-//             minerals: player_common.get_minerals(),
-//             vespene: player_common.get_vespene(),
-//             food_used: player_common.get_food_used(),
-//             food_cap: player_common.get_food_cap(),
-//             food_army: player_common.get_food_army(),
-//             food_workers: player_common.get_food_workers(),
-//             idle_worker_count: player_common.get_idle_worker_count(),
-//             army_count: player_common.get_army_count(),
-//             warp_gate_count: player_common.get_warp_gate_count(),
-//             larva_count: player_common.get_larva_count(),
-
-//             score: observation.take_score().into_sc2()?,
-//         };
-
-//         if is_new_frame {
-//             data.actions.clear();
-//             data.spatial_actions.clear();
-//         }
-
-//         for action in rsp.get_observation().get_actions() {
-//             if !action.has_action_raw() {
-//                 continue;
-//             }
-
-//             let raw = action.get_action_raw();
-//             if !raw.has_unit_command() {
-//                 continue;
-//             }
-
-//             let cmd = raw.get_unit_command();
-//             if !cmd.has_ability_id() {
-//                 continue;
-//             }
-
-//             data.actions.push(cmd.clone().into_sc2()?);
-//         }
-
-//         for action in rsp.get_observation().get_actions() {
-//             if !action.has_action_feature_layer() {
-//                 continue;
-//             }
-
-//             let fl = action.get_action_feature_layer();
-
-//             if fl.has_unit_command() {
-//                 data.spatial_actions
-//                     .push(fl.get_unit_command().clone().into_sc2()?);
-//             } else if fl.has_camera_move() {
-//                 data.spatial_actions
-//                     .push(fl.get_camera_move().clone().into_sc2()?);
-//             } else if fl.has_unit_selection_point() {
-//                 data.spatial_actions
-//                     .push(fl.get_unit_selection_point().clone().into_sc2()?);
-//             } else if fl.has_unit_selection_rect() {
-//                 data.spatial_actions
-//                     .push(fl.get_unit_selection_rect().clone().into_sc2()?);
-//             }
-//         }
-
-//         let mut events = vec![];
-
-//         if raw.has_event() {
-//             let event = raw.get_event();
-
-//             for tag in event.get_dead_units() {
-//                 match data.previous_units.get(tag) {
-//                     Some(ref mut unit) => {
-//
-// events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
-// },                     None => (),
-//                 }
-//             }
-//         }
-
-//         for ref unit in data.units.values() {
-//             match data.previous_units.get(&unit.tag) {
-//                 Some(ref prev_unit) => {
-// if unit.orders.is_empty() &&
-// !prev_unit.orders.is_empty() {
-// events.push(GameEvent::UnitIdle(Rc::clone(unit))); }
-// else if unit.build_progress >= 1.0 &&
-// prev_unit.build_progress < 1.0                     {
-//                         events.push(GameEvent::BuildingCompleted(Rc::clone(
-//                             unit,
-//                         )));
-//                     }
-//                 },
-//                 None => {
-//                     if unit.alliance == Alliance::Enemy
-//                         && unit.display_type == DisplayType::Visible
-//                     {
-//
-// events.push(GameEvent::UnitDetected(Rc::clone(unit))); }
-// else {
-// events.push(GameEvent::UnitCreated(Rc::clone(unit)));                     }
-
-//                     events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-//                 },
-//             }
-//         }
-
-//         let prev_upgrades =
-//             mem::replace(&mut data.previous_upgrades, HashSet::new());
-
-//         for upgrade in &data.upgrades {
-//             match prev_upgrades.get(upgrade) {
-//                 Some(_) => (),
-//                 None => {
-//                     events.push(GameEvent::UpgradeCompleted(*upgrade));
-//                 },
-//             }
-//         }
-
-//         data.previous_upgrades = prev_upgrades;
-
-//         let mut nukes = 0;
-//         let mut nydus_worms = 0;
-
-//         for alert in observation.get_alerts() {
-//             match *alert {
-//                 sc2api::Alert::NuclearLaunchDetected => nukes += 1,
-//                 sc2api::Alert::NydusWormDetected => nydus_worms += 1,
-//             }
-//         }
-
-//         if nukes > 0 {
-//             events.push(GameEvent::NukesDetected(nukes));
-//         }
-
-//         if nydus_worms > 0 {
-//             events.push(GameEvent::NydusWormsDetected(nydus_worms));
-//         }
-
-//         let mut map_state = raw.take_map_state();
-
-//         let frame = Rc::from(FrameData {
-//             state: new_state,
-//             data: Rc::clone(&data.game_data),
-//             events: events,
-//             map: Rc::from(MapState {
-//                 creep: map_state.take_creep().into_sc2()?,
-//                 visibility: map_state.take_visibility().into_sc2()?,
-//             }),
-//         });
-
-//         axon.send_req_input(Synapse::Observer, Signal::Observation(frame))?;
-
-//         GameDataReady::ready(data)
 //     }
 // }

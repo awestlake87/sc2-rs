@@ -284,6 +284,7 @@ impl MeleeContract for AgentMeleeDendrite {
             if rsp.get_status() != sc2api::Status::in_game {
                 break;
             } else {
+                await!(self.observer.clone().step())?;
                 await!(self.agent.clone().step())?;
             }
         }

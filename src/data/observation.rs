@@ -235,13 +235,11 @@ impl GameState {
     }
 }
 
-/// all game data passed to agents and observers
+/// the current game state
 #[derive(Debug, Clone)]
-pub struct FrameData {
+pub struct Observation {
     /// state that updates every frame
     pub state: GameState,
-    /// data that can change on a per game basis
-    pub data: Rc<GameData>,
     /// events that have happened since the last update
     pub events: Vec<GameEvent>,
     /// current map state
