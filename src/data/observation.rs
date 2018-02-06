@@ -3,10 +3,7 @@ use std::rc::Rc;
 
 use super::{
     Ability,
-    AbilityData,
     ActionTarget,
-    Buff,
-    BuffData,
     Color,
     Effect,
     ImageData,
@@ -14,12 +11,8 @@ use super::{
     Point3,
     PowerSource,
     Score,
-    TerrainInfo,
     Unit,
-    UnitType,
-    UnitTypeData,
     Upgrade,
-    UpgradeData,
     Visibility,
 };
 
@@ -117,22 +110,6 @@ pub enum GameEvent {
     NydusWormsDetected(u32),
     /// number of nukes launched
     NukesDetected(u32),
-}
-
-/// game data (may vary depending on version and DLC)
-#[derive(Debug, Clone)]
-pub struct GameData {
-    /// data associated with abilities
-    pub ability_data: HashMap<Ability, AbilityData>,
-    /// data associated with unit types
-    pub unit_type_data: HashMap<UnitType, UnitTypeData>,
-    /// data associated with upgrades
-    pub upgrade_data: HashMap<Upgrade, UpgradeData>,
-    /// data associated buffs
-    pub buff_data: HashMap<Buff, BuffData>,
-
-    /// playable area info
-    pub terrain_info: TerrainInfo,
 }
 
 /// current state of the map
@@ -243,5 +220,5 @@ pub struct Observation {
     /// events that have happened since the last update
     pub events: Vec<GameEvent>,
     /// current map state
-    pub map: Rc<MapState>,
+    pub map: MapState,
 }

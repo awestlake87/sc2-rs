@@ -70,7 +70,7 @@ pub struct GameSettings {
 
 /// terrain info
 #[derive(Debug, Clone)]
-pub struct TerrainInfo {
+pub struct MapInfo {
     /// width of the terrain
     pub width: i32,
     /// height of the terrain
@@ -91,7 +91,7 @@ pub struct TerrainInfo {
     /* player_info */
 }
 
-impl FromProto<sc2api::ResponseGameInfo> for TerrainInfo {
+impl FromProto<sc2api::ResponseGameInfo> for MapInfo {
     fn from_proto(mut info: sc2api::ResponseGameInfo) -> Result<Self> {
         let mut start_raw = info.take_start_raw();
 

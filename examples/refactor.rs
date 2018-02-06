@@ -9,16 +9,19 @@ extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate organelle;
+extern crate rand;
 extern crate serde;
 extern crate tokio_core;
 
 extern crate sc2;
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
 use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
+use rand::random;
 use sc2::{
     ActionTerminal,
     AgentContract,
@@ -31,11 +34,25 @@ use sc2::{
     PlayerTerminal,
     Result,
 };
-use sc2::data::{GameSettings, Map, PlayerSetup, Race};
+use sc2::data::{
+    Ability,
+    ActionTarget,
+    Alliance,
+    Command,
+    GameSettings,
+    Map,
+    MapInfo,
+    Observation,
+    PlayerSetup,
+    Point2,
+    Race,
+    Tag,
+    UnitType,
+    Vector2,
+};
 use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
 
@@ -55,6 +72,8 @@ Options:
   -s <count> --step-size=<count>    How many steps to take per call.
   --replay-dir=<path>               Path to a replay pack
 ";
+
+const TARGET_SCV_COUNT: usize = 15;
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
@@ -150,14 +169,18 @@ impl Soma for TerranSoma {
 
             Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
-                    self.agent.unwrap().wrap(TerranDendrite {}).or_else(
-                        move |e| {
+                    self.agent
+                        .unwrap()
+                        .wrap(TerranDendrite::new(
+                            self.observer.unwrap(),
+                            self.action.unwrap(),
+                        ))
+                        .or_else(move |e| {
                             main_tx
                                 .send(Impulse::Error(e.into()))
                                 .map(|_| ())
                                 .map_err(|_| ())
-                        },
-                    ),
+                        }),
                 );
 
                 Ok(Self {
@@ -171,7 +194,10 @@ impl Soma for TerranSoma {
     }
 }
 
-struct TerranDendrite;
+struct TerranDendrite {
+    observer: ObserverTerminal,
+    action: ActionTerminal,
+}
 
 impl AgentContract for TerranDendrite {
     type Error = Error;
@@ -182,10 +208,219 @@ impl AgentContract for TerranDendrite {
     }
 
     #[async(boxed)]
-    fn step(self) -> Result<Self> {
-        println!("stepping player");
+    fn step(mut self) -> Result<Self> {
+        let observation = await!(self.observer.clone().observe())?;
+
+        self = await!(self.scout_with_marines(Rc::clone(&observation)))?;
+        self = await!(self.try_build_supply_depot(Rc::clone(&observation)))?;
+        self = await!(self.try_build_scv(Rc::clone(&observation)))?;
+        self = await!(self.try_build_barracks(Rc::clone(&observation)))?;
+        self = await!(self.try_build_marine(Rc::clone(&observation)))?;
 
         Ok(self)
+    }
+}
+
+impl TerranDendrite {
+    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
+        TerranDendrite {
+            observer: observer,
+            action: action,
+        }
+    }
+
+    fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
+        let units = observation.state.filter_units(|u| {
+            u.alliance == Alliance::Enemy
+                && (u.unit_type == UnitType::TerranCommandCenter
+                    || u.unit_type == UnitType::TerranSupplyDepot
+                    || u.unit_type == UnitType::TerranBarracks)
+        });
+
+        if !units.is_empty() {
+            Some(units[0].tag)
+        } else {
+            None
+        }
+    }
+
+    fn find_enemy_pos(&self, map_info: &MapInfo) -> Option<Point2> {
+        if map_info.enemy_start_locations.is_empty() {
+            None
+        } else {
+            //TODO: should be random I think
+            Some(map_info.enemy_start_locations[0])
+        }
+    }
+
+    #[async]
+    fn scout_with_marines(self, observation: Rc<Observation>) -> Result<Self> {
+        let map_info = await!(self.observer.clone().get_map_info())?;
+
+        let units = observation.state.filter_units(|u| {
+            u.alliance == Alliance::Domestic
+                && u.unit_type == UnitType::TerranMarine
+                && u.orders.is_empty()
+        });
+
+        for u in units {
+            match self.find_enemy_structure(&*observation) {
+                Some(enemy_tag) => {
+                    await!(self.action.clone().send_command(
+                        Command::Action {
+                            units: vec![Rc::clone(&u)],
+                            ability: Ability::Attack,
+                            target: Some(ActionTarget::UnitTag(enemy_tag)),
+                        }
+                    ))?;
+
+                    return Ok(self);
+                },
+                None => (),
+            }
+
+            match self.find_enemy_pos(&*map_info) {
+                Some(target_pos) => {
+                    await!(self.action.clone().send_command(
+                        Command::Action {
+                            units: vec![Rc::clone(&u)],
+                            ability: Ability::Smart,
+                            target: Some(ActionTarget::Location(target_pos)),
+                        }
+                    ))?;
+
+                    return Ok(self);
+                },
+                None => (),
+            }
+        }
+
+        Ok(self)
+    }
+
+    #[async]
+    fn try_build_supply_depot(
+        self,
+        observation: Rc<Observation>,
+    ) -> Result<Self> {
+        // if we are not supply capped, don't build a supply depot
+        if observation.state.food_used + 2 <= observation.state.food_cap {
+            return Ok(self);
+        }
+
+        // find a random SVC to build a depot
+        await!(self.try_build_structure(observation, Ability::BuildSupplyDepot))
+    }
+
+    #[async]
+    fn try_build_scv(self, observation: Rc<Observation>) -> Result<Self> {
+        let scv_count = observation
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .len();
+
+        if scv_count < TARGET_SCV_COUNT {
+            await!(self.try_build_unit(
+                observation,
+                Ability::TrainScv,
+                UnitType::TerranCommandCenter,
+            ))
+        } else {
+            Ok(self)
+        }
+    }
+
+    #[async]
+    fn try_build_barracks(self, observation: Rc<Observation>) -> Result<Self> {
+        let scv_count = observation
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .len();
+        // wait until we have our quota of SCVs
+        if scv_count < TARGET_SCV_COUNT {
+            return Ok(self);
+        }
+
+        let barracks_count = observation
+            .state
+            .filter_units(|u| u.unit_type == UnitType::TerranBarracks)
+            .len();
+
+        if barracks_count > 0 {
+            return Ok(self);
+        }
+
+        await!(self.try_build_structure(observation, Ability::BuildBarracks))
+    }
+
+    #[async]
+    fn try_build_marine(self, observation: Rc<Observation>) -> Result<Self> {
+        await!(self.try_build_unit(
+            observation,
+            Ability::TrainMarine,
+            UnitType::TerranBarracks,
+        ))
+    }
+
+    #[async]
+    fn try_build_unit(
+        self,
+        observation: Rc<Observation>,
+        ability: Ability,
+        unit_type: UnitType,
+    ) -> Result<Self> {
+        let units = observation
+            .state
+            .filter_units(|u| u.unit_type == unit_type && u.orders.is_empty());
+
+        if units.is_empty() {
+            Ok(self)
+        } else {
+            await!(self.action.clone().send_command(Command::Action {
+                units: vec![Rc::clone(&units[0])],
+                ability: ability,
+                target: None,
+            }))?;
+            Ok(self)
+        }
+    }
+
+    #[async]
+    fn try_build_structure(
+        self,
+        observation: Rc<Observation>,
+        ability: Ability,
+    ) -> Result<Self> {
+        let units = observation
+            .state
+            .filter_units(|u| u.alliance == Alliance::Domestic);
+
+        // if a unit is already building this structure, do nothing
+        for u in &units {
+            for o in &u.orders {
+                if o.ability == ability {
+                    return Ok(self);
+                }
+            }
+        }
+
+        if !units.is_empty() {
+            let r = Vector2::new(random(), random());
+
+            let u = random::<usize>() % units.len();
+
+            await!(self.action.clone().send_command(Command::Action {
+                units: vec![Rc::clone(&units[u])],
+                ability: ability,
+                target: Some(ActionTarget::Location(
+                    Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0,
+                )),
+            }))?;
+
+            Ok(self)
+        } else {
+            Ok(self)
+        }
     }
 }
 

@@ -16,6 +16,7 @@ use data::{
     DisplayType,
     GameEvent,
     GameState,
+    MapInfo,
     MapState,
     Observation,
     Point2,
@@ -179,15 +180,20 @@ impl ObserverTask {
             );
 
         let mut observation = None;
+        let mut map_info = None;
 
         #[async]
         for req in queue.map_err(|_| -> Error { unreachable!() }) {
             match req {
                 Either::Control(ObserverControlRequest::Reset(tx)) => {
+                    // clear data cache every game
+                    map_info = None;
+
                     tx.send(())
                         .map_err(|_| Error::from("unable to ack reset"))?;
                 },
                 Either::Control(ObserverControlRequest::Step(tx)) => {
+                    // clear observation cache every step
                     observation = None;
                     tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
                 },
@@ -205,6 +211,18 @@ impl ObserverTask {
                         .map_err(|_| {
                             Error::from("unable to return observation")
                         })?;
+                },
+                Either::Request(ObserverRequest::GetMapInfo(tx)) => {
+                    if map_info.is_none() {
+                        let (observer, new_map_info) =
+                            await!(self.get_map_info())?;
+
+                        self = observer;
+                        map_info = Some(new_map_info);
+                    }
+
+                    tx.send(Rc::clone(map_info.as_ref().unwrap()))
+                        .map_err(|_| Error::from("unable to return map info"))?;
                 },
             }
         }
@@ -413,12 +431,24 @@ impl ObserverTask {
             Rc::from(Observation {
                 state: new_state,
                 events: events,
-                map: Rc::from(MapState {
+                map: MapState {
                     creep: map_state.take_creep().into_sc2()?,
                     visibility: map_state.take_visibility().into_sc2()?,
-                }),
+                },
             }),
         ))
+    }
+
+    #[async]
+    fn get_map_info(self) -> Result<(Self, Rc<MapInfo>)> {
+        let mut req = sc2api::Request::new();
+        req.mut_game_info();
+
+        let mut rsp = await!(self.client.clone().request(req))?;
+
+        let info = Rc::from(MapInfo::from_proto(rsp.take_game_info())?);
+
+        Ok((self, info))
     }
 }
 
@@ -431,6 +461,7 @@ enum ObserverControlRequest {
 #[derive(Debug)]
 enum ObserverRequest {
     Observe(oneshot::Sender<Rc<Observation>>),
+    GetMapInfo(oneshot::Sender<Rc<MapInfo>>),
 }
 
 enum Either {
@@ -480,6 +511,37 @@ pub struct ObserverControlDendrite {
 pub struct ObserverTerminal {
     tx: mpsc::Sender<ObserverRequest>,
 }
+
+impl ObserverTerminal {
+    #[async]
+    pub fn observe(self) -> Result<Rc<Observation>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::Observe(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send observation"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv observation")))
+    }
+
+    #[async]
+    pub fn get_map_info(self) -> Result<Rc<MapInfo>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetMapInfo(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send map info request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv map info")))
+    }
+}
+
 #[derive(Debug)]
 pub struct ObserverDendrite {
     rx: mpsc::Receiver<ObserverRequest>,
@@ -582,73 +644,5 @@ pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
 //             upgrade_data,
 //             buff_data,
 //         )
-//     }
-// }
-
-// pub struct FetchTerrainData {
-//     transactor: Transactor,
-
-//     unit_type_data: HashMap<UnitType, UnitTypeData>,
-//     ability_data: HashMap<Ability, AbilityData>,
-//     upgrade_data: HashMap<Upgrade, UpgradeData>,
-//     buff_data: HashMap<Buff, BuffData>,
-// }
-
-// impl FetchTerrainData {
-//     fn fetch(
-//         axon: &Axon,
-//         unit_type_data: HashMap<UnitType, UnitTypeData>,
-//         ability_data: HashMap<Ability, AbilityData>,
-//         upgrade_data: HashMap<Upgrade, UpgradeData>,
-//         buff_data: HashMap<Buff, BuffData>,
-//     ) -> Result<ObserverSoma> {
-//         let mut req = sc2api::Request::new();
-//         req.mut_game_info();
-
-//         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-//         Ok(ObserverSoma::FetchTerrainData(FetchTerrainData {
-//             transactor: transactor,
-
-//             unit_type_data: unit_type_data,
-//             ability_data: ability_data,
-//             upgrade_data: upgrade_data,
-//             buff_data: buff_data,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<ObserverSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(rsp)) => {
-//                 self.on_terrain_info(axon, src, rsp)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_terrain_info(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         result: ClientResult,
-//     ) -> Result<ObserverSoma> {
-//         let mut rsp = self.transactor.expect(src, result)?;
-
-//         let game_data = Rc::from(GameData {
-//             unit_type_data: self.unit_type_data,
-//             ability_data: self.ability_data,
-//             upgrade_data: self.upgrade_data,
-//             buff_data: self.buff_data,
-
-//             terrain_info: rsp.take_game_info().into_sc2()?,
-//         });
-
-//         GameDataReady::start(axon, game_data)
 //     }
 // }
