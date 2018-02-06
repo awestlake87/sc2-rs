@@ -8,7 +8,7 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, Result};
-use data::{GamePorts, GameSettings, PlayerSetup};
+use data::{GamePorts, GameSettings, PlayerSetup, UpdateScheme};
 use launcher::{LauncherSettings, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
@@ -28,6 +28,8 @@ pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
     pub players: (L1, L2),
     /// the suite of games to choose from
     pub suite: MeleeSuite,
+    /// the method of updating the game instance
+    pub update_scheme: UpdateScheme,
 }
 
 /// create a melee synapse
@@ -42,16 +44,21 @@ pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
     launcher: Option<LauncherTerminal>,
     agents: Vec<Option<MeleeTerminal>>,
+    update_scheme: UpdateScheme,
 }
 
 impl MeleeSoma {
     /// melee soma only works as a controller in a melee organelle
-    fn axon(suite: MeleeSuite) -> Result<Axon<Self>> {
+    fn axon(
+        suite: MeleeSuite,
+        update_scheme: UpdateScheme,
+    ) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 suite: Some(suite),
                 launcher: None,
                 agents: vec![],
+                update_scheme: update_scheme,
             },
             vec![],
             vec![
@@ -83,8 +90,10 @@ impl MeleeSoma {
         <L2::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
-        let mut organelle =
-            Organelle::new(MeleeSoma::axon(settings.suite)?, handle);
+        let mut organelle = Organelle::new(
+            MeleeSoma::axon(settings.suite, settings.update_scheme)?,
+            handle,
+        );
 
         let launcher =
             organelle.add_soma(LauncherSoma::axon(settings.launcher)?);
@@ -137,6 +146,7 @@ impl Soma for MeleeSoma {
                 handle.spawn(
                     run_melee(
                         mem::replace(&mut self.suite, None).unwrap(),
+                        self.update_scheme,
                         mem::replace(&mut self.launcher, None).unwrap(),
                         (
                             mem::replace(&mut self.agents[0], None).unwrap(),
@@ -162,6 +172,7 @@ impl Soma for MeleeSoma {
 #[async]
 fn run_melee(
     suite: MeleeSuite,
+    update_scheme: UpdateScheme,
     launcher: LauncherTerminal,
     agents: (MeleeTerminal, MeleeTerminal),
     main_tx: mpsc::Sender<Impulse<Synapse>>,
@@ -228,8 +239,8 @@ fn run_melee(
         }
 
         {
-            let run1 = agents.0.clone().run_game();
-            let run2 = agents.1.clone().run_game();
+            let run1 = agents.0.clone().run_game(update_scheme);
+            let run2 = agents.1.clone().run_game(update_scheme);
 
             await!(run1.join(run2))?;
         }
@@ -255,7 +266,7 @@ enum MeleeRequest {
 
     CreateGame(GameSettings, Vec<PlayerSetup>, oneshot::Sender<()>),
     JoinGame(PlayerSetup, Option<GamePorts>, oneshot::Sender<()>),
-    RunGame(oneshot::Sender<()>),
+    RunGame(UpdateScheme, oneshot::Sender<()>),
 }
 
 /// wrapper around a sender to provide a melee interface
@@ -294,7 +305,10 @@ pub trait MeleeContract: Sized {
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
 
     /// run the game
-    fn run_game(self) -> Box<Future<Item = Self, Error = Self::Error>>;
+    fn run_game(
+        self,
+        update_scheme: UpdateScheme,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
 }
 
 /// wrapper around a receiver to provide a controlled interface
@@ -347,9 +361,10 @@ impl MeleeDendrite {
 
                     tx.send(()).unwrap();
                 },
-                MeleeRequest::RunGame(tx) => {
-                    dendrite =
-                        await!(dendrite.run_game().map_err(|e| e.into()))?;
+                MeleeRequest::RunGame(update_scheme, tx) => {
+                    dendrite = await!(
+                        dendrite.run_game(update_scheme).map_err(|e| e.into())
+                    )?;
 
                     tx.send(()).unwrap();
                 },
@@ -431,12 +446,12 @@ impl MeleeTerminal {
 
     /// run the game to completion
     #[async]
-    pub fn run_game(self) -> Result<()> {
+    pub fn run_game(self, update_scheme: UpdateScheme) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(MeleeRequest::RunGame(tx))
+                .send(MeleeRequest::RunGame(update_scheme, tx))
                 .map_err(|_| Error::from("unable to run game"))
         )?;
 

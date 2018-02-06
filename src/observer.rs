@@ -6,7 +6,6 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
-use tokio_core::reactor;
 
 use super::{Error, FromProto, IntoSc2, Result};
 use client::ClientTerminal;
@@ -98,7 +97,6 @@ impl Soma for ObserverSoma {
                 }
 
                 let task = ObserverTask::new(
-                    handle.clone(),
                     self.controller.unwrap(),
                     self.client.unwrap(),
                     rx,
@@ -124,7 +122,6 @@ impl Soma for ObserverSoma {
 }
 
 struct ObserverTask {
-    handle: reactor::Handle,
     controller: Option<ObserverControlDendrite>,
     client: ClientTerminal,
     request_rx: Option<mpsc::Receiver<ObserverRequest>>,
@@ -143,13 +140,11 @@ struct ObserverTask {
 
 impl ObserverTask {
     fn new(
-        handle: reactor::Handle,
         controller: ObserverControlDendrite,
         client: ClientTerminal,
         request_rx: mpsc::Receiver<ObserverRequest>,
     ) -> Self {
         Self {
-            handle: handle,
             controller: Some(controller),
             client: client,
             request_rx: Some(request_rx),
@@ -502,17 +497,20 @@ impl ObserverControlTerminal {
         await!(rx.map_err(|_| Error::from("unable to recv step ack")))
     }
 }
+
 #[derive(Debug)]
 pub struct ObserverControlDendrite {
     rx: mpsc::Receiver<ObserverControlRequest>,
 }
 
+/// an interface for the observer soma
 #[derive(Debug, Clone)]
 pub struct ObserverTerminal {
     tx: mpsc::Sender<ObserverRequest>,
 }
 
 impl ObserverTerminal {
+    /// observe the current game state
     #[async]
     pub fn observe(self) -> Result<Rc<Observation>> {
         let (tx, rx) = oneshot::channel();
@@ -527,6 +525,7 @@ impl ObserverTerminal {
         await!(rx.map_err(|_| Error::from("unable to recv observation")))
     }
 
+    /// get information about the current map
     #[async]
     pub fn get_map_info(self) -> Result<Rc<MapInfo>> {
         let (tx, rx) = oneshot::channel();

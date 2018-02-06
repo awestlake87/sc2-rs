@@ -11,7 +11,7 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::ActionSoma;
 use client::{ClientSoma, ClientTerminal};
-use data::{GamePorts, GameSettings, Map, PlayerSetup};
+use data::{GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
 use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma};
 use synapses::{Dendrite, Synapse, Terminal};
@@ -272,21 +272,26 @@ impl MeleeContract for AgentMeleeDendrite {
     }
 
     #[async(boxed)]
-    fn run_game(self) -> Result<Self> {
+    fn run_game(self, update_scheme: UpdateScheme) -> Result<Self> {
         await!(self.observer.clone().reset())?;
 
         loop {
-            let mut req = sc2api::Request::new();
-            req.mut_step().set_count(1);
+            match update_scheme {
+                UpdateScheme::Realtime => unimplemented!(),
+                UpdateScheme::Interval(interval) => {
+                    let mut req = sc2api::Request::new();
+                    req.mut_step().set_count(interval);
 
-            let rsp = await!(self.client.clone().request(req))?;
+                    let rsp = await!(self.client.clone().request(req))?;
 
-            if rsp.get_status() != sc2api::Status::in_game {
-                break;
-            } else {
-                await!(self.observer.clone().step())?;
-                await!(self.agent.clone().step())?;
+                    if rsp.get_status() != sc2api::Status::in_game {
+                        break;
+                    }
+                },
             }
+
+            await!(self.observer.clone().step())?;
+            await!(self.agent.clone().step())?;
         }
 
         Ok(self)
@@ -306,7 +311,7 @@ pub struct AgentTerminal {
 
 impl AgentTerminal {
     #[async]
-    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+    fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
 
         await!(
@@ -322,7 +327,7 @@ impl AgentTerminal {
     }
 
     #[async]
-    pub fn step(self) -> Result<()> {
+    fn step(self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
@@ -336,14 +341,18 @@ impl AgentTerminal {
     }
 }
 
+/// contract for a player soma to obey
 pub trait AgentContract: Sized {
+    /// the type of error that can occur upon failure
     type Error: std::error::Error + Send + Into<Error>;
 
+    /// use the game settings to decide on a player setup
     fn get_player_setup(
         self,
         game: GameSettings,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
 
+    /// update the player soma
     fn step(self) -> Box<Future<Item = Self, Error = Self::Error>>
     where
         Self: 'static,
@@ -352,12 +361,15 @@ pub trait AgentContract: Sized {
     }
 }
 
+/// receiver for agent requests
 #[derive(Debug)]
 pub struct AgentDendrite {
     rx: mpsc::Receiver<AgentRequest>,
 }
 
 impl AgentDendrite {
+    /// wrap a struct that obeys the agent contract and forward requests to
+    /// it
     #[async]
     pub fn wrap<T: AgentContract + 'static>(self, mut player: T) -> Result<()> {
         #[async]
@@ -391,87 +403,6 @@ pub fn synapse() -> (AgentTerminal, AgentDendrite) {
 
     (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
 }
-
-// pub struct SendActions {
-//     interval: u32,
-//     transactor: Transactor,
-
-//     debug_commands: Vec<DebugCommand>,
-// }
-
-// impl SendActions {
-//     fn send_actions(
-//         axon: &Axon,
-//         interval: u32,
-//         commands: Vec<Command>,
-//         debug_commands: Vec<DebugCommand>,
-//     ) -> Result<AgentSoma> {
-//         let mut req = sc2api::Request::new();
-//         req.mut_action().mut_actions();
-
-//         for cmd in commands {
-//             match cmd {
-//                 Command::Action {
-//                     units,
-//                     ability,
-//                     target,
-//                 } => {
-//                     let mut a = sc2api::Action::new();
-
-//                     {
-//                         let cmd = a.mut_action_raw().mut_unit_command();
-
-//                         cmd.set_ability_id(ability.into_proto()? as i32);
-
-//                         match target {
-//                             Some(ActionTarget::UnitTag(tag)) => {
-//                                 cmd.set_target_unit_tag(tag);
-//                             },
-//                             Some(ActionTarget::Location(pos)) => {
-// let target =
-// cmd.mut_target_world_space_pos();
-// target.set_x(pos.x);                                 target.set_y(pos.y);
-//                             },
-//                             None => (),
-//                         }
-
-//                         for u in units {
-//                             cmd.mut_unit_tags().push(u.tag);
-//                         }
-//                     }
-
-//                     req.mut_action().mut_actions().push(a);
-//                 },
-//             }
-//         }
-
-//         let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
-
-//         Ok(AgentSoma::SendActions(SendActions {
-//             interval: interval,
-//             transactor: transactor,
-
-//             debug_commands: debug_commands,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.transactor.expect(src, result)?;
-
-// SendDebug::send_debug(axon, self.interval,
-// self.debug_commands)             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
 
 // pub struct SendDebug {
 //     interval: u32,
@@ -605,11 +536,6 @@ pub fn synapse() -> (AgentTerminal, AgentDendrite) {
 // msg),             _ => bail!("unexpected protocol message"),
 //         }
 //     }
-// }
-
-// pub struct Step {
-//     interval: u32,
-//     transactor: Transactor,
 // }
 
 // pub struct LeaveGame {

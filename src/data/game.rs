@@ -5,6 +5,15 @@ use sc2_proto::sc2api;
 use super::{ImageData, Point2, Rect2};
 use super::super::{FromProto, IntoSc2, Result};
 
+/// update scheme for the agents to use
+#[derive(Debug, Copy, Clone)]
+pub enum UpdateScheme {
+    /// update as fast as possible
+    Realtime,
+    /// step the game with a fixed interval
+    Interval(u32),
+}
+
 /// result of the game
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]

@@ -4,7 +4,6 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
-use tokio_core::reactor;
 
 use super::{Error, IntoProto, Result};
 use client::ClientTerminal;
@@ -68,7 +67,6 @@ impl Soma for ActionSoma {
                 }
 
                 let task = ActionTask {
-                    handle: handle.clone(),
                     client: self.client.unwrap(),
                     queue: Some(rx),
                 };
@@ -92,7 +90,6 @@ impl Soma for ActionSoma {
 }
 
 struct ActionTask {
-    handle: reactor::Handle,
     client: ClientTerminal,
     queue: Option<mpsc::Receiver<ActionRequest>>,
 }
@@ -166,12 +163,14 @@ enum ActionRequest {
     SendCommand(Command, oneshot::Sender<()>),
 }
 
+/// action interface for a game instance
 #[derive(Debug, Clone)]
 pub struct ActionTerminal {
     tx: mpsc::Sender<ActionRequest>,
 }
 
 impl ActionTerminal {
+    /// send a command to the game instance
     #[async]
     pub fn send_command(self, cmd: Command) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -186,6 +185,7 @@ impl ActionTerminal {
     }
 }
 
+/// internal action receiver for action soma
 #[derive(Debug)]
 pub struct ActionDendrite {
     rx: mpsc::Receiver<ActionRequest>,

@@ -32,15 +32,10 @@ uuid = { version = "0.5", features = ["serde", "v4"] }
 # crate-type = ["bin"]
 # path = "examples/bot-micro.rs"
 
-# [[example]]
-# name = "bot-mp"
-# crate-type = ["bin"]
-# path = "examples/bot-mp.rs"
-
 [[example]]
-name = "refactor"
+name = "bot-mp"
 crate-type = ["bin"]
-path = "examples/refactor.rs"
+path = "examples/bot-mp.rs"
 
 [dev-dependencies]
 docopt = "0"

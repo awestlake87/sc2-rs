@@ -1,13 +1,17 @@
+#![feature(proc_macro, conservative_impl_trait, generators)]
+
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate docopt;
+extern crate futures_await as futures;
 extern crate glob;
 extern crate organelle;
 extern crate rand;
 extern crate serde;
+extern crate tokio_core;
 
 extern crate sc2;
 
@@ -15,31 +19,41 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use docopt::Docopt;
-use organelle::{Dendrite, Impulse, Organelle, ResultExt, Soma};
+use futures::prelude::*;
+use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use rand::random;
 use sc2::{
+    ActionTerminal,
+    AgentContract,
+    AgentDendrite,
+    Error,
+    LauncherSettings,
+    ObserverTerminal,
+    PlayerDendrite,
+    PlayerSynapse,
+    PlayerTerminal,
+    Result,
+};
+use sc2::data::{
     Ability,
     ActionTarget,
     Alliance,
-    Axon,
     Command,
-    FrameData,
     GameSettings,
-    LauncherSettings,
     Map,
+    MapInfo,
+    Observation,
     PlayerSetup,
     Point2,
     Race,
-    Result,
-    Signal,
-    Synapse,
     Tag,
     UnitType,
+    UpdateScheme,
     Vector2,
 };
+use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
 
@@ -59,6 +73,8 @@ Options:
   -s <count> --step-size=<count>    How many steps to take per call.
   --replay-dir=<path>               Path to a replay pack
 ";
+
+const TARGET_SCV_COUNT: usize = 15;
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
@@ -97,203 +113,125 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     Ok(GameSettings { map: map })
 }
 
-const TARGET_SCV_COUNT: usize = 15;
-
-pub enum TerranSoma {
-    Init(Init),
-    Setup(Setup),
-
-    InGame(InGame),
+pub struct TerranSoma {
+    agent: Option<AgentDendrite>,
+    observer: Option<ObserverTerminal>,
+    action: Option<ActionTerminal>,
 }
 
 impl TerranSoma {
-    pub fn organelle(interval: u32) -> Result<Self> {
-        Ok(TerranSoma::Init(Init {
-            axon: Axon::new(
-                vec![Dendrite::RequireOne(Synapse::Agent)],
-                vec![],
-            )?,
-            interval: interval,
-        }))
+    pub fn axon() -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                agent: None,
+                observer: None,
+                action: None,
+            },
+            vec![Constraint::One(PlayerSynapse::Agent)],
+            vec![
+                Constraint::One(PlayerSynapse::Observer),
+                Constraint::One(PlayerSynapse::Action),
+            ],
+        ))
     }
 }
 
 impl Soma for TerranSoma {
-    type Signal = Signal;
-    type Synapse = Synapse;
+    type Synapse = PlayerSynapse;
+    type Error = Error;
 
-    fn update(
-        self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<TerranSoma> {
-        match self {
-            TerranSoma::Init(state) => state.update(msg),
-            TerranSoma::Setup(state) => state.update(msg),
+    #[async(boxed)]
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddDendrite(
+                _,
+                PlayerSynapse::Agent,
+                PlayerDendrite::Agent(rx),
+            ) => Ok(Self {
+                agent: Some(rx),
+                ..self
+            }),
+            Impulse::AddTerminal(
+                _,
+                PlayerSynapse::Observer,
+                PlayerTerminal::Observer(tx),
+            ) => Ok(Self {
+                observer: Some(tx),
+                ..self
+            }),
+            Impulse::AddTerminal(
+                _,
+                PlayerSynapse::Action,
+                PlayerTerminal::Action(tx),
+            ) => Ok(Self {
+                action: Some(tx),
+                ..self
+            }),
 
-            TerranSoma::InGame(state) => state.update(msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
-    }
-}
-
-pub struct Init {
-    axon: Axon,
-    interval: u32,
-}
-
-impl Init {
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon, self.interval),
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        } else {
-            Ok(TerranSoma::Init(self))
-        }
-    }
-}
-
-pub struct Setup {
-    axon: Axon,
-    interval: u32,
-}
-
-impl Setup {
-    fn setup(axon: Axon, interval: u32) -> Result<TerranSoma> {
-        Ok(TerranSoma::Setup(Setup {
-            axon: axon,
-            interval: interval,
-        }))
-    }
-
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::PlayerSetup(PlayerSetup::Player {
-                            race: Race::Terran,
+            Impulse::Start(_, main_tx, handle) => {
+                handle.spawn(
+                    self.agent
+                        .unwrap()
+                        .wrap(TerranDendrite::new(
+                            self.observer.unwrap(),
+                            self.action.unwrap(),
+                        ))
+                        .or_else(move |e| {
+                            main_tx
+                                .send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
                         }),
-                    )?;
+                );
 
-                    Ok(TerranSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::RequestUpdateInterval) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::UpdateInterval(self.interval),
-                    )?;
-
-                    Ok(TerranSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::GameStarted) => {
-                    InGame::start(self.axon, self.interval)
-                },
-
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        } else {
-            Ok(TerranSoma::Setup(self))
+                Ok(Self {
+                    agent: None,
+                    observer: None,
+                    action: None,
+                })
+            },
+            _ => bail!("unexpected impulse"),
         }
     }
 }
 
-pub struct InGame {
-    axon: Axon,
-    interval: u32,
+struct TerranDendrite {
+    observer: ObserverTerminal,
+    action: ActionTerminal,
 }
 
-impl InGame {
-    fn start(axon: Axon, interval: u32) -> Result<TerranSoma> {
-        Ok(TerranSoma::InGame(InGame {
-            axon: axon,
-            interval: interval,
-        }))
+impl AgentContract for TerranDendrite {
+    type Error = Error;
+
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+        Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
-    fn update(mut self, msg: Impulse<Signal, Synapse>) -> Result<TerranSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Observation(frame)) => {
-                    self.on_frame(frame)
-                },
+    #[async(boxed)]
+    fn step(mut self) -> Result<Self> {
+        let observation = await!(self.observer.clone().observe())?;
 
-                Impulse::Signal(_, Signal::GameEnded) => {
-                    Setup::setup(self.axon, self.interval)
-                },
+        self = await!(self.scout_with_marines(Rc::clone(&observation)))?;
+        self = await!(self.try_build_supply_depot(Rc::clone(&observation)))?;
+        self = await!(self.try_build_scv(Rc::clone(&observation)))?;
+        self = await!(self.try_build_barracks(Rc::clone(&observation)))?;
+        self = await!(self.try_build_marine(Rc::clone(&observation)))?;
 
-                Impulse::Signal(_, msg) => {
-                    bail!("unexpected message {:#?}", msg)
-                },
-                _ => bail!("unexpected protocol message"),
-            }
-        } else {
-            Ok(TerranSoma::InGame(self))
+        Ok(self)
+    }
+}
+
+impl TerranDendrite {
+    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
+        TerranDendrite {
+            observer: observer,
+            action: action,
         }
     }
 
-    fn on_frame(self, frame: Rc<FrameData>) -> Result<TerranSoma> {
-        let commands = self.create_commands(&*frame)?;
-
-        let agent = self.axon.req_input(Synapse::Agent)?;
-
-        let mut messages: Vec<Signal> = commands
-            .into_iter()
-            .map(|cmd| Signal::Command(cmd))
-            .collect();
-
-        messages.push(Signal::UpdateComplete);
-
-        self.axon.effector()?.send_in_order(agent, messages);
-
-        Ok(TerranSoma::InGame(self))
-    }
-
-    fn create_commands(&self, frame: &FrameData) -> Result<Vec<Command>> {
-        let mut commands = vec![];
-        // if there are marines and the command center is not found, send them
-        // scouting.
-        if let Some(cmd) = self.scout_with_marines(&frame) {
-            commands.push(cmd);
-        }
-
-        // build supply depots if they are needed
-        if let Some(cmd) = self.try_build_supply_depot(&frame) {
-            commands.push(cmd);
-            return Ok(commands);
-        }
-
-        // build terran SCV's if they are needed
-        if let Some(cmd) = self.try_build_scv(&frame) {
-            commands.push(cmd);
-            return Ok(commands);
-        }
-
-        // build barracks if they are ready to be built
-        if let Some(cmd) = self.try_build_barracks(&frame) {
-            commands.push(cmd);
-            return Ok(commands);
-        }
-
-        // just keep building marines if possible
-        if let Some(cmd) = self.try_build_marine(&frame) {
-            commands.push(cmd);
-            return Ok(commands);
-        }
-
-        Ok(commands)
-    }
-
-    fn find_enemy_structure(&self, frame: &FrameData) -> Option<Tag> {
-        let units = frame.state.filter_units(|u| {
+    fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
+        let units = observation.state.filter_units(|u| {
             u.alliance == Alliance::Enemy
                 && (u.unit_type == UnitType::TerranCommandCenter
                     || u.unit_type == UnitType::TerranSupplyDepot
@@ -307,133 +245,154 @@ impl InGame {
         }
     }
 
-    fn find_enemy_pos(&self, frame: &FrameData) -> Option<Point2> {
-        if frame.data.terrain_info.enemy_start_locations.is_empty() {
+    fn find_enemy_pos(&self, map_info: &MapInfo) -> Option<Point2> {
+        if map_info.enemy_start_locations.is_empty() {
             None
         } else {
             //TODO: should be random I think
-            Some(frame.data.terrain_info.enemy_start_locations[0])
+            Some(map_info.enemy_start_locations[0])
         }
     }
 
-    fn scout_with_marines(&self, frame: &FrameData) -> Option<Command> {
-        let units = frame.state.filter_units(|u| {
+    #[async]
+    fn scout_with_marines(self, observation: Rc<Observation>) -> Result<Self> {
+        let map_info = await!(self.observer.clone().get_map_info())?;
+
+        let units = observation.state.filter_units(|u| {
             u.alliance == Alliance::Domestic
                 && u.unit_type == UnitType::TerranMarine
                 && u.orders.is_empty()
         });
 
-        for ref u in units {
-            match self.find_enemy_structure(frame) {
+        for u in units {
+            match self.find_enemy_structure(&*observation) {
                 Some(enemy_tag) => {
-                    return Some(Command::Action {
-                        units: vec![Rc::clone(u)],
-                        ability: Ability::Attack,
-                        target: Some(ActionTarget::UnitTag(enemy_tag)),
-                    })
+                    await!(self.action.clone().send_command(
+                        Command::Action {
+                            units: vec![Rc::clone(&u)],
+                            ability: Ability::Attack,
+                            target: Some(ActionTarget::UnitTag(enemy_tag)),
+                        }
+                    ))?;
+
+                    return Ok(self);
                 },
                 None => (),
             }
 
-            match self.find_enemy_pos(frame) {
+            match self.find_enemy_pos(&*map_info) {
                 Some(target_pos) => {
-                    return Some(Command::Action {
-                        units: vec![Rc::clone(u)],
-                        ability: Ability::Smart,
-                        target: Some(ActionTarget::Location(target_pos)),
-                    })
+                    await!(self.action.clone().send_command(
+                        Command::Action {
+                            units: vec![Rc::clone(&u)],
+                            ability: Ability::Smart,
+                            target: Some(ActionTarget::Location(target_pos)),
+                        }
+                    ))?;
+
+                    return Ok(self);
                 },
                 None => (),
             }
         }
 
-        None
+        Ok(self)
     }
 
-    fn try_build_supply_depot(&self, frame: &FrameData) -> Option<Command> {
+    #[async]
+    fn try_build_supply_depot(
+        self,
+        observation: Rc<Observation>,
+    ) -> Result<Self> {
         // if we are not supply capped, don't build a supply depot
-        if frame.state.food_used + 2 <= frame.state.food_cap {
-            return None;
+        if observation.state.food_used + 2 <= observation.state.food_cap {
+            return Ok(self);
         }
 
         // find a random SVC to build a depot
-        self.try_build_structure(frame, Ability::BuildSupplyDepot)
+        await!(self.try_build_structure(observation, Ability::BuildSupplyDepot))
     }
 
-    fn try_build_scv(&self, frame: &FrameData) -> Option<Command> {
-        let scv_count = frame
+    #[async]
+    fn try_build_scv(self, observation: Rc<Observation>) -> Result<Self> {
+        let scv_count = observation
             .state
             .filter_units(|u| u.unit_type == UnitType::TerranScv)
             .len();
 
         if scv_count < TARGET_SCV_COUNT {
-            self.try_build_unit(
-                frame,
+            await!(self.try_build_unit(
+                observation,
                 Ability::TrainScv,
                 UnitType::TerranCommandCenter,
-            )
+            ))
         } else {
-            None
+            Ok(self)
         }
     }
 
-    fn try_build_barracks(&self, frame: &FrameData) -> Option<Command> {
-        let scv_count = frame
+    #[async]
+    fn try_build_barracks(self, observation: Rc<Observation>) -> Result<Self> {
+        let scv_count = observation
             .state
             .filter_units(|u| u.unit_type == UnitType::TerranScv)
             .len();
         // wait until we have our quota of SCVs
         if scv_count < TARGET_SCV_COUNT {
-            return None;
+            return Ok(self);
         }
 
-        let barracks_count = frame
+        let barracks_count = observation
             .state
             .filter_units(|u| u.unit_type == UnitType::TerranBarracks)
             .len();
 
         if barracks_count > 0 {
-            return None;
+            return Ok(self);
         }
 
-        self.try_build_structure(frame, Ability::BuildBarracks)
+        await!(self.try_build_structure(observation, Ability::BuildBarracks))
     }
 
-    fn try_build_marine(&self, frame: &FrameData) -> Option<Command> {
-        self.try_build_unit(
-            frame,
+    #[async]
+    fn try_build_marine(self, observation: Rc<Observation>) -> Result<Self> {
+        await!(self.try_build_unit(
+            observation,
             Ability::TrainMarine,
             UnitType::TerranBarracks,
-        )
+        ))
     }
 
+    #[async]
     fn try_build_unit(
-        &self,
-        frame: &FrameData,
+        self,
+        observation: Rc<Observation>,
         ability: Ability,
         unit_type: UnitType,
-    ) -> Option<Command> {
-        let units = frame
+    ) -> Result<Self> {
+        let units = observation
             .state
             .filter_units(|u| u.unit_type == unit_type && u.orders.is_empty());
 
         if units.is_empty() {
-            None
+            Ok(self)
         } else {
-            Some(Command::Action {
+            await!(self.action.clone().send_command(Command::Action {
                 units: vec![Rc::clone(&units[0])],
                 ability: ability,
                 target: None,
-            })
+            }))?;
+            Ok(self)
         }
     }
 
+    #[async]
     fn try_build_structure(
-        &self,
-        frame: &FrameData,
+        self,
+        observation: Rc<Observation>,
         ability: Ability,
-    ) -> Option<Command> {
-        let units = frame
+    ) -> Result<Self> {
+        let units = observation
             .state
             .filter_units(|u| u.alliance == Alliance::Domestic);
 
@@ -441,7 +400,7 @@ impl InGame {
         for u in &units {
             for o in &u.orders {
                 if o.ability == ability {
-                    return None;
+                    return Ok(self);
                 }
             }
         }
@@ -451,15 +410,17 @@ impl InGame {
 
             let u = random::<usize>() % units.len();
 
-            Some(Command::Action {
+            await!(self.action.clone().send_command(Command::Action {
                 units: vec![Rc::clone(&units[u])],
                 ability: ability,
                 target: Some(ActionTarget::Location(
                     Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0,
                 )),
-            })
+            }))?;
+
+            Ok(self)
         } else {
-            None
+            Ok(self)
         }
     }
 }
@@ -474,23 +435,42 @@ quick_main!(|| -> sc2::Result<()> {
         return Ok(());
     }
 
-    let mut organelle =
-        Organelle::new(sc2::MeleeSoma::organelle(sc2::MeleeSettings {
-            launcher: get_launcher_settings(&args)?,
-            players: (
-                sc2::AgentSoma::organelle(TerranSoma::organelle(
-                    args.flag_step_size.unwrap_or(1),
-                )?)?,
-                sc2::AgentSoma::organelle(TerranSoma::organelle(
-                    args.flag_step_size.unwrap_or(1),
-                )?)?,
-            ),
-            suite: sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?),
-        })?);
+    let mut core = reactor::Core::new().unwrap();
+    let handle = core.handle();
 
-    organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+    let mut organelle = Organelle::new(
+        sc2::MeleeSoma::organelle(
+            sc2::MeleeSettings {
+                launcher: get_launcher_settings(&args)?,
+                players: (
+                    sc2::AgentSoma::organelle(
+                        TerranSoma::axon()?,
+                        handle.clone(),
+                    )?,
+                    sc2::AgentSoma::organelle(
+                        TerranSoma::axon()?,
+                        handle.clone(),
+                    )?,
+                ),
+                suite: sc2::MeleeSuite::EndlessRepeat(get_game_settings(
+                    &args,
+                )?),
+                update_scheme: UpdateScheme::Interval(
+                    args.flag_step_size.unwrap_or(1),
+                ),
+            },
+            handle.clone(),
+        )?,
+        handle.clone(),
+    );
 
-    organelle.run()?;
+    organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
+    organelle.add_soma(visualizer::Soma::organelle(
+        visualizer::Settings::default(),
+        handle.clone(),
+    )?);
+
+    core.run(organelle.run(handle))?;
 
     Ok(())
 });

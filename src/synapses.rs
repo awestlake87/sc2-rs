@@ -171,24 +171,36 @@ impl From<Dendrite> for probe::Dendrite {
     }
 }
 
+/// synapse exposing only information that is important to players
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum PlayerSynapse {
+    /// control the game
     Agent,
+    /// observe the game state and data
     Observer,
+    /// dispatch game actions
     Action,
 }
 
+/// interfaces for internal somas
 #[derive(Debug)]
 pub enum PlayerTerminal {
+    /// agent soma's interface for players
     Agent(AgentTerminal),
+    /// interface for the observer soma
     Observer(ObserverTerminal),
+    /// interface for the action soma
     Action(ActionTerminal),
 }
 
+/// receivers for the terminals/interfaces of somas
 #[derive(Debug)]
 pub enum PlayerDendrite {
+    /// exposes contract for player somas
     Agent(AgentDendrite),
+    /// internal receiver for observer interface
     Observer(ObserverDendrite),
+    /// internal receiver for action interface
     Action(ActionDendrite),
 }
 

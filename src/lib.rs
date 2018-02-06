@@ -42,7 +42,7 @@ mod synapses;
 pub mod data;
 
 pub use self::action::ActionTerminal;
-pub use self::agent::{AgentContract, AgentDendrite, AgentSoma, AgentTerminal};
+pub use self::agent::{AgentContract, AgentDendrite, AgentSoma};
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;
 pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
