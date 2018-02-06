@@ -30,9 +30,8 @@ extern crate uuid;
 mod agent;
 mod client;
 mod action;
-//mod computer;
+mod computer;
 mod ctrlc_breaker;
-//mod frame;
 mod instance;
 mod launcher;
 mod melee;
@@ -43,6 +42,7 @@ pub mod data;
 
 pub use self::action::ActionTerminal;
 pub use self::agent::{AgentContract, AgentDendrite, AgentSoma};
+pub use self::computer::ComputerSoma;
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;
 pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};

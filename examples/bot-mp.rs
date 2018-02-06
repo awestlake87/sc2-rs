@@ -39,6 +39,7 @@ use sc2::data::{
     ActionTarget,
     Alliance,
     Command,
+    GameEvent,
     GameSettings,
     Map,
     MapInfo,
@@ -209,14 +210,24 @@ impl AgentContract for TerranDendrite {
     }
 
     #[async(boxed)]
-    fn step(mut self) -> Result<Self> {
-        let observation = await!(self.observer.clone().observe())?;
+    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+        match e {
+            GameEvent::Step => {
+                let observation = await!(self.observer.clone().observe())?;
 
-        self = await!(self.scout_with_marines(Rc::clone(&observation)))?;
-        self = await!(self.try_build_supply_depot(Rc::clone(&observation)))?;
-        self = await!(self.try_build_scv(Rc::clone(&observation)))?;
-        self = await!(self.try_build_barracks(Rc::clone(&observation)))?;
-        self = await!(self.try_build_marine(Rc::clone(&observation)))?;
+                self =
+                    await!(self.scout_with_marines(Rc::clone(&observation)))?;
+                self = await!(self.try_build_supply_depot(Rc::clone(
+                    &observation
+                )))?;
+                self = await!(self.try_build_scv(Rc::clone(&observation)))?;
+                self =
+                    await!(self.try_build_barracks(Rc::clone(&observation)))?;
+                self = await!(self.try_build_marine(Rc::clone(&observation)))?;
+            },
+
+            _ => (),
+        }
 
         Ok(self)
     }

@@ -27,10 +27,10 @@ tungstenite = "0.5"
 url = "1.6"
 uuid = { version = "0.5", features = ["serde", "v4"] }
 
-# [[example]]
-# name = "bot-micro"
-# crate-type = ["bin"]
-# path = "examples/bot-micro.rs"
+[[example]]
+name = "bot-micro"
+crate-type = ["bin"]
+path = "examples/bot-micro.rs"
 
 [[example]]
 name = "bot-mp"

@@ -1,4 +1,5 @@
 use std;
+use std::rc::Rc;
 
 use futures::future;
 use futures::prelude::*;
@@ -11,7 +12,16 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::ActionSoma;
 use client::{ClientSoma, ClientTerminal};
-use data::{GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
+use data::{
+    GameEvent,
+    GamePorts,
+    GameSettings,
+    Map,
+    PlayerSetup,
+    Unit,
+    UpdateScheme,
+    Upgrade,
+};
 use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma};
 use synapses::{Dendrite, Synapse, Terminal};
@@ -275,6 +285,8 @@ impl MeleeContract for AgentMeleeDendrite {
     fn run_game(self, update_scheme: UpdateScheme) -> Result<Self> {
         await!(self.observer.clone().reset())?;
 
+        let agent = self.agent.clone();
+
         loop {
             match update_scheme {
                 UpdateScheme::Realtime => unimplemented!(),
@@ -291,7 +303,7 @@ impl MeleeContract for AgentMeleeDendrite {
             }
 
             await!(self.observer.clone().step())?;
-            await!(self.agent.clone().step())?;
+            await!(self.agent.clone().handle_event(GameEvent::Step))?;
         }
 
         Ok(self)
@@ -301,7 +313,7 @@ impl MeleeContract for AgentMeleeDendrite {
 #[derive(Debug)]
 enum AgentRequest {
     PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
-    Step(oneshot::Sender<()>),
+    Event(GameEvent, oneshot::Sender<()>),
 }
 
 #[derive(Debug, Clone)]
@@ -327,17 +339,17 @@ impl AgentTerminal {
     }
 
     #[async]
-    fn step(self) -> Result<()> {
+    fn handle_event(self, event: GameEvent) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(AgentRequest::Step(tx))
+                .send(AgentRequest::Event(event, tx))
                 .map(|_| ())
-                .map_err(|_| Error::from("unable to send step request"))
+                .map_err(|_| Error::from("unable to send event"))
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv step response")))
+        await!(rx.map_err(|_| Error::from("unable to recv event response")))
     }
 }
 
@@ -346,14 +358,17 @@ pub trait AgentContract: Sized {
     /// the type of error that can occur upon failure
     type Error: std::error::Error + Send + Into<Error>;
 
-    /// use the game settings to decide on a player setup
+    /// Use the game settings to decide on a player setup
     fn get_player_setup(
         self,
         game: GameSettings,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
 
-    /// update the player soma
-    fn step(self) -> Box<Future<Item = Self, Error = Self::Error>>
+    /// Called whenever the agent needs to handle a game event
+    fn on_event(
+        self,
+        e: GameEvent,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>
     where
         Self: 'static,
     {
@@ -385,11 +400,11 @@ impl AgentDendrite {
                         Error::from("unable to get player setup")
                     })?;
                 },
-                AgentRequest::Step(tx) => {
-                    player = await!(player.step().map_err(|e| e.into()))?;
+                AgentRequest::Event(e, tx) => {
+                    player = await!(player.on_event(e).map_err(|e| e.into()))?;
 
                     tx.send(())
-                        .map_err(|_| Error::from("unable to step player"))?;
+                        .map_err(|_| Error::from("unable to ack event"))?;
                 },
             }
         }

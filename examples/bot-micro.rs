@@ -1,35 +1,49 @@
+#![feature(proc_macro, conservative_impl_trait, generators)]
+
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate docopt;
+extern crate futures_await as futures;
 extern crate glob;
 extern crate organelle;
+extern crate rand;
 extern crate serde;
+extern crate tokio_core;
 
 extern crate sc2;
 
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use docopt::Docopt;
-use organelle::{Dendrite, Impulse, Organelle, ResultExt, Soma};
+use futures::prelude::*;
+use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2::{
-    Axon,
-    FrameData,
-    GameSettings,
+    ActionTerminal,
+    AgentContract,
+    AgentDendrite,
+    Error,
     LauncherSettings,
+    ObserverTerminal,
+    PlayerDendrite,
+    PlayerSynapse,
+    PlayerTerminal,
+    Result,
+};
+use sc2::data::{
+    Difficulty,
+    GameEvent,
+    GameSettings,
     Map,
     PlayerSetup,
     Race,
-    Result,
-    Signal,
-    Synapse,
+    UpdateScheme,
 };
+use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
 
@@ -87,148 +101,124 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     Ok(GameSettings { map: map })
 }
 
-pub enum MarineMicroSoma {
-    Init(Init),
-    Setup(Setup),
-
-    InGame(InGame),
+pub struct MarineMicroSoma {
+    agent: Option<AgentDendrite>,
+    observer: Option<ObserverTerminal>,
+    action: Option<ActionTerminal>,
 }
 
 impl MarineMicroSoma {
-    pub fn organelle(interval: u32) -> Result<Self> {
-        Ok(MarineMicroSoma::Init(Init {
-            axon: Axon::new(
-                vec![Dendrite::RequireOne(Synapse::Agent)],
-                vec![],
-            )?,
-            interval: interval,
-        }))
+    pub fn axon() -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                agent: None,
+                observer: None,
+                action: None,
+            },
+            vec![Constraint::One(PlayerSynapse::Agent)],
+            vec![
+                Constraint::One(PlayerSynapse::Observer),
+                Constraint::One(PlayerSynapse::Action),
+            ],
+        ))
     }
 }
 
 impl Soma for MarineMicroSoma {
-    type Signal = Signal;
-    type Synapse = Synapse;
+    type Synapse = PlayerSynapse;
+    type Error = Error;
 
-    fn update(
-        self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<MarineMicroSoma> {
-        match self {
-            MarineMicroSoma::Init(state) => state.update(msg),
-            MarineMicroSoma::Setup(state) => state.update(msg),
+    #[async(boxed)]
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddDendrite(
+                _,
+                PlayerSynapse::Agent,
+                PlayerDendrite::Agent(rx),
+            ) => Ok(Self {
+                agent: Some(rx),
+                ..self
+            }),
+            Impulse::AddTerminal(
+                _,
+                PlayerSynapse::Observer,
+                PlayerTerminal::Observer(tx),
+            ) => Ok(Self {
+                observer: Some(tx),
+                ..self
+            }),
+            Impulse::AddTerminal(
+                _,
+                PlayerSynapse::Action,
+                PlayerTerminal::Action(tx),
+            ) => Ok(Self {
+                action: Some(tx),
+                ..self
+            }),
 
-            MarineMicroSoma::InGame(state) => state.update(msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
-    }
-}
-
-pub struct Init {
-    axon: Axon,
-    interval: u32,
-}
-
-impl Init {
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon, self.interval),
-
-                _ => bail!("unexpected message"),
-            }
-        } else {
-            Ok(MarineMicroSoma::Init(self))
-        }
-    }
-}
-
-pub struct Setup {
-    axon: Axon,
-    interval: u32,
-}
-
-impl Setup {
-    fn setup(axon: Axon, interval: u32) -> Result<MarineMicroSoma> {
-        Ok(MarineMicroSoma::Setup(Setup {
-            axon: axon,
-            interval: interval,
-        }))
-    }
-
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::PlayerSetup(PlayerSetup::Player {
-                            race: Race::Terran,
+            Impulse::Start(_, main_tx, handle) => {
+                handle.spawn(
+                    self.agent
+                        .unwrap()
+                        .wrap(MarineMicroDendrite::new(
+                            self.observer.unwrap(),
+                            self.action.unwrap(),
+                        ))
+                        .or_else(move |e| {
+                            main_tx
+                                .send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
                         }),
-                    )?;
+                );
 
-                    Ok(MarineMicroSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::RequestUpdateInterval) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::UpdateInterval(self.interval),
-                    )?;
-
-                    Ok(MarineMicroSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::GameStarted) => {
-                    InGame::start(self.axon)
-                },
-
-                _ => bail!("unexpected message"),
-            }
-        } else {
-            Ok(MarineMicroSoma::Setup(self))
+                Ok(Self {
+                    agent: None,
+                    observer: None,
+                    action: None,
+                })
+            },
+            _ => bail!("unexpected impulse"),
         }
     }
 }
 
-pub struct InGame {
-    axon: Axon,
+struct MarineMicroDendrite {
+    observer: ObserverTerminal,
+    action: ActionTerminal,
 }
 
-impl InGame {
-    fn start(axon: Axon) -> Result<MarineMicroSoma> {
-        Ok(MarineMicroSoma::InGame(InGame { axon: axon }))
+impl AgentContract for MarineMicroDendrite {
+    type Error = Error;
+
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+        Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Observation(frame)) => {
-                    self.on_frame(frame)
-                },
+    #[async(boxed)]
+    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+        match e {
+            GameEvent::Step => {
+                let observation = await!(self.observer.clone().observe())?;
+            },
+            _ => (),
+        }
 
-                _ => bail!("unexpected message"),
-            }
-        } else {
-            Ok(MarineMicroSoma::InGame(self))
+        Ok(self)
+    }
+}
+
+impl MarineMicroDendrite {
+    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
+        Self {
+            observer: observer,
+            action: action,
         }
     }
-
-    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroSoma> {
-        self.axon
-            .send_req_input(Synapse::Agent, Signal::UpdateComplete)?;
-
-        Ok(MarineMicroSoma::InGame(self))
-    }
 }
 
-quick_main!(|| -> Result<()> {
+quick_main!(|| -> sc2::Result<()> {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -238,24 +228,37 @@ quick_main!(|| -> Result<()> {
         return Ok(());
     }
 
-    let mut organelle =
-        Organelle::new(sc2::MeleeSoma::organelle(sc2::MeleeSettings {
-            launcher: get_launcher_settings(&args)?,
-            players: (
-                sc2::AgentSoma::organelle(MarineMicroSoma::organelle(
+    let mut core = reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let mut organelle = Organelle::new(
+        sc2::MeleeSoma::organelle(
+            sc2::MeleeSettings {
+                launcher: get_launcher_settings(&args)?,
+                players: (
+                    sc2::AgentSoma::organelle(
+                        MarineMicroSoma::axon()?,
+                        handle.clone(),
+                    )?,
+                    sc2::ComputerSoma::axon(Race::Zerg, Difficulty::VeryEasy)?,
+                ),
+                suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
+                update_scheme: UpdateScheme::Interval(
                     args.flag_step_size.unwrap_or(1),
-                )?)?,
-                sc2::ComputerSoma::sheath(
-                    sc2::Race::Zerg,
-                    sc2::Difficulty::VeryEasy,
-                )?,
-            ),
-            suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
-        })?);
+                ),
+            },
+            handle.clone(),
+        )?,
+        handle.clone(),
+    );
 
-    organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+    organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
+    organelle.add_soma(visualizer::Soma::organelle(
+        visualizer::Settings::default(),
+        handle.clone(),
+    )?);
 
-    organelle.run()?;
+    core.run(organelle.run(handle))?;
 
     Ok(())
 });

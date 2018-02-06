@@ -109,6 +109,9 @@ pub enum GameEvent {
     NydusWormsDetected(u32),
     /// number of nukes launched
     NukesDetected(u32),
+
+    /// step the agent or observer
+    Step,
 }
 
 /// current state of the map
