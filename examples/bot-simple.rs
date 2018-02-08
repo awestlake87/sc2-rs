@@ -23,12 +23,12 @@ use docopt::Docopt;
 use futures::prelude::*;
 use rand::random;
 use sc2::{
-    Agent,
     AgentControl,
     Error,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
+    Player,
     Result,
 };
 use sc2::data::{
@@ -108,7 +108,7 @@ struct SimpleBot {
     restarts: u32,
 }
 
-impl Agent for SimpleBot {
+impl Player for SimpleBot {
     type Error = Error;
 
     #[async(boxed)]
@@ -194,7 +194,7 @@ quick_main!(|| -> sc2::Result<()> {
             .handle(handle.clone())
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .suite(sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?))
+        .repeat_forever(get_game_settings(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)

@@ -14,9 +14,17 @@ use launcher::{Launcher, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// empty trait to prevent users from passing their own somas to MeleeBuilder
-pub trait MeleeCompetitor {}
+pub trait MeleeCompetitor {
+    type Soma: Soma + 'static;
 
-pub struct MeleeBuilder<P1: Soma + 'static, P2: Soma + 'static> {
+    fn into_soma(self) -> Self::Soma;
+}
+
+/// build a Melee coordinator
+pub struct MeleeBuilder<
+    P1: MeleeCompetitor + 'static,
+    P2: MeleeCompetitor + 'static,
+> {
     players: (P1, P2),
     launcher: Option<Launcher>,
     suite: Option<MeleeSuite>,
@@ -27,8 +35,8 @@ pub struct MeleeBuilder<P1: Soma + 'static, P2: Soma + 'static> {
 
 impl<P1, P2> MeleeBuilder<P1, P2>
 where
-    P1: Soma + MeleeCompetitor + 'static,
-    P2: Soma + MeleeCompetitor + 'static,
+    P1: MeleeCompetitor + 'static,
+    P2: MeleeCompetitor + 'static,
 {
     /// start building a melee soma with the given agent or computer somas
     pub fn new(player1: P1, player2: P2) -> Self {
@@ -51,10 +59,18 @@ where
         }
     }
 
-    /// the suite of games to choose from
-    pub fn suite(self, suite: MeleeSuite) -> Self {
+    /// play one game with the given settings
+    pub fn one_and_done(self, game: GameSettings) -> Self {
         Self {
-            suite: Some(suite),
+            suite: Some(MeleeSuite::OneAndDone(game)),
+            ..self
+        }
+    }
+
+    /// keep restarting game with the given settings
+    pub fn repeat_forever(self, game: GameSettings) -> Self {
+        Self {
+            suite: Some(MeleeSuite::EndlessRepeat(game)),
             ..self
         }
     }
@@ -86,22 +102,25 @@ where
         }
     }
 
+    /// build the melee coordinator
     pub fn create(self) -> Result<Melee>
     where
-        P1: Soma,
-        P2: Soma,
+        P1::Soma: Soma,
+        P2::Soma: Soma,
 
-        P1::Synapse: From<Synapse> + Into<Synapse>,
-        P2::Synapse: From<Synapse> + Into<Synapse>,
+        <P1::Soma as Soma>::Synapse: organelle::Synapse,
+        <P2::Soma as Soma>::Synapse: organelle::Synapse,
 
-        <P1::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+        <P1::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
+        <P2::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
+
+        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
             + Into<Terminal>,
-        <P1::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
-
-        <P2::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <P2::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
         if self.launcher.is_none() {
@@ -124,8 +143,8 @@ where
 
         let melee = organelle.nucleus();
 
-        let player1 = organelle.add_soma(self.players.0);
-        let player2 = organelle.add_soma(self.players.1);
+        let player1 = organelle.add_soma(self.players.0.into_soma());
+        let player2 = organelle.add_soma(self.players.1.into_soma());
 
         if self.break_on_ctrlc {
             organelle.add_soma(CtrlcBreakerSoma::axon());
@@ -143,6 +162,7 @@ where
     }
 }
 
+/// coordinates matches between the given players
 pub struct Melee {
     handle: reactor::Handle,
     organelle: Organelle<Axon<MeleeSoma>>,
@@ -161,8 +181,7 @@ impl IntoFuture for Melee {
 }
 
 /// suite of games to choose from when pitting bots against each other
-pub enum MeleeSuite {
-    /// play one game with the given settings
+enum MeleeSuite {
     OneAndDone(GameSettings),
     /// repeat this game indefinitely
     EndlessRepeat(GameSettings),

@@ -16,16 +16,19 @@ use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
+/// controls given to an agent
 pub struct AgentControl {
     observer: ObserverTerminal,
     action: ActionTerminal,
 }
 
 impl AgentControl {
+    /// observe the game data and current state
     pub fn observer(&self) -> ObserverTerminal {
         self.observer.clone()
     }
 
+    /// dispatch commands and debug commands to the game instance
     pub fn action(&self) -> ActionTerminal {
         self.action.clone()
     }
@@ -33,7 +36,7 @@ impl AgentControl {
 
 pub struct AgentWrapper<T, F>
 where
-    T: Agent + 'static,
+    T: Player + 'static,
     F: FnOnce(AgentControl) -> T,
 {
     agent: Option<AgentDendrite>,
@@ -45,7 +48,7 @@ where
 
 impl<T, F> Soma for AgentWrapper<T, F>
 where
-    T: Agent + 'static,
+    T: Player + 'static,
     F: FnOnce(AgentControl) -> T + 'static,
 {
     type Synapse = Synapse;
@@ -106,7 +109,7 @@ where
 
 impl<T, F> AgentWrapper<T, F>
 where
-    T: Agent + 'static,
+    T: Player + 'static,
     F: FnOnce(AgentControl) -> T + 'static,
 {
     fn new(factory: F) -> Self {
@@ -145,7 +148,7 @@ impl<T: Soma + 'static> AgentBuilder<T> {
     }
 
     /// create the agent
-    pub fn create(self) -> Result<Organelle<Axon<AgentSoma>>>
+    pub fn create(self) -> Result<Agent>
     where
         T::Synapse: From<Synapse> + Into<Synapse>,
         <T::Synapse as organelle::Synapse>::Terminal: From<Terminal>
@@ -179,23 +182,34 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         organelle.connect(player, observer, Synapse::Observer)?;
         organelle.connect(player, action, Synapse::Action)?;
 
-        Ok(organelle)
+        Ok(Agent { 0: organelle })
     }
 }
 
-impl MeleeCompetitor for Organelle<Axon<AgentSoma>> {}
-
 impl<T, F> AgentBuilder<AgentWrapper<T, F>>
 where
-    T: Agent + 'static,
+    T: Player + 'static,
     F: FnOnce(AgentControl) -> T,
 {
-    /// wrap a factory to be called with the agent controls when it is ready
+    /// wrap a factory to be called with the agent controls when ready
     pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
         AgentBuilder::<AgentWrapper<T, F>> {
             soma: AgentWrapper::new(factory),
             handle: None,
         }
+    }
+}
+
+/// a wrapper around a player to mediate interactions with game instance
+///
+/// exposes internal sc2 interfaces to players
+pub struct Agent(Organelle<Axon<AgentSoma>>);
+
+impl MeleeCompetitor for Agent {
+    type Soma = Organelle<Axon<AgentSoma>>;
+
+    fn into_soma(self) -> Self::Soma {
+        self.0
     }
 }
 
@@ -516,7 +530,7 @@ impl AgentTerminal {
 }
 
 /// contract for a player soma to obey
-pub trait Agent: Sized {
+pub trait Player: Sized {
     /// the type of error that can occur upon failure
     type Error: std::error::Error + Send + Into<Error>;
 
@@ -548,7 +562,7 @@ impl AgentDendrite {
     /// wrap a struct that obeys the agent contract and forward requests to
     /// it
     #[async]
-    pub fn wrap<T: Agent + 'static>(self, mut player: T) -> Result<()> {
+    pub fn wrap<T: Player + 'static>(self, mut player: T) -> Result<()> {
         #[async]
         for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
             match req {

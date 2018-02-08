@@ -14,26 +14,27 @@ use data::{
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
 use synapses::{Dendrite, Synapse};
 
+/// build a built-in AI opponent
 pub struct ComputerBuilder {
-    race: Option<Race>,
+    race: Race,
     difficulty: Difficulty,
 }
 
 impl ComputerBuilder {
+    /// create the builder
     pub fn new() -> Self {
         Self {
-            race: None,
+            race: Race::Random,
             difficulty: Difficulty::Medium,
         }
     }
 
+    /// set the race of the AI (default is Random)
     pub fn race(self, race: Race) -> Self {
-        Self {
-            race: Some(race),
-            ..self
-        }
+        Self { race: race, ..self }
     }
 
+    /// set the difficulty of the AI (default is Medium)
     pub fn difficulty(self, difficulty: Difficulty) -> Self {
         Self {
             difficulty: difficulty,
@@ -41,26 +42,32 @@ impl ComputerBuilder {
         }
     }
 
-    pub fn create(self) -> Result<Axon<ComputerSoma>> {
-        if self.race.is_none() {
-            bail!("built-in AI requires race")
-        }
-
-        Ok(ComputerSoma::axon(self.race.unwrap(), self.difficulty)?)
+    /// build the built-in AI
+    pub fn create(self) -> Result<Computer> {
+        Ok(Computer {
+            0: ComputerSoma::axon(self.race, self.difficulty)?,
+        })
     }
 }
 
-impl MeleeCompetitor for Axon<ComputerSoma> {}
+impl MeleeCompetitor for Computer {
+    type Soma = Axon<ComputerSoma>;
+
+    fn into_soma(self) -> Self::Soma {
+        self.0
+    }
+}
 
 /// a built-in AI opponent soma
+pub struct Computer(Axon<ComputerSoma>);
+
 pub struct ComputerSoma {
     setup: PlayerSetup,
     melee: Option<MeleeDendrite>,
 }
 
 impl ComputerSoma {
-    /// create a built-in AI to fight
-    pub fn axon(race: Race, difficulty: Difficulty) -> Result<Axon<Self>> {
+    fn axon(race: Race, difficulty: Difficulty) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 setup: PlayerSetup::Computer {

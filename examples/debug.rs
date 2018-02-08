@@ -21,13 +21,12 @@ use std::path::PathBuf;
 use docopt::Docopt;
 use futures::prelude::*;
 use sc2::{
-    Agent,
     AgentControl,
     Error,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
-    MeleeSuite,
+    Player,
     Result,
 };
 use sc2::data::{
@@ -104,7 +103,7 @@ struct DebugBot {
     control: AgentControl,
 }
 
-impl Agent for DebugBot {
+impl Player for DebugBot {
     type Error = Error;
 
     #[async(boxed)]
@@ -182,7 +181,7 @@ quick_main!(|| -> sc2::Result<()> {
             .difficulty(Difficulty::VeryEasy)
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .suite(MeleeSuite::OneAndDone(get_game_settings(&args)?))
+        .one_and_done(get_game_settings(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle.clone())

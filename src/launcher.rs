@@ -78,6 +78,7 @@ pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
     (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
 }
 
+/// launches game instances upon request
 pub struct Launcher {
     exe: PathBuf,
     pwd: Option<PathBuf>,
@@ -85,7 +86,7 @@ pub struct Launcher {
     use_wine: bool,
 }
 
-/// builder used to create launcher settings
+/// builder used to create launcher
 pub struct LauncherBuilder {
     dir: Option<PathBuf>,
     use_wine: bool,
