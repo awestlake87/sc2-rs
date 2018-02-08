@@ -23,10 +23,25 @@ use synapses::{
     Terminal,
 };
 
+pub struct AgentControl {
+    observer: ObserverTerminal,
+    action: ActionTerminal,
+}
+
+impl AgentControl {
+    pub fn observer(&self) -> ObserverTerminal {
+        self.observer.clone()
+    }
+
+    pub fn action(&self) -> ActionTerminal {
+        self.action.clone()
+    }
+}
+
 pub struct AgentWrapper<T, F>
 where
     T: Agent + 'static,
-    F: FnMut(ObserverTerminal, ActionTerminal) -> T,
+    F: FnOnce(AgentControl) -> T,
 {
     agent: Option<AgentDendrite>,
     observer: Option<ObserverTerminal>,
@@ -38,7 +53,7 @@ where
 impl<T, F> Soma for AgentWrapper<T, F>
 where
     T: Agent + 'static,
-    F: FnMut(ObserverTerminal, ActionTerminal) -> T + 'static,
+    F: FnOnce(AgentControl) -> T + 'static,
 {
     type Synapse = Synapse;
     type Error = Error;
@@ -71,10 +86,10 @@ where
                 handle.spawn(
                     self.agent
                         .unwrap()
-                        .wrap(self.factory.unwrap()(
-                            self.observer.unwrap(),
-                            self.action.unwrap(),
-                        ))
+                        .wrap(self.factory.unwrap()(AgentControl {
+                            observer: self.observer.unwrap(),
+                            action: self.action.unwrap(),
+                        }))
                         .or_else(move |e| {
                             main_tx
                                 .send(Impulse::Error(e.into()))
@@ -99,7 +114,7 @@ where
 impl<T, F> AgentWrapper<T, F>
 where
     T: Agent + 'static,
-    F: FnMut(ObserverTerminal, ActionTerminal) -> T + 'static,
+    F: FnOnce(AgentControl) -> T + 'static,
 {
     fn new(factory: F) -> Self {
         Self {
@@ -158,7 +173,7 @@ impl<T: Soma + 'static> AgentBuilder<T> {
 impl<T, F> AgentBuilder<AgentWrapper<T, F>>
 where
     T: Agent + 'static,
-    F: FnMut(ObserverTerminal, ActionTerminal) -> T,
+    F: FnOnce(AgentControl) -> T,
 {
     pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
         AgentBuilder::<AgentWrapper<T, F>> {

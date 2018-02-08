@@ -17,44 +17,26 @@ extern crate tokio_core;
 extern crate sc2;
 
 use std::f32;
-use std::mem;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
+use organelle::{visualizer, Soma};
 use rand::random;
-use sc2::{
-    ActionTerminal,
-    Agent,
-    AgentDendrite,
-    Error,
-    LauncherSettings,
-    MeleeBuilder,
-    ObserverTerminal,
-    PlayerDendrite,
-    PlayerSynapse,
-    PlayerTerminal,
-    Result,
-};
+use sc2::{Agent, AgentControl, Error, LauncherSettings, MeleeBuilder, Result};
 use sc2::data::{
     Ability,
     ActionTarget,
     Alliance,
     Command,
-    Difficulty,
     GameEvent,
     GameSettings,
     Map,
     MapInfo,
-    Observation,
     PlayerSetup,
     Point2,
     Race,
-    Unit,
     UpdateScheme,
-    Vector2,
 };
 use tokio_core::reactor;
 
@@ -117,8 +99,7 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 }
 
 struct SimpleBot {
-    observer: ObserverTerminal,
-    action: ActionTerminal,
+    control: AgentControl,
 
     restarts: u32,
 }
@@ -145,10 +126,9 @@ impl Agent for SimpleBot {
 }
 
 impl SimpleBot {
-    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
+    fn new(control: AgentControl) -> Self {
         Self {
-            observer: observer,
-            action: action,
+            control: control,
 
             restarts: 0,
         }
@@ -156,8 +136,8 @@ impl SimpleBot {
 
     #[async]
     fn on_step(self) -> Result<Self> {
-        let observation = await!(self.observer.clone().observe())?;
-        let map_info = await!(self.observer.clone().get_map_info())?;
+        let observation = await!(self.control.observer().observe())?;
+        let map_info = await!(self.control.observer().get_map_info())?;
 
         let step = observation.current_step;
 
@@ -167,7 +147,7 @@ impl SimpleBot {
 
             for u in units {
                 let target = find_random_location(&map_info);
-                await!(self.action.clone().send_command(Command::Action {
+                await!(self.control.action().send_command(Command::Action {
                     units: vec![u],
                     ability: Ability::Smart,
                     target: Some(ActionTarget::Location(target)),
@@ -203,12 +183,10 @@ quick_main!(|| -> sc2::Result<()> {
     let handle = core.handle();
 
     let mut organelle = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|observer, action| {
-            SimpleBot::new(observer, action)
-        }).create(handle.clone())?,
-        sc2::AgentBuilder::factory(|observer, action| {
-            SimpleBot::new(observer, action)
-        }).create(handle.clone())?,
+        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
+            .create(handle.clone())?,
+        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
+            .create(handle.clone())?,
     ).launcher_settings(get_launcher_settings(&args)?)
         .suite(sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?))
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))

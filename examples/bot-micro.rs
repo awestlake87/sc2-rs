@@ -23,19 +23,14 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
+use organelle::{visualizer, Soma};
 use sc2::{
-    ActionTerminal,
     Agent,
-    AgentDendrite,
+    AgentControl,
     Error,
     LauncherSettings,
     MeleeBuilder,
     MeleeSuite,
-    ObserverTerminal,
-    PlayerDendrite,
-    PlayerSynapse,
-    PlayerTerminal,
     Result,
 };
 use sc2::data::{
@@ -116,8 +111,7 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 }
 
 struct MarineMicroBot {
-    observer: ObserverTerminal,
-    action: ActionTerminal,
+    control: AgentControl,
 
     targeted_zergling: Option<Rc<Unit>>,
     move_back: bool,
@@ -152,10 +146,9 @@ impl Agent for MarineMicroBot {
 }
 
 impl MarineMicroBot {
-    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
+    fn new(control: AgentControl) -> Self {
         Self {
-            observer: observer,
-            action: action,
+            control: control,
 
             targeted_zergling: None,
             move_back: false,
@@ -166,7 +159,7 @@ impl MarineMicroBot {
 
     #[async]
     fn on_step(mut self) -> Result<Self> {
-        let observation = await!(self.observer.clone().observe())?;
+        let observation = await!(self.control.observer().observe())?;
 
         let marines =
             observation.filter_units(|u| u.alliance == Alliance::Domestic);
@@ -180,14 +173,14 @@ impl MarineMicroBot {
 
         if let Some(zergling) = self.targeted_zergling.clone() {
             if !self.move_back {
-                await!(self.action.clone().send_command(Command::Action {
+                await!(self.control.action().send_command(Command::Action {
                     units: marines,
                     ability: Ability::Attack,
                     target: Some(ActionTarget::UnitTag(zergling.tag)),
                 }))?;
             } else {
                 if let Some(backup_target) = self.backup_target {
-                    await!(self.action.clone().send_command(
+                    await!(self.control.action().send_command(
                         Command::Action {
                             units: marines,
                             ability: Ability::Smart,
@@ -207,7 +200,7 @@ impl MarineMicroBot {
 
     #[async]
     fn on_unit_destroyed(mut self, unit: Rc<Unit>) -> Result<Self> {
-        let observation = await!(self.observer.clone().observe())?;
+        let observation = await!(self.control.observer().observe())?;
 
         if let Some(targeted_zergling) =
             mem::replace(&mut self.targeted_zergling, None)
@@ -288,9 +281,8 @@ quick_main!(|| -> sc2::Result<()> {
     let handle = core.handle();
 
     let mut organelle = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|observer, action| {
-            MarineMicroBot::new(observer, action)
-        }).create(handle.clone())?,
+        sc2::AgentBuilder::factory(|control| MarineMicroBot::new(control))
+            .create(handle.clone())?,
         sc2::ComputerSoma::axon(Race::Zerg, Difficulty::VeryEasy)?,
     ).launcher_settings(get_launcher_settings(&args)?)
         .suite(MeleeSuite::OneAndDone(get_game_settings(&args)?))

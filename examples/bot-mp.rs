@@ -20,21 +20,9 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
+use organelle::{visualizer, Soma};
 use rand::random;
-use sc2::{
-    ActionTerminal,
-    Agent,
-    AgentDendrite,
-    Error,
-    LauncherSettings,
-    MeleeBuilder,
-    ObserverTerminal,
-    PlayerDendrite,
-    PlayerSynapse,
-    PlayerTerminal,
-    Result,
-};
+use sc2::{Agent, AgentControl, Error, LauncherSettings, MeleeBuilder, Result};
 use sc2::data::{
     Ability,
     ActionTarget,
@@ -116,8 +104,7 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
 }
 
 struct TerranBot {
-    observer: ObserverTerminal,
-    action: ActionTerminal,
+    control: AgentControl,
 }
 
 impl Agent for TerranBot {
@@ -132,7 +119,7 @@ impl Agent for TerranBot {
     fn on_event(mut self, e: GameEvent) -> Result<Self> {
         match e {
             GameEvent::Step => {
-                let observation = await!(self.observer.clone().observe())?;
+                let observation = await!(self.control.observer().observe())?;
 
                 self =
                     await!(self.scout_with_marines(Rc::clone(&observation)))?;
@@ -153,11 +140,8 @@ impl Agent for TerranBot {
 }
 
 impl TerranBot {
-    fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
-        Self {
-            observer: observer,
-            action: action,
-        }
+    fn new(control: AgentControl) -> Self {
+        Self { control: control }
     }
 
     fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
@@ -186,7 +170,7 @@ impl TerranBot {
 
     #[async]
     fn scout_with_marines(self, observation: Rc<Observation>) -> Result<Self> {
-        let map_info = await!(self.observer.clone().get_map_info())?;
+        let map_info = await!(self.control.observer().get_map_info())?;
 
         let units = observation.filter_units(|u| {
             u.alliance == Alliance::Domestic
@@ -197,7 +181,7 @@ impl TerranBot {
         for u in units {
             match self.find_enemy_structure(&*observation) {
                 Some(enemy_tag) => {
-                    await!(self.action.clone().send_command(
+                    await!(self.control.action().send_command(
                         Command::Action {
                             units: vec![Rc::clone(&u)],
                             ability: Ability::Attack,
@@ -212,7 +196,7 @@ impl TerranBot {
 
             match self.find_enemy_pos(&*map_info) {
                 Some(target_pos) => {
-                    await!(self.action.clone().send_command(
+                    await!(self.control.action().send_command(
                         Command::Action {
                             units: vec![Rc::clone(&u)],
                             ability: Ability::Smart,
@@ -303,7 +287,7 @@ impl TerranBot {
         if units.is_empty() {
             Ok(self)
         } else {
-            await!(self.action.clone().send_command(Command::Action {
+            await!(self.control.action().send_command(Command::Action {
                 units: vec![Rc::clone(&units[0])],
                 ability: ability,
                 target: None,
@@ -335,7 +319,7 @@ impl TerranBot {
 
             let u = random::<usize>() % units.len();
 
-            await!(self.action.clone().send_command(Command::Action {
+            await!(self.control.action().send_command(Command::Action {
                 units: vec![Rc::clone(&units[u])],
                 ability: ability,
                 target: Some(ActionTarget::Location(
@@ -364,12 +348,10 @@ quick_main!(|| -> sc2::Result<()> {
     let handle = core.handle();
 
     let mut organelle = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|observer, action| {
-            TerranBot::new(observer, action)
-        }).create(handle.clone())?,
-        sc2::AgentBuilder::factory(|observer, action| {
-            TerranBot::new(observer, action)
-        }).create(handle.clone())?,
+        sc2::AgentBuilder::factory(|control| TerranBot::new(control))
+            .create(handle.clone())?,
+        sc2::AgentBuilder::factory(|control| TerranBot::new(control))
+            .create(handle.clone())?,
     ).launcher_settings(get_launcher_settings(&args)?)
         .suite(sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?))
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
