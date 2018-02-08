@@ -66,6 +66,13 @@ pub struct Rect2 {
     pub to: Point2,
 }
 
+impl Rect2 {
+    /// returns the width and height of the rectangle
+    pub fn get_dimensions(&self) -> (f32, f32) {
+        (self.to.x - self.from.x, self.to.y - self.from.y)
+    }
+}
+
 /// 2D integer point used to specify a location
 pub type Point2I = na::Vector2<i32>;
 /// 3D integer point used to specify a location

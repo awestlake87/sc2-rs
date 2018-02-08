@@ -37,6 +37,11 @@ name = "bot-mp"
 crate-type = ["bin"]
 path = "examples/bot-mp.rs"
 
+[[example]]
+name = "bot-simple"
+crate-type = ["bin"]
+path = "examples/bot-simple.rs"
+
 [dev-dependencies]
 docopt = "0"
 serde = "1"
