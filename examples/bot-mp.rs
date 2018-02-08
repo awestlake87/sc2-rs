@@ -242,7 +242,7 @@ impl TerranDendrite {
     }
 
     fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
-        let units = observation.state.filter_units(|u| {
+        let units = observation.filter_units(|u| {
             u.alliance == Alliance::Enemy
                 && (u.unit_type == UnitType::TerranCommandCenter
                     || u.unit_type == UnitType::TerranSupplyDepot
@@ -269,7 +269,7 @@ impl TerranDendrite {
     fn scout_with_marines(self, observation: Rc<Observation>) -> Result<Self> {
         let map_info = await!(self.observer.clone().get_map_info())?;
 
-        let units = observation.state.filter_units(|u| {
+        let units = observation.filter_units(|u| {
             u.alliance == Alliance::Domestic
                 && u.unit_type == UnitType::TerranMarine
                 && u.orders.is_empty()
@@ -316,7 +316,7 @@ impl TerranDendrite {
         observation: Rc<Observation>,
     ) -> Result<Self> {
         // if we are not supply capped, don't build a supply depot
-        if observation.state.food_used + 2 <= observation.state.food_cap {
+        if observation.food_used + 2 <= observation.food_cap {
             return Ok(self);
         }
 
@@ -327,7 +327,6 @@ impl TerranDendrite {
     #[async]
     fn try_build_scv(self, observation: Rc<Observation>) -> Result<Self> {
         let scv_count = observation
-            .state
             .filter_units(|u| u.unit_type == UnitType::TerranScv)
             .len();
 
@@ -345,7 +344,6 @@ impl TerranDendrite {
     #[async]
     fn try_build_barracks(self, observation: Rc<Observation>) -> Result<Self> {
         let scv_count = observation
-            .state
             .filter_units(|u| u.unit_type == UnitType::TerranScv)
             .len();
         // wait until we have our quota of SCVs
@@ -354,7 +352,6 @@ impl TerranDendrite {
         }
 
         let barracks_count = observation
-            .state
             .filter_units(|u| u.unit_type == UnitType::TerranBarracks)
             .len();
 
@@ -382,7 +379,6 @@ impl TerranDendrite {
         unit_type: UnitType,
     ) -> Result<Self> {
         let units = observation
-            .state
             .filter_units(|u| u.unit_type == unit_type && u.orders.is_empty());
 
         if units.is_empty() {
@@ -403,9 +399,8 @@ impl TerranDendrite {
         observation: Rc<Observation>,
         ability: Ability,
     ) -> Result<Self> {
-        let units = observation
-            .state
-            .filter_units(|u| u.alliance == Alliance::Domestic);
+        let units =
+            observation.filter_units(|u| u.alliance == Alliance::Domestic);
 
         // if a unit is already building this structure, do nothing
         for u in &units {
@@ -425,7 +420,7 @@ impl TerranDendrite {
                 units: vec![Rc::clone(&units[u])],
                 ability: ability,
                 target: Some(ActionTarget::Location(
-                    Point2::new(units[u].pos.x, units[u].pos.y) + r * 5.0,
+                    units[u].get_pos_2d() + r * 5.0,
                 )),
             }))?;
 

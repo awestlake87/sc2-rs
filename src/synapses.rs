@@ -244,7 +244,10 @@ impl From<Synapse> for PlayerSynapse {
             Synapse::Agent => PlayerSynapse::Agent,
             Synapse::Observer => PlayerSynapse::Observer,
             Synapse::Action => PlayerSynapse::Action,
-            _ => panic!("invalid conversion from internal sc2 synapse"),
+            _ => panic!(
+                "invalid conversion from internal sc2 synapse {:?}",
+                synapse
+            ),
         }
     }
 }

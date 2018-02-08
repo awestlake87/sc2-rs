@@ -1,15 +1,23 @@
 use futures::prelude::*;
 use organelle::{Axon, Constraint, Impulse, Soma};
+use url::Url;
 
 use super::{Error, Result};
-use agent::{AgentContract, AgentDendrite};
-use data::{Difficulty, GameSettings, PlayerSetup, Race};
-use synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
+use data::{
+    Difficulty,
+    GamePorts,
+    GameSettings,
+    PlayerSetup,
+    Race,
+    UpdateScheme,
+};
+use melee::{MeleeContract, MeleeDendrite};
+use synapses::{Dendrite, Synapse, Terminal};
 
 /// a built-in AI opponent soma
 pub struct ComputerSoma {
     setup: PlayerSetup,
-    agent: Option<AgentDendrite>,
+    melee: Option<MeleeDendrite>,
 }
 
 impl ComputerSoma {
@@ -21,47 +29,32 @@ impl ComputerSoma {
                     race: race,
                     difficulty: difficulty,
                 },
-                agent: None,
+                melee: None,
             },
-            vec![Constraint::One(PlayerSynapse::Agent)],
-            vec![
-                Constraint::One(PlayerSynapse::Observer),
-                Constraint::One(PlayerSynapse::Action),
-            ],
+            vec![Constraint::One(Synapse::Melee)],
+            vec![],
         ))
     }
 }
 
 impl Soma for ComputerSoma {
-    type Synapse = PlayerSynapse;
+    type Synapse = Synapse;
     type Error = Error;
 
     #[async(boxed)]
     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddDendrite(
-                _,
-                PlayerSynapse::Agent,
-                PlayerDendrite::Agent(agent),
-            ) => Ok(Self {
-                agent: Some(agent),
+            Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(melee)) => {
+                Ok(Self {
+                    melee: Some(melee),
 
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Observer,
-                PlayerTerminal::Observer(_),
-            )
-            | Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Action,
-                PlayerTerminal::Action(_),
-            ) => Ok(self),
+                    ..self
+                })
+            },
 
             Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
-                    self.agent
+                    self.melee
                         .unwrap()
                         .wrap(ComputerDendrite::new(self.setup))
                         .or_else(move |e| {
@@ -73,7 +66,7 @@ impl Soma for ComputerSoma {
                 );
 
                 Ok(Self {
-                    agent: None,
+                    melee: None,
                     ..self
                 })
             },
@@ -86,13 +79,36 @@ struct ComputerDendrite {
     setup: PlayerSetup,
 }
 
-impl AgentContract for ComputerDendrite {
+impl MeleeContract for ComputerDendrite {
     type Error = Error;
 
     #[async(boxed)]
     fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
         let setup = self.setup;
         Ok((self, setup))
+    }
+    /// connect to an instance
+    #[async(boxed)]
+    fn connect(self, _: Url) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// create a game
+    #[async(boxed)]
+    fn create_game(self, _: GameSettings, _: Vec<PlayerSetup>) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// join a game
+    #[async(boxed)]
+    fn join_game(self, _: PlayerSetup, _: Option<GamePorts>) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// run the game
+    #[async(boxed)]
+    fn run_game(self, _: UpdateScheme) -> Result<Self> {
+        Ok(self)
     }
 }
 

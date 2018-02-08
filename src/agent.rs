@@ -1,5 +1,4 @@
 use std;
-use std::rc::Rc;
 
 use futures::future;
 use futures::prelude::*;
@@ -12,16 +11,7 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::ActionSoma;
 use client::{ClientSoma, ClientTerminal};
-use data::{
-    GameEvent,
-    GamePorts,
-    GameSettings,
-    Map,
-    PlayerSetup,
-    Unit,
-    UpdateScheme,
-    Upgrade,
-};
+use data::{GameEvent, GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
 use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma};
 use synapses::{Dendrite, Synapse, Terminal};
@@ -278,6 +268,8 @@ impl MeleeContract for AgentMeleeDendrite {
 
         await!(self.client.clone().request(req))?;
 
+        await!(self.agent.clone().handle_event(GameEvent::GameLoaded))?;
+
         Ok(self)
     }
 
@@ -285,25 +277,31 @@ impl MeleeContract for AgentMeleeDendrite {
     fn run_game(self, update_scheme: UpdateScheme) -> Result<Self> {
         await!(self.observer.clone().reset())?;
 
-        let agent = self.agent.clone();
+        await!(self.agent.clone().handle_event(GameEvent::GameStarted))?;
 
         loop {
             match update_scheme {
-                UpdateScheme::Realtime => unimplemented!(),
+                UpdateScheme::Realtime => (),
                 UpdateScheme::Interval(interval) => {
                     let mut req = sc2api::Request::new();
                     req.mut_step().set_count(interval);
 
-                    let rsp = await!(self.client.clone().request(req))?;
-
-                    if rsp.get_status() != sc2api::Status::in_game {
-                        break;
-                    }
+                    await!(self.client.clone().request(req))?;
                 },
             }
 
-            await!(self.observer.clone().step())?;
+            let (events, game_ended) = await!(self.observer.clone().step())?;
+
+            for e in events {
+                await!(self.agent.clone().handle_event(e))?;
+            }
+
             await!(self.agent.clone().handle_event(GameEvent::Step))?;
+
+            if game_ended {
+                await!(self.agent.clone().handle_event(GameEvent::GameEnded))?;
+                break;
+            }
         }
 
         Ok(self)
@@ -367,7 +365,7 @@ pub trait AgentContract: Sized {
     /// Called whenever the agent needs to handle a game event
     fn on_event(
         self,
-        e: GameEvent,
+        _e: GameEvent,
     ) -> Box<Future<Item = Self, Error = Self::Error>>
     where
         Self: 'static,

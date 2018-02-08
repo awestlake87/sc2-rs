@@ -14,9 +14,7 @@ use data::{
     Alliance,
     DisplayType,
     GameEvent,
-    GameState,
     MapInfo,
-    MapState,
     Observation,
     Point2,
     SpatialAction,
@@ -188,20 +186,18 @@ impl ObserverTask {
                         .map_err(|_| Error::from("unable to ack reset"))?;
                 },
                 Either::Control(ObserverControlRequest::Step(tx)) => {
-                    // clear observation cache every step
-                    observation = None;
-                    tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
+                    let (observer, new_observation, events, game_ended) =
+                        await!(self.get_observation())?;
+
+                    self = observer;
+                    observation = Some(new_observation);
+
+                    tx.send((events, game_ended))
+                        .map_err(|_| Error::from("unable to ack step"))?;
                 },
 
                 Either::Request(ObserverRequest::Observe(tx)) => {
-                    if observation.is_none() {
-                        let (observer, new_observation) =
-                            await!(self.get_observation())?;
-
-                        self = observer;
-                        observation = Some(new_observation);
-                    }
-
+                    // observation should exist because step should create it
                     tx.send(Rc::clone(observation.as_ref().unwrap()))
                         .map_err(|_| {
                             Error::from("unable to return observation")
@@ -226,7 +222,9 @@ impl ObserverTask {
     }
 
     #[async]
-    fn get_observation(mut self) -> Result<(Self, Rc<Observation>)> {
+    fn get_observation(
+        mut self,
+    ) -> Result<(Self, Rc<Observation>, Vec<GameEvent>, bool)> {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
@@ -263,7 +261,9 @@ impl ObserverTask {
             self.upgrades.insert(Upgrade::from_proto(u)?);
         }
 
-        let new_state = GameState {
+        let mut map_state = raw.take_map_state();
+
+        let new_observation = Rc::from(Observation {
             player_id: player_common.get_player_id(),
             previous_step: self.previous_step,
             current_step: self.current_step,
@@ -297,8 +297,11 @@ impl ObserverTask {
             warp_gate_count: player_common.get_warp_gate_count(),
             larva_count: player_common.get_larva_count(),
 
+            creep: map_state.take_creep().into_sc2()?,
+            visibility: map_state.take_visibility().into_sc2()?,
+
             score: observation.take_score().into_sc2()?,
-        };
+        });
 
         if is_new_frame {
             self.actions.clear();
@@ -419,19 +422,13 @@ impl ObserverTask {
             events.push(GameEvent::NydusWormsDetected(nydus_worms));
         }
 
-        let mut map_state = raw.take_map_state();
+        let game_ended = if rsp.get_status() != sc2api::Status::in_game {
+            true
+        } else {
+            false
+        };
 
-        Ok((
-            self,
-            Rc::from(Observation {
-                state: new_state,
-                events: events,
-                map: MapState {
-                    creep: map_state.take_creep().into_sc2()?,
-                    visibility: map_state.take_visibility().into_sc2()?,
-                },
-            }),
-        ))
+        Ok((self, new_observation, events, game_ended))
     }
 
     #[async]
@@ -450,7 +447,7 @@ impl ObserverTask {
 #[derive(Debug)]
 enum ObserverControlRequest {
     Reset(oneshot::Sender<()>),
-    Step(oneshot::Sender<()>),
+    Step(oneshot::Sender<(Vec<GameEvent>, bool)>),
 }
 
 #[derive(Debug)]
@@ -483,8 +480,9 @@ impl ObserverControlTerminal {
         await!(rx.map_err(|_| Error::from("unable to recv reset ack")))
     }
 
+    /// returns a list of game events that have occurred since last step
     #[async]
-    pub fn step(self) -> Result<()> {
+    pub fn step(self) -> Result<(Vec<GameEvent>, bool)> {
         let (tx, rx) = oneshot::channel();
 
         await!(

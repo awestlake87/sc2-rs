@@ -21,8 +21,7 @@ pub struct Unit {
     /// which player owns this unit
     pub owner: i32,
 
-    /// position of the unit in the world
-    pub pos: Point3,
+    pos: Point3,
     /// direction the unit faces in radians
     pub facing: f32,
     /// radius of the unit
@@ -98,6 +97,16 @@ impl Unit {
     /// mark this unit as dead
     pub fn mark_dead(&mut self) {
         self.is_alive = false;
+    }
+
+    /// position of the unit in the world
+    pub fn get_pos(&self) -> Point3 {
+        self.pos
+    }
+
+    /// just the x and y coordinates of the unit position
+    pub fn get_pos_2d(&self) -> Point2 {
+        Point2::new(self.pos.x, self.pos.y)
     }
 }
 

@@ -8,6 +8,7 @@ extern crate serde_derive;
 extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
+extern crate nalgebra as na;
 extern crate organelle;
 extern crate rand;
 extern crate serde;
@@ -15,7 +16,10 @@ extern crate tokio_core;
 
 extern crate sc2;
 
+use std::f32;
+use std::mem;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
@@ -33,13 +37,21 @@ use sc2::{
     Result,
 };
 use sc2::data::{
+    Ability,
+    ActionTarget,
+    Alliance,
+    Command,
     Difficulty,
     GameEvent,
     GameSettings,
     Map,
+    Observation,
     PlayerSetup,
+    Point2,
     Race,
+    Unit,
     UpdateScheme,
+    Vector2,
 };
 use tokio_core::reactor;
 
@@ -186,6 +198,11 @@ impl Soma for MarineMicroSoma {
 struct MarineMicroDendrite {
     observer: ObserverTerminal,
     action: ActionTerminal,
+
+    targeted_zergling: Option<Rc<Unit>>,
+    move_back: bool,
+    backup_target: Option<Point2>,
+    backup_start: Option<Point2>,
 }
 
 impl AgentContract for MarineMicroDendrite {
@@ -199,13 +216,18 @@ impl AgentContract for MarineMicroDendrite {
     #[async(boxed)]
     fn on_event(mut self, e: GameEvent) -> Result<Self> {
         match e {
-            GameEvent::Step => {
-                let observation = await!(self.observer.clone().observe())?;
-            },
-            _ => (),
-        }
+            GameEvent::GameStarted => {
+                self.move_back = false;
+                self.targeted_zergling = None;
 
-        Ok(self)
+                Ok(self)
+            },
+            GameEvent::UnitDestroyed(unit) => {
+                await!(self.on_unit_destroyed(unit))
+            },
+            GameEvent::Step => await!(self.on_step()),
+            _ => Ok(self),
+        }
     }
 }
 
@@ -214,8 +236,122 @@ impl MarineMicroDendrite {
         Self {
             observer: observer,
             action: action,
+
+            targeted_zergling: None,
+            move_back: false,
+            backup_target: None,
+            backup_start: None,
         }
     }
+
+    #[async]
+    fn on_step(mut self) -> Result<Self> {
+        let observation = await!(self.observer.clone().observe())?;
+
+        let marines =
+            observation.filter_units(|u| u.alliance == Alliance::Domestic);
+
+        let marine_pos = match get_center_of_mass(&marines) {
+            Some(pos) => pos,
+            None => return Ok(self),
+        };
+
+        self.targeted_zergling = get_nearest_enemy(&*observation, marine_pos);
+
+        if let Some(zergling) = self.targeted_zergling.clone() {
+            if !self.move_back {
+                await!(self.action.clone().send_command(Command::Action {
+                    units: marines,
+                    ability: Ability::Attack,
+                    target: Some(ActionTarget::UnitTag(zergling.tag)),
+                }))?;
+            } else {
+                if let Some(backup_target) = self.backup_target {
+                    await!(self.action.clone().send_command(
+                        Command::Action {
+                            units: marines,
+                            ability: Ability::Smart,
+                            target: Some(ActionTarget::Location(backup_target)),
+                        }
+                    ))?;
+
+                    if na::distance(&marine_pos, &backup_target) < 1.5 {
+                        self.move_back = false;
+                    }
+                }
+            }
+        }
+
+        Ok(self)
+    }
+
+    #[async]
+    fn on_unit_destroyed(mut self, unit: Rc<Unit>) -> Result<Self> {
+        let observation = await!(self.observer.clone().observe())?;
+
+        if let Some(targeted_zergling) =
+            mem::replace(&mut self.targeted_zergling, None)
+        {
+            if unit.tag == targeted_zergling.tag {
+                let marines = observation
+                    .filter_units(|u| u.alliance == Alliance::Domestic);
+                let zerglings =
+                    observation.filter_units(|u| u.alliance == Alliance::Enemy);
+
+                let marine_pos = match get_center_of_mass(&marines) {
+                    Some(pos) => pos,
+                    None => return Ok(self),
+                };
+                let zerg_pos = match get_center_of_mass(&zerglings) {
+                    Some(pos) => pos,
+                    None => return Ok(self),
+                };
+
+                let diff = marine_pos - zerg_pos;
+                let direction = na::normalize(&diff);
+
+                self.move_back = true;
+                self.backup_start = Some(marine_pos);
+                self.backup_target = Some(Point2::from_coordinates(
+                    marine_pos.coords + direction * 3.0,
+                ));
+            }
+        }
+        Ok(self)
+    }
+}
+
+fn get_center_of_mass(units: &[Rc<Unit>]) -> Option<Point2> {
+    if units.len() == 0 {
+        None
+    } else {
+        let sum = units
+            .iter()
+            .fold(Vector2::new(0.0, 0.0), |acc, u| acc + u.get_pos_2d().coords);
+
+        Some(Point2::from_coordinates(sum / (units.len() as f32)))
+    }
+}
+
+fn get_nearest_enemy(
+    observation: &Observation,
+    pos: Point2,
+) -> Option<Rc<Unit>> {
+    let units = observation.filter_units(|u| u.alliance == Alliance::Enemy);
+
+    let mut min = f32::MAX;
+    let mut nearest = None;
+
+    for u in units {
+        let d = na::distance_squared(&u.get_pos_2d(), &pos);
+
+        if d < min {
+            min = d;
+            nearest = Some(u);
+        }
+    }
+
+    nearest
 }
 
 quick_main!(|| -> sc2::Result<()> {

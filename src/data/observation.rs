@@ -91,6 +91,13 @@ pub enum DebugCommand {
 /// an event from the game
 #[derive(Debug, Clone)]
 pub enum GameEvent {
+    /// game has loaded - not called for fast restarts
+    GameLoaded,
+    /// game has started
+    GameStarted,
+    /// game has ended
+    GameEnded,
+
     /// a unit was destroyed
     UnitDestroyed(Rc<Unit>),
     /// a unit was created
@@ -114,18 +121,9 @@ pub enum GameEvent {
     Step,
 }
 
-/// current state of the map
-#[derive(Debug, Clone)]
-pub struct MapState {
-    /// creep image (sample pixels to find tiles with creep)
-    pub creep: ImageData,
-    /// visibility image (sample pixels to find visible tiles)
-    pub visibility: ImageData,
-}
-
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
-pub struct GameState {
+pub struct Observation {
     /// the player id associated with the participant
     pub player_id: u32,
     /// the previous game step
@@ -166,11 +164,16 @@ pub struct GameState {
     /// the number of larva owned by the player
     pub larva_count: u32,
 
+    /// creep image (sample pixels to find tiles with creep)
+    pub creep: ImageData,
+    /// visibility image (sample pixels to find visible tiles)
+    pub visibility: ImageData,
+
     /// detailed current set of scores
     pub score: Score,
 }
 
-impl GameState {
+impl Observation {
     /// filter all units based on a custom condition
     pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
     where
@@ -212,15 +215,4 @@ impl GameState {
     pub fn get_terrain_height(&self, _: Point2) -> f32 {
         unimplemented!("get terrain height")
     }
-}
-
-/// the current game state
-#[derive(Debug, Clone)]
-pub struct Observation {
-    /// state that updates every frame
-    pub state: GameState,
-    /// events that have happened since the last update
-    pub events: Vec<GameEvent>,
-    /// current map state
-    pub map: MapState,
 }

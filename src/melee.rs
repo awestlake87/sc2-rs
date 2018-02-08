@@ -253,7 +253,36 @@ fn run_melee(
                 .map_err(|_| Error::from("unable to stop"))
         )?;
     } else {
-        unimplemented!();
+        let (player, computer) = if player1.is_computer() {
+            ((agents.1, player2), (agents.0, player1))
+        } else if player2.is_computer() {
+            ((agents.0, player1), (agents.1, player2))
+        } else {
+            unreachable!()
+        };
+
+        assert!(player.1.is_player() && computer.1.is_computer());
+
+        let instance = await!(launcher.clone().launch())?;
+
+        await!(player.0.clone().connect(instance.get_url()?))?;
+        await!(
+            player
+                .0
+                .clone()
+                .create_game(game.clone(), vec![player.1, computer.1])
+        )?;
+        await!(player.0.clone().join_game(player.1, None))?;
+
+        await!(player.0.clone().run_game(update_scheme))?;
+
+        // just quit for now
+        await!(
+            main_tx
+                .send(Impulse::Stop)
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to stop"))
+        )?;
     }
 
     Ok(())
