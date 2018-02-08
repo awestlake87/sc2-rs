@@ -26,10 +26,12 @@ use futures::prelude::*;
 use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2::{
     ActionTerminal,
-    AgentContract,
+    Agent,
     AgentDendrite,
     Error,
     LauncherSettings,
+    MeleeBuilder,
+    MeleeSuite,
     ObserverTerminal,
     PlayerDendrite,
     PlayerSynapse,
@@ -113,89 +115,7 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     Ok(GameSettings { map: map })
 }
 
-pub struct MarineMicroSoma {
-    agent: Option<AgentDendrite>,
-    observer: Option<ObserverTerminal>,
-    action: Option<ActionTerminal>,
-}
-
-impl MarineMicroSoma {
-    pub fn axon() -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                agent: None,
-                observer: None,
-                action: None,
-            },
-            vec![Constraint::One(PlayerSynapse::Agent)],
-            vec![
-                Constraint::One(PlayerSynapse::Observer),
-                Constraint::One(PlayerSynapse::Action),
-            ],
-        ))
-    }
-}
-
-impl Soma for MarineMicroSoma {
-    type Synapse = PlayerSynapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(
-                _,
-                PlayerSynapse::Agent,
-                PlayerDendrite::Agent(rx),
-            ) => Ok(Self {
-                agent: Some(rx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Observer,
-                PlayerTerminal::Observer(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Action,
-                PlayerTerminal::Action(tx),
-            ) => Ok(Self {
-                action: Some(tx),
-                ..self
-            }),
-
-            Impulse::Start(_, main_tx, handle) => {
-                handle.spawn(
-                    self.agent
-                        .unwrap()
-                        .wrap(MarineMicroDendrite::new(
-                            self.observer.unwrap(),
-                            self.action.unwrap(),
-                        ))
-                        .or_else(move |e| {
-                            main_tx
-                                .send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(Self {
-                    agent: None,
-                    observer: None,
-                    action: None,
-                })
-            },
-            _ => bail!("unexpected impulse"),
-        }
-    }
-}
-
-struct MarineMicroDendrite {
+struct MarineMicroBot {
     observer: ObserverTerminal,
     action: ActionTerminal,
 
@@ -205,7 +125,7 @@ struct MarineMicroDendrite {
     backup_start: Option<Point2>,
 }
 
-impl AgentContract for MarineMicroDendrite {
+impl Agent for MarineMicroBot {
     type Error = Error;
 
     #[async(boxed)]
@@ -231,7 +151,7 @@ impl AgentContract for MarineMicroDendrite {
     }
 }
 
-impl MarineMicroDendrite {
+impl MarineMicroBot {
     fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
         Self {
             observer: observer,
@@ -367,26 +287,15 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut organelle = Organelle::new(
-        sc2::MeleeSoma::organelle(
-            sc2::MeleeSettings {
-                launcher: get_launcher_settings(&args)?,
-                players: (
-                    sc2::AgentSoma::organelle(
-                        MarineMicroSoma::axon()?,
-                        handle.clone(),
-                    )?,
-                    sc2::ComputerSoma::axon(Race::Zerg, Difficulty::VeryEasy)?,
-                ),
-                suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
-                update_scheme: UpdateScheme::Interval(
-                    args.flag_step_size.unwrap_or(1),
-                ),
-            },
-            handle.clone(),
-        )?,
-        handle.clone(),
-    );
+    let mut organelle = MeleeBuilder::new(
+        sc2::AgentBuilder::factory(|observer, action| {
+            MarineMicroBot::new(observer, action)
+        }).create(handle.clone())?,
+        sc2::ComputerSoma::axon(Race::Zerg, Difficulty::VeryEasy)?,
+    ).launcher_settings(get_launcher_settings(&args)?)
+        .suite(MeleeSuite::OneAndDone(get_game_settings(&args)?))
+        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .create(handle.clone())?;
 
     organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
     organelle.add_soma(visualizer::Soma::organelle(

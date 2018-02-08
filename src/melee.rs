@@ -12,24 +12,103 @@ use data::{GamePorts, GameSettings, PlayerSetup, UpdateScheme};
 use launcher::{LauncherSettings, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
+pub struct MeleeBuilder<P1: Soma + 'static, P2: Soma + 'static> {
+    /// the player somas
+    players: (P1, P2),
+    /// the settings for the launcher soma
+    launcher: Option<LauncherSettings>,
+    /// the suite of games to choose from
+    suite: Option<MeleeSuite>,
+    /// the method of updating the game instance
+    update_scheme: UpdateScheme,
+}
+
+impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
+    /// start building a melee soma with the given players
+    pub fn new(player1: P1, player2: P2) -> Self {
+        Self {
+            players: (player1, player2),
+
+            launcher: None,
+            suite: None,
+            update_scheme: UpdateScheme::Realtime,
+        }
+    }
+
+    pub fn launcher_settings(self, settings: LauncherSettings) -> Self {
+        Self {
+            launcher: Some(settings),
+            ..self
+        }
+    }
+
+    pub fn suite(self, suite: MeleeSuite) -> Self {
+        Self {
+            suite: Some(suite),
+            ..self
+        }
+    }
+
+    pub fn update_scheme(self, scheme: UpdateScheme) -> Self {
+        Self {
+            update_scheme: scheme,
+            ..self
+        }
+    }
+
+    pub fn create(
+        self,
+        handle: reactor::Handle,
+    ) -> Result<Organelle<Axon<MeleeSoma>>>
+    where
+        P1: Soma,
+        P2: Soma,
+
+        P1::Synapse: From<Synapse> + Into<Synapse>,
+        P2::Synapse: From<Synapse> + Into<Synapse>,
+
+        <P1::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <P1::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+            + Into<Dendrite>,
+
+        <P2::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <P2::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+            + Into<Dendrite>,
+    {
+        if self.launcher.is_none() || self.suite.is_none() {
+            bail!("missing required setting")
+        }
+
+        let mut organelle = Organelle::new(
+            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme)?,
+            handle,
+        );
+
+        let launcher =
+            organelle.add_soma(LauncherSoma::axon(self.launcher.unwrap())?);
+
+        let melee = organelle.nucleus();
+
+        let player1 = organelle.add_soma(self.players.0);
+        let player2 = organelle.add_soma(self.players.1);
+
+        organelle.connect(melee, launcher, Synapse::Launcher)?;
+
+        organelle.connect(melee, player1, Synapse::Melee)?;
+        organelle.connect(melee, player2, Synapse::Melee)?;
+
+        Ok(organelle)
+    }
+}
+
 /// suite of games to choose from when pitting bots against each other
 pub enum MeleeSuite {
     /// play one game with the given settings
     OneAndDone(GameSettings),
     /// repeat this game indefinitely
     EndlessRepeat(GameSettings),
-}
-
-/// settings for the melee soma
-pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
-    /// the settings for the launcher soma
-    pub launcher: LauncherSettings,
-    /// the player organelles
-    pub players: (L1, L2),
-    /// the suite of games to choose from
-    pub suite: MeleeSuite,
-    /// the method of updating the game instance
-    pub update_scheme: UpdateScheme,
 }
 
 /// create a melee synapse
@@ -66,49 +145,6 @@ impl MeleeSoma {
                 Constraint::Variadic(Synapse::Melee),
             ],
         ))
-    }
-
-    /// create the melee organelle
-    pub fn organelle<L1, L2>(
-        settings: MeleeSettings<L1, L2>,
-        handle: reactor::Handle,
-    ) -> Result<Organelle<Axon<Self>>>
-    where
-        L1: Soma,
-        L2: Soma,
-
-        L1::Synapse: From<Synapse> + Into<Synapse>,
-        L2::Synapse: From<Synapse> + Into<Synapse>,
-
-        <L1::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <L1::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
-
-        <L2::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <L2::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
-    {
-        let mut organelle = Organelle::new(
-            MeleeSoma::axon(settings.suite, settings.update_scheme)?,
-            handle,
-        );
-
-        let launcher =
-            organelle.add_soma(LauncherSoma::axon(settings.launcher)?);
-
-        let melee = organelle.nucleus();
-
-        let player1 = organelle.add_soma(settings.players.0);
-        let player2 = organelle.add_soma(settings.players.1);
-
-        organelle.connect(melee, launcher, Synapse::Launcher)?;
-
-        organelle.connect(melee, player1, Synapse::Melee)?;
-        organelle.connect(melee, player2, Synapse::Melee)?;
-
-        Ok(organelle)
     }
 }
 

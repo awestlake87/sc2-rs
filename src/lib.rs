@@ -41,11 +41,11 @@ mod synapses;
 pub mod data;
 
 pub use self::action::ActionTerminal;
-pub use self::agent::{AgentContract, AgentDendrite, AgentSoma};
+pub use self::agent::{Agent, AgentBuilder, AgentDendrite, AgentSoma};
 pub use self::computer::ComputerSoma;
 pub use self::ctrlc_breaker::CtrlcBreakerSoma;
 pub use self::launcher::LauncherSettings;
-pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
+pub use self::melee::{MeleeBuilder, MeleeSoma, MeleeSuite};
 pub use self::observer::ObserverTerminal;
 pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
 

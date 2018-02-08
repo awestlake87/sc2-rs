@@ -24,10 +24,11 @@ use organelle::{visualizer, Axon, Constraint, Impulse, Organelle, Soma};
 use rand::random;
 use sc2::{
     ActionTerminal,
-    AgentContract,
+    Agent,
     AgentDendrite,
     Error,
     LauncherSettings,
+    MeleeBuilder,
     ObserverTerminal,
     PlayerDendrite,
     PlayerSynapse,
@@ -114,94 +115,12 @@ pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
     Ok(GameSettings { map: map })
 }
 
-pub struct TerranSoma {
-    agent: Option<AgentDendrite>,
-    observer: Option<ObserverTerminal>,
-    action: Option<ActionTerminal>,
-}
-
-impl TerranSoma {
-    pub fn axon() -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                agent: None,
-                observer: None,
-                action: None,
-            },
-            vec![Constraint::One(PlayerSynapse::Agent)],
-            vec![
-                Constraint::One(PlayerSynapse::Observer),
-                Constraint::One(PlayerSynapse::Action),
-            ],
-        ))
-    }
-}
-
-impl Soma for TerranSoma {
-    type Synapse = PlayerSynapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(
-                _,
-                PlayerSynapse::Agent,
-                PlayerDendrite::Agent(rx),
-            ) => Ok(Self {
-                agent: Some(rx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Observer,
-                PlayerTerminal::Observer(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                PlayerSynapse::Action,
-                PlayerTerminal::Action(tx),
-            ) => Ok(Self {
-                action: Some(tx),
-                ..self
-            }),
-
-            Impulse::Start(_, main_tx, handle) => {
-                handle.spawn(
-                    self.agent
-                        .unwrap()
-                        .wrap(TerranDendrite::new(
-                            self.observer.unwrap(),
-                            self.action.unwrap(),
-                        ))
-                        .or_else(move |e| {
-                            main_tx
-                                .send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(Self {
-                    agent: None,
-                    observer: None,
-                    action: None,
-                })
-            },
-            _ => bail!("unexpected impulse"),
-        }
-    }
-}
-
-struct TerranDendrite {
+struct TerranBot {
     observer: ObserverTerminal,
     action: ActionTerminal,
 }
 
-impl AgentContract for TerranDendrite {
+impl Agent for TerranBot {
     type Error = Error;
 
     #[async(boxed)]
@@ -233,9 +152,9 @@ impl AgentContract for TerranDendrite {
     }
 }
 
-impl TerranDendrite {
+impl TerranBot {
     fn new(observer: ObserverTerminal, action: ActionTerminal) -> Self {
-        TerranDendrite {
+        Self {
             observer: observer,
             action: action,
         }
@@ -444,31 +363,17 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut organelle = Organelle::new(
-        sc2::MeleeSoma::organelle(
-            sc2::MeleeSettings {
-                launcher: get_launcher_settings(&args)?,
-                players: (
-                    sc2::AgentSoma::organelle(
-                        TerranSoma::axon()?,
-                        handle.clone(),
-                    )?,
-                    sc2::AgentSoma::organelle(
-                        TerranSoma::axon()?,
-                        handle.clone(),
-                    )?,
-                ),
-                suite: sc2::MeleeSuite::EndlessRepeat(get_game_settings(
-                    &args,
-                )?),
-                update_scheme: UpdateScheme::Interval(
-                    args.flag_step_size.unwrap_or(1),
-                ),
-            },
-            handle.clone(),
-        )?,
-        handle.clone(),
-    );
+    let mut organelle = MeleeBuilder::new(
+        sc2::AgentBuilder::factory(|observer, action| {
+            TerranBot::new(observer, action)
+        }).create(handle.clone())?,
+        sc2::AgentBuilder::factory(|observer, action| {
+            TerranBot::new(observer, action)
+        }).create(handle.clone())?,
+    ).launcher_settings(get_launcher_settings(&args)?)
+        .suite(sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?))
+        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .create(handle.clone())?;
 
     organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
     organelle.add_soma(visualizer::Soma::organelle(

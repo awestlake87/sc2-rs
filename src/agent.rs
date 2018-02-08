@@ -9,12 +9,163 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
-use action::ActionSoma;
+use action::{ActionSoma, ActionTerminal};
 use client::{ClientSoma, ClientTerminal};
 use data::{GameEvent, GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
 use melee::{MeleeContract, MeleeDendrite};
-use observer::{ObserverControlTerminal, ObserverSoma};
-use synapses::{Dendrite, Synapse, Terminal};
+use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
+use synapses::{
+    Dendrite,
+    PlayerDendrite,
+    PlayerSynapse,
+    PlayerTerminal,
+    Synapse,
+    Terminal,
+};
+
+pub struct AgentWrapper<T, F>
+where
+    T: Agent + 'static,
+    F: FnMut(ObserverTerminal, ActionTerminal) -> T,
+{
+    agent: Option<AgentDendrite>,
+    observer: Option<ObserverTerminal>,
+    action: Option<ActionTerminal>,
+
+    factory: Option<F>,
+}
+
+impl<T, F> Soma for AgentWrapper<T, F>
+where
+    T: Agent + 'static,
+    F: FnMut(ObserverTerminal, ActionTerminal) -> T + 'static,
+{
+    type Synapse = Synapse;
+    type Error = Error;
+
+    #[async(boxed)]
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddDendrite(_, Synapse::Agent, Dendrite::Agent(rx)) => {
+                Ok(Self {
+                    agent: Some(rx),
+                    ..self
+                })
+            },
+            Impulse::AddTerminal(
+                _,
+                Synapse::Observer,
+                Terminal::Observer(tx),
+            ) => Ok(Self {
+                observer: Some(tx),
+                ..self
+            }),
+            Impulse::AddTerminal(_, Synapse::Action, Terminal::Action(tx)) => {
+                Ok(Self {
+                    action: Some(tx),
+                    ..self
+                })
+            },
+
+            Impulse::Start(_, main_tx, handle) => {
+                handle.spawn(
+                    self.agent
+                        .unwrap()
+                        .wrap(self.factory.unwrap()(
+                            self.observer.unwrap(),
+                            self.action.unwrap(),
+                        ))
+                        .or_else(move |e| {
+                            main_tx
+                                .send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
+                        }),
+                );
+
+                Ok(Self {
+                    agent: None,
+                    observer: None,
+                    action: None,
+
+                    factory: None,
+                })
+            },
+            _ => bail!("unexpected impulse"),
+        }
+    }
+}
+
+impl<T, F> AgentWrapper<T, F>
+where
+    T: Agent + 'static,
+    F: FnMut(ObserverTerminal, ActionTerminal) -> T + 'static,
+{
+    fn new(factory: F) -> Self {
+        Self {
+            agent: None,
+            observer: None,
+            action: None,
+
+            factory: Some(factory),
+        }
+    }
+}
+
+pub struct AgentBuilder<T: Soma + 'static> {
+    soma: T,
+}
+
+impl<T: Soma + 'static> AgentBuilder<T> {
+    pub fn new(agent: T) -> Self {
+        Self { soma: agent }
+    }
+
+    pub fn create(
+        self,
+        handle: reactor::Handle,
+    ) -> Result<Organelle<Axon<AgentSoma>>>
+    where
+        T::Synapse: From<Synapse> + Into<Synapse>,
+        <T::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+            + Into<Dendrite>,
+    {
+        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
+
+        let agent = organelle.nucleus();
+        let player = organelle.add_soma(self.soma);
+
+        let client = organelle.add_soma(ClientSoma::axon()?);
+        let observer = organelle.add_soma(ObserverSoma::axon()?);
+        let action = organelle.add_soma(ActionSoma::axon()?);
+
+        organelle.connect(agent, client, Synapse::Client)?;
+        organelle.connect(observer, client, Synapse::Client)?;
+        organelle.connect(action, client, Synapse::Client)?;
+
+        organelle.connect(agent, observer, Synapse::ObserverControl)?;
+
+        organelle.connect(agent, player, Synapse::Agent)?;
+        organelle.connect(player, observer, Synapse::Observer)?;
+        organelle.connect(player, action, Synapse::Action)?;
+
+        Ok(organelle)
+    }
+}
+
+impl<T, F> AgentBuilder<AgentWrapper<T, F>>
+where
+    T: Agent + 'static,
+    F: FnMut(ObserverTerminal, ActionTerminal) -> T,
+{
+    pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
+        AgentBuilder::<AgentWrapper<T, F>> {
+            soma: AgentWrapper::new(factory),
+        }
+    }
+}
 
 /// manages a player soma
 pub struct AgentSoma {
@@ -40,42 +191,6 @@ impl AgentSoma {
                 Constraint::One(Synapse::Agent),
             ],
         ))
-    }
-
-    /// compose an agent organelle to interact with a controller soma
-    pub fn organelle<T>(
-        soma: T,
-        handle: reactor::Handle,
-    ) -> Result<Organelle<Axon<Self>>>
-    where
-        T: Soma + 'static,
-
-        T::Synapse: From<Synapse> + Into<Synapse>,
-        <T::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
-    {
-        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
-
-        let agent = organelle.nucleus();
-        let player = organelle.add_soma(soma);
-
-        let client = organelle.add_soma(ClientSoma::axon()?);
-        let observer = organelle.add_soma(ObserverSoma::axon()?);
-        let action = organelle.add_soma(ActionSoma::axon()?);
-
-        organelle.connect(agent, client, Synapse::Client)?;
-        organelle.connect(observer, client, Synapse::Client)?;
-        organelle.connect(action, client, Synapse::Client)?;
-
-        organelle.connect(agent, observer, Synapse::ObserverControl)?;
-
-        organelle.connect(agent, player, Synapse::Agent)?;
-        organelle.connect(player, observer, Synapse::Observer)?;
-        organelle.connect(player, action, Synapse::Action)?;
-
-        Ok(organelle)
     }
 }
 
@@ -352,7 +467,7 @@ impl AgentTerminal {
 }
 
 /// contract for a player soma to obey
-pub trait AgentContract: Sized {
+pub trait Agent: Sized {
     /// the type of error that can occur upon failure
     type Error: std::error::Error + Send + Into<Error>;
 
@@ -384,7 +499,7 @@ impl AgentDendrite {
     /// wrap a struct that obeys the agent contract and forward requests to
     /// it
     #[async]
-    pub fn wrap<T: AgentContract + 'static>(self, mut player: T) -> Result<()> {
+    pub fn wrap<T: Agent + 'static>(self, mut player: T) -> Result<()> {
         #[async]
         for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
             match req {
