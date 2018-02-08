@@ -11,8 +11,46 @@ use data::{
     Race,
     UpdateScheme,
 };
-use melee::{MeleeContract, MeleeDendrite};
-use synapses::{Dendrite, Synapse, Terminal};
+use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
+use synapses::{Dendrite, Synapse};
+
+pub struct ComputerBuilder {
+    race: Option<Race>,
+    difficulty: Difficulty,
+}
+
+impl ComputerBuilder {
+    pub fn new() -> Self {
+        Self {
+            race: None,
+            difficulty: Difficulty::Medium,
+        }
+    }
+
+    pub fn race(self, race: Race) -> Self {
+        Self {
+            race: Some(race),
+            ..self
+        }
+    }
+
+    pub fn difficulty(self, difficulty: Difficulty) -> Self {
+        Self {
+            difficulty: difficulty,
+            ..self
+        }
+    }
+
+    pub fn create(self) -> Result<Axon<ComputerSoma>> {
+        if self.race.is_none() {
+            bail!("built-in AI requires race")
+        }
+
+        Ok(ComputerSoma::axon(self.race.unwrap(), self.difficulty)?)
+    }
+}
+
+impl MeleeCompetitor for Axon<ComputerSoma> {}
 
 /// a built-in AI opponent soma
 pub struct ComputerSoma {

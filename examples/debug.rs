@@ -16,41 +16,31 @@ extern crate tokio_core;
 
 extern crate sc2;
 
-use std::f32;
-use std::mem;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{visualizer, Soma};
 use sc2::{
     Agent,
     AgentControl,
     Error,
-    LauncherSettings,
+    Launcher,
+    LauncherBuilder,
     MeleeBuilder,
     MeleeSuite,
     Result,
 };
 use sc2::data::{
-    Ability,
-    ActionTarget,
-    Alliance,
-    Command,
     DebugCommand,
     DebugTextTarget,
     Difficulty,
     GameEvent,
     GameSettings,
     Map,
-    Observation,
     PlayerSetup,
     Point2,
     Race,
-    Unit,
     UpdateScheme,
-    Vector2,
 };
 use tokio_core::reactor;
 
@@ -87,20 +77,18 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
-    let default_settings = LauncherSettings::default();
+pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
+    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
 
-    Ok(LauncherSettings {
-        use_wine: args.flag_wine,
-        dir: args.flag_dir.clone(),
-        base_port: {
-            if let Some(port) = args.flag_port {
-                port
-            } else {
-                default_settings.base_port
-            }
-        },
-    })
+    if let Some(dir) = args.flag_dir.clone() {
+        builder = builder.install_dir(dir);
+    }
+
+    if let Some(port) = args.flag_port {
+        builder = builder.base_port(port);
+    }
+
+    Ok(builder.create()?)
 }
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
@@ -125,7 +113,7 @@ impl Agent for DebugBot {
     }
 
     #[async(boxed)]
-    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+    fn on_event(self, e: GameEvent) -> Result<Self> {
         match e {
             GameEvent::Step => await!(self.on_step()),
             _ => Ok(self),
@@ -139,7 +127,7 @@ impl DebugBot {
     }
 
     #[async]
-    fn on_step(mut self) -> Result<Self> {
+    fn on_step(self) -> Result<Self> {
         let observation = await!(self.control.observer().observe())?;
         let unit_type_data = await!(self.control.observer().get_unit_data())?;
 
@@ -185,22 +173,22 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut organelle = MeleeBuilder::new(
+    let melee = MeleeBuilder::new(
         sc2::AgentBuilder::factory(|control| DebugBot::new(control))
-            .create(handle.clone())?,
-        sc2::ComputerSoma::axon(Race::Zerg, Difficulty::VeryEasy)?,
+            .handle(handle.clone())
+            .create()?,
+        sc2::ComputerBuilder::new()
+            .race(Race::Zerg)
+            .difficulty(Difficulty::VeryEasy)
+            .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
         .suite(MeleeSuite::OneAndDone(get_game_settings(&args)?))
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
-        .create(handle.clone())?;
+        .break_on_ctrlc(args.flag_wine)
+        .handle(handle.clone())
+        .create()?;
 
-    organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
-    organelle.add_soma(visualizer::Soma::organelle(
-        visualizer::Settings::default(),
-        handle.clone(),
-    )?);
-
-    core.run(organelle.run(handle))?;
+    core.run(melee.into_future())?;
 
     Ok(())
 });

@@ -21,9 +21,16 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
-use organelle::{visualizer, Soma};
 use rand::random;
-use sc2::{Agent, AgentControl, Error, LauncherSettings, MeleeBuilder, Result};
+use sc2::{
+    Agent,
+    AgentControl,
+    Error,
+    Launcher,
+    LauncherBuilder,
+    MeleeBuilder,
+    Result,
+};
 use sc2::data::{
     Ability,
     ActionTarget,
@@ -69,24 +76,21 @@ pub struct Args {
     pub flag_replay_dir: Option<PathBuf>,
     pub flag_wine: bool,
     pub flag_version: bool,
-    pub flag_realtime: bool,
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
-    let default_settings = LauncherSettings::default();
+pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
+    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
 
-    Ok(LauncherSettings {
-        use_wine: args.flag_wine,
-        dir: args.flag_dir.clone(),
-        base_port: {
-            if let Some(port) = args.flag_port {
-                port
-            } else {
-                default_settings.base_port
-            }
-        },
-    })
+    if let Some(dir) = args.flag_dir.clone() {
+        builder = builder.install_dir(dir);
+    }
+
+    if let Some(port) = args.flag_port {
+        builder = builder.base_port(port);
+    }
+
+    Ok(builder.create()?)
 }
 
 pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
@@ -182,23 +186,21 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut organelle = MeleeBuilder::new(
+    let melee = MeleeBuilder::new(
         sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .create(handle.clone())?,
+            .handle(handle.clone())
+            .create()?,
         sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .create(handle.clone())?,
+            .handle(handle.clone())
+            .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
         .suite(sc2::MeleeSuite::EndlessRepeat(get_game_settings(&args)?))
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
-        .create(handle.clone())?;
+        .break_on_ctrlc(args.flag_wine)
+        .handle(handle)
+        .create()?;
 
-    organelle.add_soma(sc2::CtrlcBreakerSoma::axon());
-    organelle.add_soma(visualizer::Soma::organelle(
-        visualizer::Settings::default(),
-        handle.clone(),
-    )?);
-
-    core.run(organelle.run(handle))?;
+    core.run(melee.into_future())?;
 
     Ok(())
 });

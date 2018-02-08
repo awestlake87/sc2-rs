@@ -40,31 +40,27 @@ mod synapses;
 
 pub mod data;
 
-pub use self::action::ActionTerminal;
-pub use self::agent::{
-    Agent,
-    AgentBuilder,
-    AgentControl,
-    AgentDendrite,
-    AgentSoma,
-};
-pub use self::computer::ComputerSoma;
-pub use self::ctrlc_breaker::CtrlcBreakerSoma;
-pub use self::launcher::LauncherSettings;
-pub use self::melee::{MeleeBuilder, MeleeSoma, MeleeSuite};
-pub use self::observer::ObserverTerminal;
-pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
+pub use self::agent::{Agent, AgentBuilder, AgentControl};
+pub use self::computer::ComputerBuilder;
+pub use self::launcher::{Launcher, LauncherBuilder};
+pub use self::melee::{Melee, MeleeBuilder, MeleeSuite};
 
-// pub use self::frame::{
-//     Command,
-//     DebugCommand,
-//     DebugTextTarget,
-//     FrameData,
-//     GameData,
-//     GameEvent,
-//     GameState,
-//     MapState,
-// };
+#[cfg(feature = "with-organelle")]
+pub use self::action::{
+    synapse as action_synapse,
+    ActionDendrite,
+    ActionTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::agent::{synapse as agent_synapse, AgentDendrite, AgentTerminal};
+#[cfg(feature = "with-organelle")]
+pub use self::observer::{
+    synapse as observer_synapse,
+    ObserverDendrite,
+    ObserverTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
 
 use std::path::PathBuf;
 

@@ -4,7 +4,6 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::{debug, sc2api};
-use tokio_core::reactor;
 
 use super::{Error, IntoProto, Result};
 use client::ClientTerminal;
@@ -90,7 +89,6 @@ impl Soma for ActionSoma {
                 }
 
                 let task = ActionTask::new(
-                    handle.clone(),
                     self.client.unwrap(),
                     self.control.unwrap(),
                     rx,
@@ -116,8 +114,6 @@ impl Soma for ActionSoma {
 }
 
 struct ActionTask {
-    handle: reactor::Handle,
-
     client: ClientTerminal,
     control: Option<ActionControlDendrite>,
     queue: Option<mpsc::Receiver<ActionRequest>>,
@@ -128,14 +124,11 @@ struct ActionTask {
 
 impl ActionTask {
     fn new(
-        handle: reactor::Handle,
         client: ClientTerminal,
         control: ActionControlDendrite,
         rx: mpsc::Receiver<ActionRequest>,
     ) -> Self {
         Self {
-            handle: handle,
-
             client: client,
             control: Some(control),
             queue: Some(rx),

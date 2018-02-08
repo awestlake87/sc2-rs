@@ -12,7 +12,7 @@ use super::{Error, IntoProto, Result};
 use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
 use client::{ClientSoma, ClientTerminal};
 use data::{GameEvent, GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
-use melee::{MeleeContract, MeleeDendrite};
+use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
@@ -120,19 +120,32 @@ where
     }
 }
 
+/// build an agent
 pub struct AgentBuilder<T: Soma + 'static> {
     soma: T,
+    handle: Option<reactor::Handle>,
 }
 
 impl<T: Soma + 'static> AgentBuilder<T> {
-    pub fn new(agent: T) -> Self {
-        Self { soma: agent }
+    /// wrap the given soma in an agent
+    #[cfg(feature = "with-organelle")]
+    pub fn soma(agent: T) -> Self {
+        Self {
+            soma: agent,
+            handle: None,
+        }
     }
 
-    pub fn create(
-        self,
-        handle: reactor::Handle,
-    ) -> Result<Organelle<Axon<AgentSoma>>>
+    /// the tokio core handle to use
+    pub fn handle(self, handle: reactor::Handle) -> Self {
+        Self {
+            handle: Some(handle),
+            ..self
+        }
+    }
+
+    /// create the agent
+    pub fn create(self) -> Result<Organelle<Axon<AgentSoma>>>
     where
         T::Synapse: From<Synapse> + Into<Synapse>,
         <T::Synapse as organelle::Synapse>::Terminal: From<Terminal>
@@ -140,6 +153,12 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
+        if self.handle.is_none() {
+            bail!("missing tokio core handle")
+        }
+
+        let handle = self.handle.unwrap();
+
         let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
 
         let agent = organelle.nucleus();
@@ -164,14 +183,18 @@ impl<T: Soma + 'static> AgentBuilder<T> {
     }
 }
 
+impl MeleeCompetitor for Organelle<Axon<AgentSoma>> {}
+
 impl<T, F> AgentBuilder<AgentWrapper<T, F>>
 where
     T: Agent + 'static,
     F: FnOnce(AgentControl) -> T,
 {
+    /// wrap a factory to be called with the agent controls when it is ready
     pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
         AgentBuilder::<AgentWrapper<T, F>> {
             soma: AgentWrapper::new(factory),
+            handle: None,
         }
     }
 }

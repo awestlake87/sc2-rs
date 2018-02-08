@@ -78,52 +78,73 @@ pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
     (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
 }
 
-/// settings used to create a launcher
-pub struct LauncherSettings {
-    /// installation directory
-    ///
-    /// auto-detect if not specified
-    pub dir: Option<PathBuf>,
-    /// use Wine to run the game - Linux users
-    pub use_wine: bool,
-    /// starting point for game ports
-    pub base_port: u16,
-}
-
-impl Default for LauncherSettings {
-    fn default() -> Self {
-        Self {
-            dir: None,
-            use_wine: false,
-            base_port: 9168,
-        }
-    }
-}
-
-struct Launcher {
+pub struct Launcher {
     exe: PathBuf,
     pwd: Option<PathBuf>,
     current_port: u16,
     use_wine: bool,
 }
 
-impl Launcher {
-    fn new(settings: LauncherSettings) -> Result<Self> {
+/// builder used to create launcher settings
+pub struct LauncherBuilder {
+    dir: Option<PathBuf>,
+    use_wine: bool,
+    base_port: u16,
+}
+
+impl LauncherBuilder {
+    /// create a new builder
+    pub fn new() -> Self {
+        Self {
+            dir: None,
+            use_wine: false,
+            base_port: 9168,
+        }
+    }
+
+    /// installation directory
+    ///
+    /// auto-detect if not specified
+    pub fn install_dir(self, dir: PathBuf) -> Self {
+        Self {
+            dir: Some(dir),
+            ..self
+        }
+    }
+
+    /// use Wine to run the game - for unix users
+    pub fn use_wine(self, flag: bool) -> Self {
+        Self {
+            use_wine: flag,
+            ..self
+        }
+    }
+
+    /// starting point for game ports
+    pub fn base_port(self, port: u16) -> Self {
+        Self {
+            base_port: port,
+            ..self
+        }
+    }
+
+    /// build the settings object
+    pub fn create(self) -> Result<Launcher> {
         let dir = {
-            if let Some(dir) = settings.dir {
+            if let Some(dir) = self.dir {
                 dir
             } else {
-                auto_detect_starcraft(settings.use_wine)?
+                auto_detect_starcraft(self.use_wine)?
             }
         };
-        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
+        let (exe, arch) = select_exe(&dir, self.use_wine)?;
         let pwd = select_pwd(&dir, arch);
 
-        Ok(Self {
+        Ok(Launcher {
             exe: exe,
             pwd: pwd,
-            current_port: settings.base_port,
-            use_wine: settings.use_wine,
+            current_port: self.base_port,
+            use_wine: self.use_wine,
         })
     }
 }
@@ -204,10 +225,10 @@ pub struct LauncherSoma {
 
 impl LauncherSoma {
     /// create a launcher from settings
-    pub fn axon(settings: LauncherSettings) -> Result<Axon<Self>> {
+    pub fn axon(launcher: Launcher) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
-                launcher: Some(Launcher::new(settings)?),
+                launcher: Some(launcher),
                 dendrite: None,
             },
             vec![Constraint::One(Synapse::Launcher)],

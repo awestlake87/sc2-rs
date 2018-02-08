@@ -8,23 +8,29 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, Result};
+use ctrlc_breaker::CtrlcBreakerSoma;
 use data::{GamePorts, GameSettings, PlayerSetup, UpdateScheme};
-use launcher::{LauncherSettings, LauncherSoma, LauncherTerminal};
+use launcher::{Launcher, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
+/// empty trait to prevent users from passing their own somas to MeleeBuilder
+pub trait MeleeCompetitor {}
+
 pub struct MeleeBuilder<P1: Soma + 'static, P2: Soma + 'static> {
-    /// the player somas
     players: (P1, P2),
-    /// the settings for the launcher soma
-    launcher: Option<LauncherSettings>,
-    /// the suite of games to choose from
+    launcher: Option<Launcher>,
     suite: Option<MeleeSuite>,
-    /// the method of updating the game instance
     update_scheme: UpdateScheme,
+    break_on_ctrlc: bool,
+    handle: Option<reactor::Handle>,
 }
 
-impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
-    /// start building a melee soma with the given players
+impl<P1, P2> MeleeBuilder<P1, P2>
+where
+    P1: Soma + MeleeCompetitor + 'static,
+    P2: Soma + MeleeCompetitor + 'static,
+{
+    /// start building a melee soma with the given agent or computer somas
     pub fn new(player1: P1, player2: P2) -> Self {
         Self {
             players: (player1, player2),
@@ -32,16 +38,20 @@ impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
             launcher: None,
             suite: None,
             update_scheme: UpdateScheme::Realtime,
+            break_on_ctrlc: false,
+            handle: None,
         }
     }
 
-    pub fn launcher_settings(self, settings: LauncherSettings) -> Self {
+    /// the settings for the launcher soma
+    pub fn launcher_settings(self, settings: Launcher) -> Self {
         Self {
             launcher: Some(settings),
             ..self
         }
     }
 
+    /// the suite of games to choose from
     pub fn suite(self, suite: MeleeSuite) -> Self {
         Self {
             suite: Some(suite),
@@ -49,6 +59,7 @@ impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
         }
     }
 
+    /// the method of updating the game instance
     pub fn update_scheme(self, scheme: UpdateScheme) -> Self {
         Self {
             update_scheme: scheme,
@@ -56,10 +67,26 @@ impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
         }
     }
 
-    pub fn create(
-        self,
-        handle: reactor::Handle,
-    ) -> Result<Organelle<Axon<MeleeSoma>>>
+    /// stop running upon CTRL-C
+    ///
+    /// this is only necessary with Wine. CTRL-C doesn't seem to kill it for
+    /// some reason by default.
+    pub fn break_on_ctrlc(self, flag: bool) -> Self {
+        Self {
+            break_on_ctrlc: flag,
+            ..self
+        }
+    }
+
+    /// the tokio core handle to use
+    pub fn handle(self, handle: reactor::Handle) -> Self {
+        Self {
+            handle: Some(handle),
+            ..self
+        }
+    }
+
+    pub fn create(self) -> Result<Melee>
     where
         P1: Soma,
         P2: Soma,
@@ -77,13 +104,19 @@ impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
         <P2::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
-        if self.launcher.is_none() || self.suite.is_none() {
-            bail!("missing required setting")
+        if self.launcher.is_none() {
+            bail!("missing launcher settings")
+        } else if self.suite.is_none() {
+            bail!("missing melee suite")
+        } else if self.handle.is_none() {
+            bail!("missing reactor handle")
         }
+
+        let handle = self.handle.unwrap();
 
         let mut organelle = Organelle::new(
             MeleeSoma::axon(self.suite.unwrap(), self.update_scheme)?,
-            handle,
+            handle.clone(),
         );
 
         let launcher =
@@ -94,12 +127,36 @@ impl<P1: Soma + 'static, P2: Soma + 'static> MeleeBuilder<P1, P2> {
         let player1 = organelle.add_soma(self.players.0);
         let player2 = organelle.add_soma(self.players.1);
 
+        if self.break_on_ctrlc {
+            organelle.add_soma(CtrlcBreakerSoma::axon());
+        }
+
         organelle.connect(melee, launcher, Synapse::Launcher)?;
 
         organelle.connect(melee, player1, Synapse::Melee)?;
         organelle.connect(melee, player2, Synapse::Melee)?;
 
-        Ok(organelle)
+        Ok(Melee {
+            handle: handle,
+            organelle: organelle,
+        })
+    }
+}
+
+pub struct Melee {
+    handle: reactor::Handle,
+    organelle: Organelle<Axon<MeleeSoma>>,
+}
+
+impl IntoFuture for Melee {
+    type Item = ();
+    type Error = Error;
+    type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
+
+    #[async(boxed)]
+    fn into_future(self) -> Result<()> {
+        await!(self.organelle.run(self.handle))?;
+        Ok(())
     }
 }
 
