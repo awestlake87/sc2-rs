@@ -1,6 +1,12 @@
 use organelle::{self, probe};
 
-use action::{self, ActionDendrite, ActionTerminal};
+use action::{
+    self,
+    ActionControlDendrite,
+    ActionControlTerminal,
+    ActionDendrite,
+    ActionTerminal,
+};
 use agent::{self, AgentDendrite, AgentTerminal};
 use client::{self, ClientDendrite, ClientTerminal};
 use launcher::{self, LauncherDendrite, LauncherTerminal};
@@ -32,6 +38,8 @@ pub enum Synapse {
     Agent,
     /// action
     Action,
+    /// action control
+    ActionControl,
 }
 
 /// senders for synapses
@@ -52,6 +60,8 @@ pub enum Terminal {
     Agent(AgentTerminal),
     /// action sender
     Action(ActionTerminal),
+    /// action control sender
+    ActionControl(ActionControlTerminal),
 }
 
 /// receivers for synapses
@@ -70,8 +80,10 @@ pub enum Dendrite {
     Observer(ObserverDendrite),
     /// agent receiver
     Agent(AgentDendrite),
-    /// agent receiver
+    /// action receiver
     Action(ActionDendrite),
+    /// action control receiver
+    ActionControl(ActionControlDendrite),
 }
 
 impl organelle::Synapse for Synapse {
@@ -119,6 +131,11 @@ impl organelle::Synapse for Synapse {
                 let (tx, rx) = action::synapse();
 
                 (Terminal::Action(tx), Dendrite::Action(rx))
+            },
+            Synapse::ActionControl => {
+                let (tx, rx) = action::control_synapse();
+
+                (Terminal::ActionControl(tx), Dendrite::ActionControl(rx))
             },
         }
     }

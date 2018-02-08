@@ -46,7 +46,7 @@ pub enum Command {
 #[derive(Debug, Clone)]
 pub enum DebugCommand {
     /// shows debug text in the game instance
-    DebugText {
+    Text {
         /// text to display
         text: String,
         /// target in screen or world space
@@ -58,7 +58,7 @@ pub enum DebugCommand {
     },
 
     /// shows a debug line in the game from p1 to p2
-    DebugLine {
+    Line {
         /// starting point of the line
         p1: Point3,
         /// ending point of the line
@@ -68,7 +68,7 @@ pub enum DebugCommand {
     },
 
     /// shows a debug box in the game defined by corners min and max
-    DebugBox {
+    Box {
         /// minimum corner of the box
         min: Point3,
         /// maximum corner of the box
@@ -78,7 +78,7 @@ pub enum DebugCommand {
     },
 
     /// shows a debug sphere in the game
-    DebugSphere {
+    Sphere {
         /// center of the sphere
         center: Point3,
         /// radius of the sphere

@@ -10,8 +10,12 @@ use sc2_proto::sc2api;
 use super::{Error, FromProto, IntoSc2, Result};
 use client::ClientTerminal;
 use data::{
+    Ability,
+    AbilityData,
     Action,
     Alliance,
+    Buff,
+    BuffData,
     DisplayType,
     GameEvent,
     MapInfo,
@@ -20,7 +24,10 @@ use data::{
     SpatialAction,
     Tag,
     Unit,
+    UnitType,
+    UnitTypeData,
     Upgrade,
+    UpgradeData,
 };
 use synapses::{Dendrite, Synapse, Terminal};
 
@@ -174,6 +181,10 @@ impl ObserverTask {
 
         let mut observation = None;
         let mut map_info = None;
+        let mut unit_data = None;
+        let mut ability_data = None;
+        let mut upgrade_data = None;
+        let mut buff_data = None;
 
         #[async]
         for req in queue.map_err(|_| -> Error { unreachable!() }) {
@@ -181,6 +192,7 @@ impl ObserverTask {
                 Either::Control(ObserverControlRequest::Reset(tx)) => {
                     // clear data cache every game
                     map_info = None;
+                    unit_data = None;
 
                     tx.send(())
                         .map_err(|_| Error::from("unable to ack reset"))?;
@@ -214,6 +226,59 @@ impl ObserverTask {
 
                     tx.send(Rc::clone(map_info.as_ref().unwrap()))
                         .map_err(|_| Error::from("unable to return map info"))?;
+                },
+                Either::Request(ObserverRequest::GetUnitData(_))
+                | Either::Request(ObserverRequest::GetAbilityData(_))
+                | Either::Request(ObserverRequest::GetUpgradeData(_))
+                | Either::Request(ObserverRequest::GetBuffData(_)) => {
+                    if unit_data.is_none() {
+                        let (
+                            observer,
+                            new_unit_data,
+                            new_ability_data,
+                            new_upgrade_data,
+                            new_buff_data,
+                        ) = await!(self.get_game_data())?;
+
+                        self = observer;
+                        unit_data = Some(new_unit_data);
+                        ability_data = Some(new_ability_data);
+                        upgrade_data = Some(new_upgrade_data);
+                        buff_data = Some(new_buff_data);
+                    }
+
+                    match req {
+                        Either::Request(ObserverRequest::GetUnitData(tx)) => {
+                            tx.send(Rc::clone(unit_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return unit data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetAbilityData(
+                            tx,
+                        )) => {
+                            tx.send(Rc::clone(ability_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return ability data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetUpgradeData(
+                            tx,
+                        )) => {
+                            tx.send(Rc::clone(upgrade_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return upgrade data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetBuffData(tx)) => {
+                            tx.send(Rc::clone(buff_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return buff data")
+                                })?;
+                        },
+
+                        _ => unreachable!(),
+                    }
                 },
             }
         }
@@ -442,6 +507,65 @@ impl ObserverTask {
 
         Ok((self, info))
     }
+
+    #[async]
+    fn get_game_data(
+        self,
+    ) -> Result<
+        (
+            Self,
+            Rc<HashMap<UnitType, UnitTypeData>>,
+            Rc<HashMap<Ability, AbilityData>>,
+            Rc<HashMap<Upgrade, UpgradeData>>,
+            Rc<HashMap<Buff, BuffData>>,
+        ),
+    > {
+        let mut req = sc2api::Request::new();
+        req.mut_data().set_unit_type_id(true);
+
+        let mut rsp = await!(self.client.clone().request(req))?;
+
+        let mut unit_type_data = HashMap::new();
+        let mut ability_data = HashMap::new();
+        let mut upgrade_data = HashMap::new();
+        let mut buff_data = HashMap::new();
+
+        for data in rsp.mut_data().take_units().into_iter() {
+            let u = UnitTypeData::from_proto(data)?;
+
+            let unit_type = u.unit_type;
+            unit_type_data.insert(unit_type, u);
+        }
+
+        for data in rsp.mut_data().take_abilities().into_iter() {
+            let a = AbilityData::from_proto(data)?;
+
+            let ability = a.ability;
+            ability_data.insert(ability, a);
+        }
+
+        for data in rsp.mut_data().take_upgrades().into_iter() {
+            let u = UpgradeData::from_proto(data)?;
+
+            let upgrade = u.upgrade;
+            upgrade_data.insert(upgrade, u);
+        }
+
+        for data in rsp.mut_data().take_buffs().into_iter() {
+            let b = BuffData::from_proto(data)?;
+
+            let buff = b.buff;
+            buff_data.insert(buff, b);
+        }
+
+        Ok((
+            self,
+            Rc::from(unit_type_data),
+            Rc::from(ability_data),
+            Rc::from(upgrade_data),
+            Rc::from(buff_data),
+        ))
+    }
 }
 
 #[derive(Debug)]
@@ -453,7 +577,13 @@ enum ObserverControlRequest {
 #[derive(Debug)]
 enum ObserverRequest {
     Observe(oneshot::Sender<Rc<Observation>>),
+
     GetMapInfo(oneshot::Sender<Rc<MapInfo>>),
+
+    GetUnitData(oneshot::Sender<Rc<HashMap<UnitType, UnitTypeData>>>),
+    GetAbilityData(oneshot::Sender<Rc<HashMap<Ability, AbilityData>>>),
+    GetUpgradeData(oneshot::Sender<Rc<HashMap<Upgrade, UpgradeData>>>),
+    GetBuffData(oneshot::Sender<Rc<HashMap<Buff, BuffData>>>),
 }
 
 enum Either {
@@ -537,6 +667,70 @@ impl ObserverTerminal {
 
         await!(rx.map_err(|_| Error::from("unable to recv map info")))
     }
+
+    /// get data about each unit type
+    #[async]
+    pub fn get_unit_data(self) -> Result<Rc<HashMap<UnitType, UnitTypeData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUnitData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send unit data request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv unit data")))
+    }
+
+    /// get data about each ability
+    #[async]
+    pub fn get_ability_data(self) -> Result<Rc<HashMap<Ability, AbilityData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetAbilityData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send ability data request"
+                ))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv ability data")))
+    }
+
+    /// get data about each upgrade
+    #[async]
+    pub fn get_upgrade_data(self) -> Result<Rc<HashMap<Upgrade, UpgradeData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUpgradeData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send upgrade data request"
+                ))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
+    }
+
+    /// get data about each buff
+    #[async]
+    pub fn get_buff_data(self) -> Result<Rc<HashMap<Buff, BuffData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetBuffData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send buff data request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv buff data")))
+    }
 }
 
 #[derive(Debug)]
@@ -561,85 +755,3 @@ pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
         ObserverControlDendrite { rx: rx },
     )
 }
-
-// pub struct FetchGameData {
-//     transactor: Transactor,
-// }
-
-// impl FetchGameData {
-//     fn fetch(axon: &Axon) -> Result<ObserverSoma> {
-//         let mut req = sc2api::Request::new();
-//         req.mut_data().set_unit_type_id(true);
-
-//         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-//         Ok(ObserverSoma::FetchGameData(FetchGameData {
-//             transactor: transactor,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<ObserverSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.on_game_data(axon, src, result)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_game_data(
-//         self,
-//         axon: &Axon,
-//         src: Handle,
-//         result: ClientResult,
-//     ) -> Result<ObserverSoma> {
-//         let mut rsp = self.transactor.expect(src, result)?;
-
-//         let mut unit_type_data = HashMap::new();
-//         let mut ability_data = HashMap::new();
-//         let mut upgrade_data = HashMap::new();
-//         let mut buff_data = HashMap::new();
-
-//         for data in rsp.mut_data().take_units().into_iter() {
-//             let u = UnitTypeData::from_proto(data)?;
-
-//             let unit_type = u.unit_type;
-//             unit_type_data.insert(unit_type, u);
-//         }
-
-//         for data in rsp.mut_data().take_abilities().into_iter() {
-//             let a = AbilityData::from_proto(data)?;
-
-//             let ability = a.ability;
-//             ability_data.insert(ability, a);
-//         }
-
-//         for data in rsp.mut_data().take_upgrades().into_iter() {
-//             let u = UpgradeData::from_proto(data)?;
-
-//             let upgrade = u.upgrade;
-//             upgrade_data.insert(upgrade, u);
-//         }
-
-//         for data in rsp.mut_data().take_buffs().into_iter() {
-//             let b = BuffData::from_proto(data)?;
-
-//             let buff = b.buff;
-//             buff_data.insert(buff, b);
-//         }
-
-//         FetchTerrainData::fetch(
-//             axon,
-//             unit_type_data,
-//             ability_data,
-//             upgrade_data,
-//             buff_data,
-//         )
-//     }
-// }

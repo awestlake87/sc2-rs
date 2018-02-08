@@ -9,19 +9,12 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
-use action::{ActionSoma, ActionTerminal};
+use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
 use client::{ClientSoma, ClientTerminal};
 use data::{GameEvent, GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
 use melee::{MeleeContract, MeleeDendrite};
 use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
-use synapses::{
-    Dendrite,
-    PlayerDendrite,
-    PlayerSynapse,
-    PlayerTerminal,
-    Synapse,
-    Terminal,
-};
+use synapses::{Dendrite, Synapse, Terminal};
 
 pub struct AgentControl {
     observer: ObserverTerminal,
@@ -161,6 +154,7 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         organelle.connect(action, client, Synapse::Client)?;
 
         organelle.connect(agent, observer, Synapse::ObserverControl)?;
+        organelle.connect(agent, action, Synapse::ActionControl)?;
 
         organelle.connect(agent, player, Synapse::Agent)?;
         organelle.connect(player, observer, Synapse::Observer)?;
@@ -188,6 +182,7 @@ pub struct AgentSoma {
     client: Option<ClientTerminal>,
     observer: Option<ObserverControlTerminal>,
     agent: Option<AgentTerminal>,
+    action: Option<ActionControlTerminal>,
 }
 
 impl AgentSoma {
@@ -198,11 +193,13 @@ impl AgentSoma {
                 client: None,
                 observer: None,
                 agent: None,
+                action: None,
             },
             vec![Constraint::One(Synapse::Melee)],
             vec![
                 Constraint::One(Synapse::Client),
                 Constraint::One(Synapse::ObserverControl),
+                Constraint::One(Synapse::ActionControl),
                 Constraint::One(Synapse::Agent),
             ],
         ))
@@ -217,24 +214,33 @@ impl Soma for AgentSoma {
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
             Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(rx)) => {
-                self.controller = Some(rx);
-
-                Ok(self)
+                Ok(Self {
+                    controller: Some(rx),
+                    ..self
+                })
             },
             Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                self.client = Some(tx);
-
-                Ok(self)
+                Ok(Self {
+                    client: Some(tx),
+                    ..self
+                })
             },
             Impulse::AddTerminal(
                 _,
                 Synapse::ObserverControl,
                 Terminal::ObserverControl(tx),
-            ) => {
-                self.observer = Some(tx);
-
-                Ok(self)
-            },
+            ) => Ok(Self {
+                observer: Some(tx),
+                ..self
+            }),
+            Impulse::AddTerminal(
+                _,
+                Synapse::ActionControl,
+                Terminal::ActionControl(tx),
+            ) => Ok(Self {
+                action: Some(tx),
+                ..self
+            }),
             Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
                 self.agent = Some(tx);
 
@@ -247,6 +253,7 @@ impl Soma for AgentSoma {
                         .wrap(AgentMeleeDendrite {
                             client: self.client.unwrap(),
                             observer: self.observer.unwrap(),
+                            action: self.action.unwrap(),
                             agent: self.agent.unwrap(),
                         })
                         .or_else(move |e| {
@@ -261,6 +268,7 @@ impl Soma for AgentSoma {
                     client: None,
                     observer: None,
                     agent: None,
+                    action: None,
                 })
             },
 
@@ -272,6 +280,7 @@ impl Soma for AgentSoma {
 pub struct AgentMeleeDendrite {
     client: ClientTerminal,
     observer: ObserverControlTerminal,
+    action: ActionControlTerminal,
     agent: AgentTerminal,
 }
 
@@ -432,6 +441,8 @@ impl MeleeContract for AgentMeleeDendrite {
                 await!(self.agent.clone().handle_event(GameEvent::GameEnded))?;
                 break;
             }
+
+            await!(self.action.clone().step())?;
         }
 
         Ok(self)
@@ -546,140 +557,6 @@ pub fn synapse() -> (AgentTerminal, AgentDendrite) {
 
     (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
 }
-
-// pub struct SendDebug {
-//     interval: u32,
-//     transactor: Transactor,
-// }
-
-// impl SendDebug {
-//     fn send_debug(
-//         axon: &Axon,
-//         interval: u32,
-//         commands: Vec<DebugCommand>,
-//     ) -> Result<AgentSoma> {
-//         let mut req = sc2api::Request::new();
-//         req.mut_debug().mut_debug();
-
-//         for cmd in commands {
-//             match cmd {
-//                 DebugCommand::DebugText {
-//                     text,
-//                     target,
-//                     color,
-//                 } => {
-//                     let mut cmd = debug::DebugCommand::new();
-//                     let mut debug_text = debug::DebugText::new();
-
-//                     debug_text.set_text(text);
-
-//                     match target {
-//                         Some(DebugTextTarget::Screen(p)) => {
-//                             debug_text.mut_virtual_pos().set_x(p.x);
-//                             debug_text.mut_virtual_pos().set_y(p.y);
-//                         },
-//                         Some(DebugTextTarget::World(p)) => {
-//                             debug_text.mut_world_pos().set_x(p.x);
-//                             debug_text.mut_world_pos().set_y(p.y);
-//                             debug_text.mut_world_pos().set_z(p.z);
-//                         },
-//                         None => (),
-//                     }
-
-//                     debug_text.mut_color().set_r(color.0 as u32);
-//                     debug_text.mut_color().set_g(color.1 as u32);
-//                     debug_text.mut_color().set_b(color.2 as u32);
-
-//                     cmd.mut_draw().mut_text().push(debug_text);
-//                     req.mut_debug().mut_debug().push(cmd);
-//                 },
-//                 DebugCommand::DebugLine { p1, p2, color } => {
-//                     let mut cmd = debug::DebugCommand::new();
-//                     let mut debug_line = debug::DebugLine::new();
-
-//                     debug_line.mut_line().mut_p0().set_x(p1.x);
-//                     debug_line.mut_line().mut_p0().set_y(p1.y);
-//                     debug_line.mut_line().mut_p0().set_z(p1.z);
-
-//                     debug_line.mut_line().mut_p1().set_x(p2.x);
-//                     debug_line.mut_line().mut_p1().set_y(p2.y);
-//                     debug_line.mut_line().mut_p1().set_z(p2.z);
-
-//                     debug_line.mut_color().set_r(color.0 as u32);
-//                     debug_line.mut_color().set_g(color.1 as u32);
-//                     debug_line.mut_color().set_b(color.2 as u32);
-
-//                     cmd.mut_draw().mut_lines().push(debug_line);
-//                     req.mut_debug().mut_debug().push(cmd);
-//                 },
-//                 DebugCommand::DebugBox { min, max, color } => {
-//                     let mut cmd = debug::DebugCommand::new();
-//                     let mut debug_box = debug::DebugBox::new();
-
-//                     debug_box.mut_min().set_x(min.x);
-//                     debug_box.mut_min().set_y(min.y);
-//                     debug_box.mut_min().set_z(min.z);
-
-//                     debug_box.mut_max().set_x(max.x);
-//                     debug_box.mut_max().set_y(max.y);
-//                     debug_box.mut_max().set_z(max.z);
-
-//                     debug_box.mut_color().set_r(color.0 as u32);
-//                     debug_box.mut_color().set_g(color.1 as u32);
-//                     debug_box.mut_color().set_b(color.2 as u32);
-
-//                     cmd.mut_draw().mut_boxes().push(debug_box);
-//                     req.mut_debug().mut_debug().push(cmd);
-//                 },
-//                 DebugCommand::DebugSphere {
-//                     center,
-//                     radius,
-//                     color,
-//                 } => {
-//                     let mut cmd = debug::DebugCommand::new();
-//                     let mut debug_sphere = debug::DebugSphere::new();
-
-//                     debug_sphere.mut_p().set_x(center.x);
-//                     debug_sphere.mut_p().set_y(center.y);
-//                     debug_sphere.mut_p().set_z(center.z);
-
-//                     debug_sphere.set_r(radius);
-
-//                     debug_sphere.mut_color().set_r(color.0 as u32);
-//                     debug_sphere.mut_color().set_g(color.1 as u32);
-//                     debug_sphere.mut_color().set_b(color.2 as u32);
-
-//                     cmd.mut_draw().mut_spheres().push(debug_sphere);
-//                     req.mut_debug().mut_debug().push(cmd);
-//                 },
-//             }
-//         }
-
-//         let transactor = Transactor::send(&axon, ClientRequest::new(req))?;
-
-//         Ok(AgentSoma::SendDebug(SendDebug {
-//             interval: interval,
-//             transactor: transactor,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.transactor.expect(src, result)?;
-
-//                 Step::step(axon, self.interval)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
 
 // pub struct LeaveGame {
 //     transactor: Transactor,
