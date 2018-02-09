@@ -11,7 +11,8 @@ script:
   - |
       cargo build &&
       cargo test &&
-      cargo bench
+      cargo bench &&
+      cargo doc --no-deps
 
 deploy:
   - provider: script
@@ -25,5 +26,6 @@ deploy:
     skip-cleanup: true
     github-token: $GITHUB_TOKEN
     keep-history: true
+    local-dir: target/doc
     on:
       branch: master
