@@ -19,7 +19,16 @@ use sc2_proto::{common, raw, sc2api};
 use super::{FromProto, IntoSc2, Result};
 
 pub use self::ability::{Ability, AbilityData};
-pub use self::action::{Action, ActionTarget, DebugCommand, DebugTextTarget};
+pub use self::action::{
+    Action,
+    ActionTarget,
+    DebugAabb,
+    DebugCommand,
+    DebugLine,
+    DebugSphere,
+    DebugText,
+    DebugTextTarget,
+};
 pub use self::buff::{Buff, BuffData};
 pub use self::game::{GameResult, GameSettings, Map, PlayerResult};
 pub use self::image::ImageData;
@@ -72,8 +81,6 @@ impl Rect2 {
 
 /// 2D integer point used to specify a location
 pub type Point2I = na::Vector2<i32>;
-/// 3D integer point used to specify a location
-//pub type Point3I = na::Vector3<i32>;
 
 /// 2D integer rectangle represented by two points
 #[derive(Debug, Copy, Clone)]

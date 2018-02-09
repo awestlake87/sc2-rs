@@ -33,6 +33,7 @@ use sc2::{
 };
 use sc2::data::{
     DebugCommand,
+    DebugText,
     DebugTextTarget,
     Difficulty,
     GameSettings,
@@ -130,24 +131,25 @@ impl DebugBot {
         let observation = await!(self.control.observer().observe())?;
         let unit_type_data = await!(self.control.observer().get_unit_data())?;
 
-        await!(self.control.action().send_debug(DebugCommand::Text {
-            text: "in the corner".to_string(),
-            target: None,
-            color: (0xFF, 0, 0),
-        }))?;
-        await!(self.control.action().send_debug(DebugCommand::Text {
-            text: "screen pos".to_string(),
-            target: Some(DebugTextTarget::Screen(Point2::new(1.0, 1.0))),
-            color: (0, 0xFF, 0),
-        }))?;
+        await!(self.control.action().send_debug(
+            DebugText::new("in the corner".to_string()).color((0xFF, 0, 0)),
+        ))?;
+        await!(
+            self.control.action().send_debug(
+                DebugText::new("screen pos".to_string())
+                    .target(DebugTextTarget::Screen(Point2::new(1.0, 1.0)))
+                    .color((0, 0xFF, 0))
+            )
+        )?;
 
         let mut commands: Vec<DebugCommand> = observation
             .units
             .iter()
-            .map(|u| DebugCommand::Text {
-                text: unit_type_data[&u.unit_type].name.clone(),
-                target: Some(DebugTextTarget::World(u.get_pos())),
-                color: (0xFF, 0xFF, 0xFF),
+            .map(|u| {
+                DebugText::new(unit_type_data[&u.unit_type].name.clone())
+                    .target(DebugTextTarget::World(u.get_pos()))
+                    .color((0xFF, 0xFF, 0xFF))
+                    .into()
             })
             .collect();
 

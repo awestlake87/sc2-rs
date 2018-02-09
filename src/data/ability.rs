@@ -994,10 +994,16 @@ impl IntoProto<u32> for Ability {
 /// data for an ability that is currently available
 #[derive(Debug, Copy, Clone)]
 pub struct AvailableAbility {
+    ability: Ability,
+    /* /// indicates whether the ability requires a point to invoke
+     * requires_point: bool, */
+}
+
+impl AvailableAbility {
     /// the ability that is available
-    pub ability: Ability,
-    /// indicates whether the ability requires a point to invoke
-    pub requires_point: bool,
+    pub fn get_id(&self) -> Ability {
+        self.ability
+    }
 }
 
 /// target type of the ability
@@ -1157,16 +1163,30 @@ impl FromProto<data::AbilityData> for AbilityData {
     }
 }
 
-/// all abilities available to a unit
-#[derive(Debug, Clone)]
-pub struct AvailableUnitAbilities {
-    /// the available abilities
-    pub abilities: Vec<AvailableAbility>,
-    /// the tag of the unit
-    pub unit_tag: Tag,
-    /// the type of the unit
-    pub unit_type: UnitType,
-}
+// /// all abilities available to a unit
+// #[derive(Debug, Clone)]
+// pub struct AvailableUnitAbilities {
+//     abilities: Vec<AvailableAbility>,
+//     unit_tag: Tag,
+//     unit_type: UnitType,
+// }
+
+// impl AvailableUnitAbilities {
+//     /// the available abilities
+//     pub fn get_available_abilities(&self) -> &[AvailableAbility] {
+//         &self.abilities
+//     }
+
+//     /// the tag of the unit
+//     pub fn get_unit_tag(&self) -> Tag {
+//         self.unit_tag
+//     }
+
+//     /// the type of the unit
+//     pub fn get_unit_type(&self) -> UnitType {
+//         self.unit_type
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

@@ -4,11 +4,9 @@ use sc2_proto::sc2api;
 
 use super::super::{FromProto, IntoSc2, Result};
 use data::{
-    Color,
     Effect,
     ImageData,
     Point2,
-    Point3,
     PowerSource,
     Rect2,
     Score,

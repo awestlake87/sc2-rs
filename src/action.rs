@@ -197,97 +197,7 @@ impl ActionTask {
         req.mut_debug().mut_debug();
 
         for cmd in self.debug_batch {
-            match cmd {
-                DebugCommand::Text {
-                    text,
-                    target,
-                    color,
-                } => {
-                    let mut cmd = debug::DebugCommand::new();
-                    let mut debug_text = debug::DebugText::new();
-
-                    debug_text.set_text(text);
-
-                    match target {
-                        Some(DebugTextTarget::Screen(p)) => {
-                            debug_text.mut_virtual_pos().set_x(p.x);
-                            debug_text.mut_virtual_pos().set_y(p.y);
-                        },
-                        Some(DebugTextTarget::World(p)) => {
-                            debug_text.mut_world_pos().set_x(p.x);
-                            debug_text.mut_world_pos().set_y(p.y);
-                            debug_text.mut_world_pos().set_z(p.z);
-                        },
-                        None => (),
-                    }
-
-                    debug_text.mut_color().set_r(color.0 as u32);
-                    debug_text.mut_color().set_g(color.1 as u32);
-                    debug_text.mut_color().set_b(color.2 as u32);
-
-                    cmd.mut_draw().mut_text().push(debug_text);
-                    req.mut_debug().mut_debug().push(cmd);
-                },
-                DebugCommand::Line { p1, p2, color } => {
-                    let mut cmd = debug::DebugCommand::new();
-                    let mut debug_line = debug::DebugLine::new();
-
-                    debug_line.mut_line().mut_p0().set_x(p1.x);
-                    debug_line.mut_line().mut_p0().set_y(p1.y);
-                    debug_line.mut_line().mut_p0().set_z(p1.z);
-
-                    debug_line.mut_line().mut_p1().set_x(p2.x);
-                    debug_line.mut_line().mut_p1().set_y(p2.y);
-                    debug_line.mut_line().mut_p1().set_z(p2.z);
-
-                    debug_line.mut_color().set_r(color.0 as u32);
-                    debug_line.mut_color().set_g(color.1 as u32);
-                    debug_line.mut_color().set_b(color.2 as u32);
-
-                    cmd.mut_draw().mut_lines().push(debug_line);
-                    req.mut_debug().mut_debug().push(cmd);
-                },
-                DebugCommand::Box { min, max, color } => {
-                    let mut cmd = debug::DebugCommand::new();
-                    let mut debug_box = debug::DebugBox::new();
-
-                    debug_box.mut_min().set_x(min.x);
-                    debug_box.mut_min().set_y(min.y);
-                    debug_box.mut_min().set_z(min.z);
-
-                    debug_box.mut_max().set_x(max.x);
-                    debug_box.mut_max().set_y(max.y);
-                    debug_box.mut_max().set_z(max.z);
-
-                    debug_box.mut_color().set_r(color.0 as u32);
-                    debug_box.mut_color().set_g(color.1 as u32);
-                    debug_box.mut_color().set_b(color.2 as u32);
-
-                    cmd.mut_draw().mut_boxes().push(debug_box);
-                    req.mut_debug().mut_debug().push(cmd);
-                },
-                DebugCommand::Sphere {
-                    center,
-                    radius,
-                    color,
-                } => {
-                    let mut cmd = debug::DebugCommand::new();
-                    let mut debug_sphere = debug::DebugSphere::new();
-
-                    debug_sphere.mut_p().set_x(center.x);
-                    debug_sphere.mut_p().set_y(center.y);
-                    debug_sphere.mut_p().set_z(center.z);
-
-                    debug_sphere.set_r(radius);
-
-                    debug_sphere.mut_color().set_r(color.0 as u32);
-                    debug_sphere.mut_color().set_g(color.1 as u32);
-                    debug_sphere.mut_color().set_b(color.2 as u32);
-
-                    cmd.mut_draw().mut_spheres().push(debug_sphere);
-                    req.mut_debug().mut_debug().push(cmd);
-                },
-            }
+            req.mut_debug().mut_debug().push(cmd.into_proto()?);
         }
 
         await!(self.client.clone().request(req))?;
@@ -365,12 +275,15 @@ impl ActionTerminal {
 
     /// send a debug command to the game instance
     #[async]
-    pub fn send_debug(self, cmd: DebugCommand) -> Result<()> {
+    pub fn send_debug<T>(self, cmd: T) -> Result<()>
+    where
+        T: Into<DebugCommand> + 'static,
+    {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(ActionRequest::SendDebug(cmd, tx))
+                .send(ActionRequest::SendDebug(cmd.into(), tx))
                 .map(|_| ())
                 .map_err(|_| Error::from("unable to send debug command"))
         )?;

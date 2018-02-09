@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
-use super::{ImageData, Point2, Rect2};
-use super::super::{FromProto, IntoSc2, Result};
+use super::super::{FromProto, Result};
 
 /// result of the game
 #[allow(missing_docs)]
