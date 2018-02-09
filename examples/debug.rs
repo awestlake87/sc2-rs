@@ -109,7 +109,7 @@ impl Player for DebugBot {
 
     #[async(boxed)]
     fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player { race: Race::Terran }))
+        Ok((self, PlayerSetup::Player(Race::Terran)))
     }
 
     #[async(boxed)]
@@ -146,8 +146,9 @@ impl DebugBot {
             .get_units()
             .iter()
             .map(|u| {
-                DebugText::new(unit_type_data[&u.unit_type].name.clone())
-                    .target(DebugTextTarget::World(u.get_pos()))
+                DebugText::new(
+                    unit_type_data[&u.get_unit_type()].get_name().into(),
+                ).target(DebugTextTarget::World(u.get_pos()))
                     .color((0xFF, 0xFF, 0xFF))
                     .into()
             })

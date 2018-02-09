@@ -120,7 +120,7 @@ impl Player for MarineMicroBot {
 
     #[async(boxed)]
     fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player { race: Race::Terran }))
+        Ok((self, PlayerSetup::Player(Race::Terran)))
     }
 
     #[async(boxed)]
@@ -157,8 +157,8 @@ impl MarineMicroBot {
     fn on_step(mut self) -> Result<Self> {
         let observation = await!(self.control.observer().observe())?;
 
-        let marines =
-            observation.filter_units(|u| u.alliance == Alliance::Domestic);
+        let marines = observation
+            .filter_units(|u| u.get_alliance() == Alliance::Domestic);
 
         let marine_pos = match get_center_of_mass(&marines) {
             Some(pos) => pos,
@@ -173,7 +173,7 @@ impl MarineMicroBot {
                     self.control.action().send_action(
                         Action::new(Ability::Attack)
                             .units(marines.iter())
-                            .target(ActionTarget::Unit(zergling.tag))
+                            .target(ActionTarget::Unit(zergling.get_tag()))
                     )
                 )?;
             } else {
@@ -203,11 +203,11 @@ impl MarineMicroBot {
         if let Some(targeted_zergling) =
             mem::replace(&mut self.targeted_zergling, None)
         {
-            if unit.tag == targeted_zergling.tag {
+            if unit.get_tag() == targeted_zergling.get_tag() {
                 let marines = observation
-                    .filter_units(|u| u.alliance == Alliance::Domestic);
-                let zerglings =
-                    observation.filter_units(|u| u.alliance == Alliance::Enemy);
+                    .filter_units(|u| u.get_alliance() == Alliance::Domestic);
+                let zerglings = observation
+                    .filter_units(|u| u.get_alliance() == Alliance::Enemy);
 
                 let marine_pos = match get_center_of_mass(&marines) {
                     Some(pos) => pos,
@@ -248,7 +248,8 @@ fn get_nearest_enemy(
     observation: &Observation,
     pos: Point2,
 ) -> Option<Rc<Unit>> {
-    let units = observation.filter_units(|u| u.alliance == Alliance::Enemy);
+    let units =
+        observation.filter_units(|u| u.get_alliance() == Alliance::Enemy);
 
     let mut min = f32::MAX;
     let mut nearest = None;

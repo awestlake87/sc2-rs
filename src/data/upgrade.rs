@@ -199,18 +199,39 @@ impl IntoProto<u32> for Upgrade {
 /// upgrade data
 #[derive(Debug, Clone)]
 pub struct UpgradeData {
+    upgrade: Upgrade,
+    name: String,
+    mineral_cost: u32,
+    vespene_cost: u32,
+    ability: Ability,
+    research_time: f32,
+}
+
+impl UpgradeData {
     /// stable upgrade ID
-    pub upgrade: Upgrade,
+    pub fn get_id(&self) -> Upgrade {
+        self.upgrade
+    }
     /// upgrade name (corresponds to the game's catalog)
-    pub name: String,
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
     /// mineral cost of researching this upgrade
-    pub mineral_cost: u32,
+    pub fn get_mineral_cost(&self) -> u32 {
+        self.mineral_cost
+    }
     /// vespene cost of researching this upgrade
-    pub vespene_cost: u32,
+    pub fn get_vespene_cost(&self) -> u32 {
+        self.vespene_cost
+    }
     /// ability that researches this upgrade
-    pub ability: Ability,
+    pub fn get_ability(&self) -> Ability {
+        self.ability
+    }
     /// time in game steps to research this upgrade
-    pub research_time: f32,
+    pub fn get_research_time(&self) -> f32 {
+        self.research_time
+    }
 }
 
 impl FromProto<data::UpgradeData> for UpgradeData {

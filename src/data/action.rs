@@ -48,7 +48,7 @@ impl Action {
         T: Iterator<Item = &'a Rc<Unit>>,
     {
         Self {
-            units: units.map(|u| u.tag).collect(),
+            units: units.map(|u| u.get_tag()).collect(),
             ..self
         }
     }

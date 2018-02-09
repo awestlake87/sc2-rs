@@ -398,15 +398,13 @@ impl MeleeContract for AgentMeleeDendrite {
             let mut setup = sc2api::PlayerSetup::new();
 
             match player {
-                PlayerSetup::Computer {
-                    difficulty, race, ..
-                } => {
+                PlayerSetup::Computer(race, difficulty) => {
                     setup.set_field_type(sc2api::PlayerType::Computer);
 
                     setup.set_difficulty(difficulty.to_proto());
                     setup.set_race(race.into_proto()?);
                 },
-                PlayerSetup::Player { race, .. } => {
+                PlayerSetup::Player(race) => {
                     setup.set_field_type(sc2api::PlayerType::Participant);
 
                     setup.set_race(race.into_proto()?);
@@ -434,10 +432,10 @@ impl MeleeContract for AgentMeleeDendrite {
         let mut req = sc2api::Request::new();
 
         match setup {
-            PlayerSetup::Computer { race, .. } => {
+            PlayerSetup::Computer(race, _) => {
                 req.mut_join_game().set_race(race.into_proto()?);
             },
-            PlayerSetup::Player { race, .. } => {
+            PlayerSetup::Player(race) => {
                 req.mut_join_game().set_race(race.into_proto()?);
             }, //_ => req.mut_join_game().set_race(common::Race::NoRace)
         };

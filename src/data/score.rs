@@ -24,11 +24,11 @@ pub enum ScoreType {
 #[derive(Debug, Copy, Clone)]
 pub struct Score {
     /// method of scoring
-    pub score_type: ScoreType,
+    score_type: ScoreType,
     /// overall score
-    pub score: f32,
+    score: f32,
     /// more detailed scoring
-    pub details: ScoreDetails,
+    details: ScoreDetails,
 }
 
 impl FromProto<ProtoScore> for Score {
@@ -54,15 +54,15 @@ impl FromProto<ProtoScore> for Score {
 #[derive(Debug, Copy, Clone)]
 pub struct CategoryScoreDetails {
     /// overall score
-    pub none: f32,
+    none: f32,
     /// military score
-    pub army: f32,
+    army: f32,
     /// economic score
-    pub economy: f32,
+    economy: f32,
     /// tech score
-    pub technology: f32,
+    technology: f32,
     /// upgrade score
-    pub upgrade: f32,
+    upgrade: f32,
 }
 
 impl FromProto<ProtoCategoryScoreDetails> for CategoryScoreDetails {
@@ -81,11 +81,11 @@ impl FromProto<ProtoCategoryScoreDetails> for CategoryScoreDetails {
 #[derive(Debug, Copy, Clone)]
 pub struct VitalScoreDetails {
     /// health score
-    pub life: f32,
+    life: f32,
     /// shield score
-    pub shields: f32,
+    shields: f32,
     /// energy score
-    pub energy: f32,
+    energy: f32,
 }
 
 impl FromProto<ProtoVitalScoreDetails> for VitalScoreDetails {
@@ -102,14 +102,14 @@ impl FromProto<ProtoVitalScoreDetails> for VitalScoreDetails {
 #[derive(Debug, Copy, Clone)]
 pub struct ScoreDetails {
     /// time elapsed while production was idle
-    pub idle_production_time: f32,
+    idle_production_time: f32,
     /// time elapsed while workers were idle
-    pub idle_worker_time: f32,
+    idle_worker_time: f32,
 
     /// total unit value
-    pub total_value_units: f32,
+    total_value_units: f32,
     /// total structural value
-    pub total_value_structures: f32,
+    total_value_structures: f32,
 
     /// value of enemy units destroyed
     ///
@@ -117,64 +117,64 @@ pub struct ScoreDetails {
     /// designer guess. might be useful as a delta. the weighting of the
     /// combination and the human designer guess is asymmetric with the total
     /// value
-    pub killed_value_units: f32,
+    killed_value_units: f32,
     /// value of enemy structures destroyed
     ///
     /// note that this field is a combo of minerals, vespene, and a human
     /// designer guess. might be useful as a delta. the weighting of the
     /// combination and the human designer guess is asymmetric with the total
     /// value
-    pub killed_value_structures: f32,
+    killed_value_structures: f32,
 
     /// total minerals collected
-    pub collected_minerals: f32,
+    collected_minerals: f32,
     /// total vespene collected
-    pub collected_vespene: f32,
+    collected_vespene: f32,
 
     /// collection rate of minerals
-    pub collection_rate_minerals: f32,
+    collection_rate_minerals: f32,
     /// collection rate of vespene
-    pub collection_rate_vespene: f32,
+    collection_rate_vespene: f32,
 
     /// total minerals spent
-    pub spent_minerals: f32,
+    spent_minerals: f32,
     /// total vespene spent
-    pub spent_vespene: f32,
+    spent_vespene: f32,
 
     /// total food used
-    pub food_used: Option<CategoryScoreDetails>,
+    food_used: Option<CategoryScoreDetails>,
 
     /// TODO: find out what this means
-    pub killed_minerals: Option<CategoryScoreDetails>,
+    killed_minerals: Option<CategoryScoreDetails>,
     /// TODO: find out what this means
-    pub killed_vespene: Option<CategoryScoreDetails>,
+    killed_vespene: Option<CategoryScoreDetails>,
 
     /// TODO: find out what this means
-    pub lost_minerals: Option<CategoryScoreDetails>,
+    lost_minerals: Option<CategoryScoreDetails>,
     /// TODO: find out what this means
-    pub lost_vespene: Option<CategoryScoreDetails>,
+    lost_vespene: Option<CategoryScoreDetails>,
 
     /// TODO: find out what this means
-    pub friendly_fire_minerals: Option<CategoryScoreDetails>,
+    friendly_fire_minerals: Option<CategoryScoreDetails>,
     /// TODO: find out what this means
-    pub friendly_fire_vespene: Option<CategoryScoreDetails>,
+    friendly_fire_vespene: Option<CategoryScoreDetails>,
 
     /// TODO: find out what this means
-    pub used_minerals: Option<CategoryScoreDetails>,
+    used_minerals: Option<CategoryScoreDetails>,
     /// TODO: find out what this means
-    pub used_vespene: Option<CategoryScoreDetails>,
+    used_vespene: Option<CategoryScoreDetails>,
 
     /// TODO: find out what this means
-    pub total_used_minerals: Option<CategoryScoreDetails>,
+    total_used_minerals: Option<CategoryScoreDetails>,
     /// TODO: find out what this means
-    pub total_used_vespene: Option<CategoryScoreDetails>,
+    total_used_vespene: Option<CategoryScoreDetails>,
 
     /// total damage dealt to enemies
-    pub total_damage_dealt: Option<VitalScoreDetails>,
+    total_damage_dealt: Option<VitalScoreDetails>,
     /// total damage taken from enemies
-    pub total_damage_taken: Option<VitalScoreDetails>,
+    total_damage_taken: Option<VitalScoreDetails>,
     /// total damage healed
-    pub total_healed: Option<VitalScoreDetails>,
+    total_healed: Option<VitalScoreDetails>,
 }
 
 impl FromProto<ProtoScoreDetails> for ScoreDetails {

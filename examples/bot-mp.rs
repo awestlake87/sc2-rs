@@ -117,7 +117,7 @@ impl Player for TerranBot {
 
     #[async(boxed)]
     fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player { race: Race::Terran }))
+        Ok((self, PlayerSetup::Player(Race::Terran)))
     }
 
     #[async(boxed)]
@@ -151,14 +151,14 @@ impl TerranBot {
 
     fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
         let units = observation.filter_units(|u| {
-            u.alliance == Alliance::Enemy
-                && (u.unit_type == UnitType::TerranCommandCenter
-                    || u.unit_type == UnitType::TerranSupplyDepot
-                    || u.unit_type == UnitType::TerranBarracks)
+            u.get_alliance() == Alliance::Enemy
+                && (u.get_unit_type() == UnitType::TerranCommandCenter
+                    || u.get_unit_type() == UnitType::TerranSupplyDepot
+                    || u.get_unit_type() == UnitType::TerranBarracks)
         });
 
         if !units.is_empty() {
-            Some(units[0].tag)
+            Some(units[0].get_tag())
         } else {
             None
         }
@@ -178,9 +178,9 @@ impl TerranBot {
         let map_info = await!(self.control.observer().get_map_info())?;
 
         let units = observation.filter_units(|u| {
-            u.alliance == Alliance::Domestic
-                && u.unit_type == UnitType::TerranMarine
-                && u.orders.is_empty()
+            u.get_alliance() == Alliance::Domestic
+                && u.get_unit_type() == UnitType::TerranMarine
+                && u.get_orders().is_empty()
         });
 
         for u in units {
@@ -235,7 +235,7 @@ impl TerranBot {
     #[async]
     fn try_build_scv(self, observation: Rc<Observation>) -> Result<Self> {
         let scv_count = observation
-            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .filter_units(|u| u.get_unit_type() == UnitType::TerranScv)
             .len();
 
         if scv_count < TARGET_SCV_COUNT {
@@ -252,7 +252,7 @@ impl TerranBot {
     #[async]
     fn try_build_barracks(self, observation: Rc<Observation>) -> Result<Self> {
         let scv_count = observation
-            .filter_units(|u| u.unit_type == UnitType::TerranScv)
+            .filter_units(|u| u.get_unit_type() == UnitType::TerranScv)
             .len();
         // wait until we have our quota of SCVs
         if scv_count < TARGET_SCV_COUNT {
@@ -260,7 +260,7 @@ impl TerranBot {
         }
 
         let barracks_count = observation
-            .filter_units(|u| u.unit_type == UnitType::TerranBarracks)
+            .filter_units(|u| u.get_unit_type() == UnitType::TerranBarracks)
             .len();
 
         if barracks_count > 0 {
@@ -286,8 +286,9 @@ impl TerranBot {
         ability: Ability,
         unit_type: UnitType,
     ) -> Result<Self> {
-        let units = observation
-            .filter_units(|u| u.unit_type == unit_type && u.orders.is_empty());
+        let units = observation.filter_units(|u| {
+            u.get_unit_type() == unit_type && u.get_orders().is_empty()
+        });
 
         if units.is_empty() {
             Ok(self)
@@ -305,13 +306,13 @@ impl TerranBot {
         observation: Rc<Observation>,
         ability: Ability,
     ) -> Result<Self> {
-        let units =
-            observation.filter_units(|u| u.alliance == Alliance::Domestic);
+        let units = observation
+            .filter_units(|u| u.get_alliance() == Alliance::Domestic);
 
         // if a unit is already building this structure, do nothing
         for u in &units {
-            for o in &u.orders {
-                if o.ability == ability {
+            for o in u.get_orders().iter() {
+                if o.get_ability() == ability {
                     return Ok(self);
                 }
             }

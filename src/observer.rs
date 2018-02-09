@@ -476,9 +476,9 @@ impl ObserverTask {
         for unit in raw.take_units().into_iter() {
             match Unit::from_proto(unit) {
                 Ok(mut unit) => {
-                    let tag = unit.tag;
+                    let tag = unit.get_tag();
 
-                    unit.last_seen_game_loop = self.current_step;
+                    unit.set_last_seen_step(self.current_step);
 
                     self.units.insert(tag, Rc::from(unit));
                 },
@@ -596,12 +596,14 @@ impl ObserverTask {
         }
 
         for ref unit in self.units.values() {
-            match self.previous_units.get(&unit.tag) {
+            match self.previous_units.get(&unit.get_tag()) {
                 Some(ref prev_unit) => {
-                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
+                    if unit.get_orders().is_empty()
+                        && !prev_unit.get_orders().is_empty()
+                    {
                         events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                    } else if unit.build_progress >= 1.0
-                        && prev_unit.build_progress < 1.0
+                    } else if unit.get_build_progress() >= 1.0
+                        && prev_unit.get_build_progress() < 1.0
                     {
                         events.push(GameEvent::BuildingCompleted(Rc::clone(
                             unit,
@@ -609,8 +611,8 @@ impl ObserverTask {
                     }
                 },
                 None => {
-                    if unit.alliance == Alliance::Enemy
-                        && unit.display_type == DisplayType::Visible
+                    if unit.get_alliance() == Alliance::Enemy
+                        && unit.get_display_type() == DisplayType::Visible
                     {
                         events.push(GameEvent::UnitDetected(Rc::clone(unit)));
                     } else {
@@ -700,7 +702,7 @@ impl ObserverTask {
         for data in rsp.mut_data().take_units().into_iter() {
             let u = UnitTypeData::from_proto(data)?;
 
-            let unit_type = u.unit_type;
+            let unit_type = u.get_id();
             unit_type_data.insert(unit_type, u);
         }
 
@@ -714,7 +716,7 @@ impl ObserverTask {
         for data in rsp.mut_data().take_upgrades().into_iter() {
             let u = UpgradeData::from_proto(data)?;
 
-            let upgrade = u.upgrade;
+            let upgrade = u.get_id();
             upgrade_data.insert(upgrade, u);
         }
 

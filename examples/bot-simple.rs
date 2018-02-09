@@ -113,7 +113,7 @@ impl Player for SimpleBot {
 
     #[async(boxed)]
     fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player { race: Race::Terran }))
+        Ok((self, PlayerSetup::Player(Race::Terran)))
     }
 
     #[async(boxed)]
@@ -146,8 +146,8 @@ impl SimpleBot {
         let step = observation.get_current_step();
 
         if step % 100 == 0 {
-            let units =
-                observation.filter_units(|u| u.alliance == Alliance::Domestic);
+            let units = observation
+                .filter_units(|u| u.get_alliance() == Alliance::Domestic);
 
             for u in units {
                 let target = find_random_location(&map_info);

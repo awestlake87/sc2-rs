@@ -64,10 +64,7 @@ impl ComputerSoma {
     fn axon(race: Race, difficulty: Difficulty) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
-                setup: PlayerSetup::Computer {
-                    race: race,
-                    difficulty: difficulty,
-                },
+                setup: PlayerSetup::Computer(race, difficulty),
                 melee: None,
             },
             vec![Constraint::One(Synapse::Melee)],
