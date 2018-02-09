@@ -9,9 +9,18 @@ use url::Url;
 
 use super::{Error, Result};
 use ctrlc_breaker::CtrlcBreakerSoma;
-use data::{GamePorts, GameSettings, PlayerSetup, UpdateScheme};
-use launcher::{Launcher, LauncherSoma, LauncherTerminal};
+use data::{GameSettings, PlayerSetup};
+use launcher::{GamePorts, Launcher, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
+
+/// update scheme for the agents to use
+#[derive(Debug, Copy, Clone)]
+pub enum UpdateScheme {
+    /// update as fast as possible
+    Realtime,
+    /// step the game with a fixed interval
+    Interval(u32),
+}
 
 /// empty trait to prevent users from passing their own somas to MeleeBuilder
 pub trait MeleeCompetitor {

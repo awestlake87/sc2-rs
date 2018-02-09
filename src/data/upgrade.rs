@@ -1,4 +1,7 @@
+use sc2_proto::data;
+
 use super::super::{ErrorKind, FromProto, IntoProto, Result};
+use data::Ability;
 
 /// a list of known StarCraft II upgrades
 #[allow(missing_docs)]
@@ -190,6 +193,36 @@ impl FromProto<u32> for Upgrade {
 impl IntoProto<u32> for Upgrade {
     fn into_proto(self) -> Result<u32> {
         Ok(self as u32)
+    }
+}
+
+/// upgrade data
+#[derive(Debug, Clone)]
+pub struct UpgradeData {
+    /// stable upgrade ID
+    pub upgrade: Upgrade,
+    /// upgrade name (corresponds to the game's catalog)
+    pub name: String,
+    /// mineral cost of researching this upgrade
+    pub mineral_cost: u32,
+    /// vespene cost of researching this upgrade
+    pub vespene_cost: u32,
+    /// ability that researches this upgrade
+    pub ability: Ability,
+    /// time in game steps to research this upgrade
+    pub research_time: f32,
+}
+
+impl FromProto<data::UpgradeData> for UpgradeData {
+    fn from_proto(mut data: data::UpgradeData) -> Result<Self> {
+        Ok(Self {
+            upgrade: Upgrade::from_proto(data.get_upgrade_id())?,
+            name: data.take_name(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
+            ability: Ability::from_proto(data.get_ability_id())?,
+            research_time: data.get_research_time(),
+        })
     }
 }
 

@@ -1,124 +1,79 @@
 use std::rc::Rc;
 
-use super::{
-    Ability,
-    ActionTarget,
+use sc2_proto::sc2api;
+
+use super::super::{FromProto, IntoSc2, Result};
+use data::{
     Color,
     Effect,
     ImageData,
     Point2,
     Point3,
     PowerSource,
+    Rect2,
     Score,
     Unit,
     Upgrade,
     Visibility,
 };
 
-/// target for debugging text
-#[derive(Debug, Copy, Clone)]
-pub enum DebugTextTarget {
-    /// screen coordinates for debug text
-    Screen(Point2),
-    /// world coordinates for debug text
-    World(Point3),
+/// terrain info
+#[derive(Debug, Clone)]
+pub struct MapInfo {
+    /// width of the terrain
+    pub width: i32,
+    /// height of the terrain
+    pub height: i32,
+
+    /// image that reveals pathable tiles
+    pub pathing_grid: ImageData,
+    /// image that reveals placable tiles
+    pub placement_grid: ImageData,
+    /// image that reveals terrain height
+    pub terrain_height: ImageData,
+
+    /// rectangle of the playable area
+    pub playable_area: Rect2,
+    /// starting locations of the enemy bases
+    pub enemy_start_locations: Vec<Point2>,
+    /* options */
+    /* player_info */
 }
 
-/// a command to issue to the game instance
-#[derive(Debug, Clone)]
-pub enum Command {
-    /// command a set of units
-    Action {
-        /// units to command
-        units: Vec<Rc<Unit>>,
-        /// ability to trigger
-        ability: Ability,
-        /// ability target
-        target: Option<ActionTarget>,
-    },
-    /* ToggleAutocast {
-     *     units: Vec<Rc<Unit>>,
-     *     ability: Ability
-     * }, */
-}
+impl FromProto<sc2api::ResponseGameInfo> for MapInfo {
+    fn from_proto(mut info: sc2api::ResponseGameInfo) -> Result<Self> {
+        let mut start_raw = info.take_start_raw();
 
-/// a debug command for the game
-#[derive(Debug, Clone)]
-pub enum DebugCommand {
-    /// shows debug text in the game instance
-    Text {
-        /// text to display
-        text: String,
-        /// target in screen or world space
-        ///
-        /// if the target is None, then text appears at top-left of screen.
-        target: Option<DebugTextTarget>,
-        /// color of the text
-        color: Color,
-    },
+        Ok(Self {
+            width: start_raw.get_map_size().get_x(),
+            height: start_raw.get_map_size().get_y(),
 
-    /// shows a debug line in the game from p1 to p2
-    Line {
-        /// starting point of the line
-        p1: Point3,
-        /// ending point of the line
-        p2: Point3,
-        /// color of the line
-        color: Color,
-    },
+            pathing_grid: start_raw.take_pathing_grid().into_sc2()?,
+            placement_grid: start_raw.take_placement_grid().into_sc2()?,
+            terrain_height: start_raw.take_terrain_height().into_sc2()?,
 
-    /// shows a debug box in the game defined by corners min and max
-    Box {
-        /// minimum corner of the box
-        min: Point3,
-        /// maximum corner of the box
-        max: Point3,
-        /// color of the box
-        color: Color,
-    },
+            playable_area: {
+                let area = start_raw.get_playable_area();
 
-    /// shows a debug sphere in the game
-    Sphere {
-        /// center of the sphere
-        center: Point3,
-        /// radius of the sphere
-        radius: f32,
-        /// color of the sphere
-        color: Color,
-    },
-}
+                Rect2 {
+                    from: Point2::new(
+                        area.get_p0().get_x() as f32,
+                        area.get_p0().get_y() as f32,
+                    ),
+                    to: Point2::new(
+                        area.get_p1().get_x() as f32,
+                        area.get_p1().get_y() as f32,
+                    ),
+                }
+            },
 
-/// an event from the game
-#[derive(Debug, Clone)]
-pub enum GameEvent {
-    /// game has loaded - not called for fast restarts
-    GameLoaded,
-    /// game has started
-    GameStarted,
-    /// game has ended
-    GameEnded,
-
-    /// a unit was destroyed
-    UnitDestroyed(Rc<Unit>),
-    /// a unit was created
-    UnitCreated(Rc<Unit>),
-    /// a unit does not have any orders
-    UnitIdle(Rc<Unit>),
-    /// a unit was detected
-    UnitDetected(Rc<Unit>),
-
-    /// an upgrade completed
-    UpgradeCompleted(Upgrade),
-    /// a unit finished constructing a building
-    BuildingCompleted(Rc<Unit>),
-
-    /// number of nydus worms detected
-    NydusWormsDetected(u32),
-    /// number of nukes launched
-    NukesDetected(u32),
-
-    /// step the agent or observer
-    Step,
+            enemy_start_locations: start_raw
+                .take_start_locations()
+                .into_iter()
+                .map(|p| Point2::new(p.get_x() as f32, p.get_y() as f32))
+                .collect(),
+        })
+    }
 }
 
 /// state of the game (changes every frame)

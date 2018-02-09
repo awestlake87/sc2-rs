@@ -7,7 +7,7 @@ use sc2_proto::{debug, sc2api};
 
 use super::{Error, IntoProto, Result};
 use client::ClientTerminal;
-use data::{ActionTarget, Command, DebugCommand, DebugTextTarget};
+use data::{Action, DebugCommand, DebugTextTarget};
 use synapses::{Dendrite, Synapse, Terminal};
 
 pub struct ActionSoma {
@@ -118,7 +118,7 @@ struct ActionTask {
     control: Option<ActionControlDendrite>,
     queue: Option<mpsc::Receiver<ActionRequest>>,
 
-    command_batch: Vec<Command>,
+    action_batch: Vec<Action>,
     debug_batch: Vec<DebugCommand>,
 }
 
@@ -133,7 +133,7 @@ impl ActionTask {
             control: Some(control),
             queue: Some(rx),
 
-            command_batch: vec![],
+            action_batch: vec![],
             debug_batch: vec![],
         }
     }
@@ -152,13 +152,13 @@ impl ActionTask {
         for req in queue.map_err(|_| -> Error { unreachable!() }) {
             match req {
                 Either::Control(ActionControlRequest::Step(tx)) => {
-                    self = await!(self.send_commands())?;
+                    self = await!(self.send_actions())?;
                     self = await!(self.send_debug())?;
 
                     tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
                 },
-                Either::Request(ActionRequest::SendCommand(cmd, tx)) => {
-                    self.command_batch.push(cmd);
+                Either::Request(ActionRequest::SendAction(action, tx)) => {
+                    self.action_batch.push(action);
                     tx.send(()).map_err(|_| {
                         Error::from("unable to ack send command")
                     })?;
@@ -175,50 +175,18 @@ impl ActionTask {
     }
 
     #[async]
-    fn send_commands(self) -> Result<Self> {
+    fn send_actions(self) -> Result<Self> {
         let mut req = sc2api::Request::new();
         req.mut_action().mut_actions();
 
-        for cmd in self.command_batch {
-            match cmd {
-                Command::Action {
-                    units,
-                    ability,
-                    target,
-                } => {
-                    let mut a = sc2api::Action::new();
-
-                    {
-                        let cmd = a.mut_action_raw().mut_unit_command();
-
-                        cmd.set_ability_id(ability.into_proto()? as i32);
-
-                        match target {
-                            Some(ActionTarget::UnitTag(tag)) => {
-                                cmd.set_target_unit_tag(tag);
-                            },
-                            Some(ActionTarget::Location(pos)) => {
-                                let target = cmd.mut_target_world_space_pos();
-                                target.set_x(pos.x);
-                                target.set_y(pos.y);
-                            },
-                            None => (),
-                        }
-
-                        for u in units {
-                            cmd.mut_unit_tags().push(u.tag);
-                        }
-                    }
-
-                    req.mut_action().mut_actions().push(a);
-                },
-            }
+        for action in self.action_batch {
+            req.mut_action().mut_actions().push(action.into_proto()?);
         }
 
         await!(self.client.clone().request(req))?;
 
         Ok(Self {
-            command_batch: vec![],
+            action_batch: vec![],
             ..self
         })
     }
@@ -338,7 +306,7 @@ enum ActionControlRequest {
 
 #[derive(Debug)]
 enum ActionRequest {
-    SendCommand(Command, oneshot::Sender<()>),
+    SendAction(Action, oneshot::Sender<()>),
     SendDebug(DebugCommand, oneshot::Sender<()>),
 }
 
@@ -383,12 +351,12 @@ pub struct ActionTerminal {
 impl ActionTerminal {
     /// send a command to the game instance
     #[async]
-    pub fn send_command(self, cmd: Command) -> Result<()> {
+    pub fn send_action(self, action: Action) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(ActionRequest::SendCommand(cmd, tx))
+                .send(ActionRequest::SendAction(action, tx))
                 .map(|_| ())
                 .map_err(|_| Error::from("unable to send command"))
         )?;

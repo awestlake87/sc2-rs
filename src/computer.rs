@@ -3,15 +3,9 @@ use organelle::{Axon, Constraint, Impulse, Soma};
 use url::Url;
 
 use super::{Error, Result};
-use data::{
-    Difficulty,
-    GamePorts,
-    GameSettings,
-    PlayerSetup,
-    Race,
-    UpdateScheme,
-};
-use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
+use data::{Difficulty, GameSettings, PlayerSetup, Race};
+use launcher::GamePorts;
+use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use synapses::{Dendrite, Synapse};
 
 /// build a built-in AI opponent

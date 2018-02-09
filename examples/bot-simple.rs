@@ -25,25 +25,25 @@ use rand::random;
 use sc2::{
     AgentControl,
     Error,
+    GameEvent,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
     Player,
     Result,
+    UpdateScheme,
 };
 use sc2::data::{
     Ability,
+    Action,
     ActionTarget,
     Alliance,
-    Command,
-    GameEvent,
     GameSettings,
     Map,
     MapInfo,
     PlayerSetup,
     Point2,
     Race,
-    UpdateScheme,
 };
 use tokio_core::reactor;
 
@@ -151,11 +151,13 @@ impl SimpleBot {
 
             for u in units {
                 let target = find_random_location(&map_info);
-                await!(self.control.action().send_command(Command::Action {
-                    units: vec![u],
-                    ability: Ability::Smart,
-                    target: Some(ActionTarget::Location(target)),
-                }))?;
+                await!(
+                    self.control.action().send_action(
+                        Action::new(Ability::Smart)
+                            .units([u].iter())
+                            .target(ActionTarget::Location(target))
+                    )
+                )?;
             }
         }
 

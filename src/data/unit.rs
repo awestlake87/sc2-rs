@@ -1,7 +1,7 @@
-use sc2_proto::raw;
+use sc2_proto::{common, data, raw};
 
-use super::{Ability, Buff, Point2, Point3};
-use super::super::{FromProto, Result};
+use super::super::{FromProto, IntoSc2, Result};
+use data::{Ability, Buff, Point2, Point3, Race};
 
 /// unique tag for a unit instance
 pub type Tag = u64;
@@ -979,6 +979,232 @@ impl FromProto<raw::PassengerUnit> for PassengerUnit {
             shield: passenger.get_shield(),
             energy: passenger.get_energy(),
             unit_type: UnitType::from_proto(passenger.get_unit_type())?,
+        })
+    }
+}
+
+/// category of unit
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum Attribute {
+    Light,
+    Armored,
+    Biological,
+    Mechanical,
+    Robotic,
+    Psionic,
+    Massive,
+    Structure,
+    Hover,
+    Heroic,
+    Summoned,
+}
+
+impl FromProto<data::Attribute> for Attribute {
+    fn from_proto(a: data::Attribute) -> Result<Self> {
+        Ok(match a {
+            data::Attribute::Light => Attribute::Light,
+            data::Attribute::Armored => Attribute::Armored,
+            data::Attribute::Biological => Attribute::Biological,
+            data::Attribute::Mechanical => Attribute::Mechanical,
+            data::Attribute::Robotic => Attribute::Robotic,
+            data::Attribute::Psionic => Attribute::Psionic,
+            data::Attribute::Massive => Attribute::Massive,
+            data::Attribute::Structure => Attribute::Structure,
+            data::Attribute::Hover => Attribute::Hover,
+            data::Attribute::Heroic => Attribute::Heroic,
+            data::Attribute::Summoned => Attribute::Summoned,
+        })
+    }
+}
+
+/// damage bonus of a unit
+#[derive(Debug, Copy, Clone)]
+pub struct DamageBonus {
+    /// affected attribute
+    pub attribute: Attribute,
+    /// damage bonus
+    pub bonus: f32,
+}
+
+impl FromProto<data::DamageBonus> for DamageBonus {
+    fn from_proto(b: data::DamageBonus) -> Result<Self> {
+        Ok(Self {
+            attribute: b.get_attribute().into_sc2()?,
+            bonus: b.get_bonus(),
+        })
+    }
+}
+
+/// target type of a weapon
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum WeaponTargetType {
+    Ground,
+    Air,
+    Any,
+}
+
+impl FromProto<data::Weapon_TargetType> for WeaponTargetType {
+    fn from_proto(target: data::Weapon_TargetType) -> Result<Self> {
+        Ok(match target {
+            data::Weapon_TargetType::Ground => WeaponTargetType::Ground,
+            data::Weapon_TargetType::Air => WeaponTargetType::Air,
+            data::Weapon_TargetType::Any => WeaponTargetType::Any,
+        })
+    }
+}
+
+/// unit weapon
+#[derive(Debug, Clone)]
+pub struct Weapon {
+    /// weapon's target type
+    pub target_type: WeaponTargetType,
+    /// weapon damage
+    pub damage: f32,
+    /// any damage bonuses that apply to the weapon
+    pub damage_bonus: Vec<DamageBonus>,
+    /// number of hits per attack (eg. Colossus has 2 beams)
+    pub attacks: u32,
+    /// attack range
+    pub range: f32,
+    /// time between attacks
+    pub speed: f32,
+}
+
+impl FromProto<data::Weapon> for Weapon {
+    fn from_proto(mut w: data::Weapon) -> Result<Self> {
+        Ok(Self {
+            target_type: w.get_field_type().into_sc2()?,
+            damage: w.get_damage(),
+            damage_bonus: {
+                let mut bonuses = vec![];
+
+                for b in w.take_damage_bonus().into_iter() {
+                    bonuses.push(b.into_sc2()?);
+                }
+
+                bonuses
+            },
+            attacks: w.get_attacks(),
+            range: w.get_range(),
+            speed: w.get_speed(),
+        })
+    }
+}
+
+/// data about a unit type
+///
+/// this data is derived from the catalog (xml) data of the game and upgrades
+#[derive(Debug, Clone)]
+pub struct UnitTypeData {
+    /// stable unit ID
+    pub unit_type: UnitType,
+    /// unit type name (corresponds to the game's catalog)
+    pub name: String,
+    /// whether this unit is available to the current mods/map
+    pub available: bool,
+    /// number of cargo slots this unit occupies in a transport
+    pub cargo_size: u32,
+    /// cost in minerals to build this unit
+    pub mineral_cost: u32,
+    /// cost in vespene to build this unit
+    pub vespene_cost: u32,
+
+    /// unit attributes (may change based on upgrades)
+    pub attributes: Vec<Attribute>,
+    /// movement speed of this unit
+    pub movement_speed: f32,
+    /// armor of this unit
+    pub armor: f32,
+    /// weapons on this unit
+    pub weapons: Vec<Weapon>,
+    /// how much food this unit requires
+    pub food_required: f32,
+    /// how much food this unit provides
+    pub food_provided: f32,
+    /// which ability id creates this unit
+    pub ability: Ability,
+    /// the race this unit belongs to
+    pub race: Option<Race>,
+    /// how long a unit takes to build
+    pub build_time: f32,
+    /// whether this unit can have minerals (mineral patches)
+    pub has_minerals: bool,
+    /// whether this unit can have vespene (vespene geysers)
+    pub has_vespene: bool,
+
+    /// units this is equivalent to in terms of satisfying tech
+    /// requirements
+    pub tech_alias: Vec<UnitType>,
+    /// units that are morphed variants of the same unit
+    pub unit_alias: UnitType,
+    /// structure required to build this unit (or any with same tech alias)
+    pub tech_requirement: UnitType,
+    /// whether tech requirement is an addon
+    pub require_attached: bool,
+}
+
+impl FromProto<data::UnitTypeData> for UnitTypeData {
+    fn from_proto(mut data: data::UnitTypeData) -> Result<Self> {
+        Ok(Self {
+            unit_type: data.get_unit_id().into_sc2()?,
+            name: data.get_name().to_string(),
+            available: data.get_available(),
+            cargo_size: data.get_cargo_size(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
+
+            attributes: {
+                let mut attributes = vec![];
+
+                for a in data.take_attributes().into_iter() {
+                    attributes.push(a.into_sc2()?);
+                }
+
+                attributes
+            },
+
+            movement_speed: data.get_movement_speed(),
+            armor: data.get_armor(),
+            weapons: {
+                let mut weapons = vec![];
+
+                for w in data.take_weapons().into_iter() {
+                    weapons.push(w.into_sc2()?);
+                }
+
+                weapons
+            },
+            food_required: data.get_food_required(),
+            food_provided: data.get_food_provided(),
+
+            ability: data.get_ability_id().into_sc2()?,
+            race: {
+                if data.has_race() && data.get_race() != common::Race::NoRace {
+                    Some(data.get_race().into_sc2()?)
+                } else {
+                    None
+                }
+            },
+            build_time: data.get_build_time(),
+            has_minerals: data.get_has_minerals(),
+            has_vespene: data.get_has_vespene(),
+
+            tech_alias: {
+                let mut aliases = vec![];
+
+                for a in data.get_tech_alias() {
+                    aliases.push(UnitType::from_proto(*a)?);
+                }
+
+                aliases
+            },
+            unit_alias: UnitType::from_proto(data.get_unit_alias())?,
+            tech_requirement: UnitType::from_proto(
+                data.get_tech_requirement(),
+            )?,
+            require_attached: data.get_require_attached(),
         })
     }
 }

@@ -23,23 +23,23 @@ use futures::prelude::*;
 use sc2::{
     AgentControl,
     Error,
+    GameEvent,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
     Player,
     Result,
+    UpdateScheme,
 };
 use sc2::data::{
     DebugCommand,
     DebugTextTarget,
     Difficulty,
-    GameEvent,
     GameSettings,
     Map,
     PlayerSetup,
     Point2,
     Race,
-    UpdateScheme,
 };
 use tokio_core::reactor;
 

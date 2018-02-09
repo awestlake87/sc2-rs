@@ -9,9 +9,26 @@ use organelle::{Axon, Constraint, Impulse, Soma};
 use regex::Regex;
 
 use super::{Error, ErrorKind, Result};
-use data::{GamePorts, PortSet, Rect};
+use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
 use synapses::{Dendrite, Synapse};
+
+/// endpoint port settings
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone)]
+pub struct PortSet {
+    pub game_port: u16,
+    pub base_port: u16,
+}
+
+/// all port settings for a game
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct GamePorts {
+    pub shared_port: u16,
+    pub server_ports: PortSet,
+    pub client_ports: Vec<PortSet>,
+}
 
 /// sender for launcher
 #[derive(Debug, Clone)]

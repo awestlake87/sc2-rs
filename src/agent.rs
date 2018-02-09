@@ -1,4 +1,5 @@
 use std;
+use std::rc::Rc;
 
 use futures::future;
 use futures::prelude::*;
@@ -11,10 +12,44 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
 use client::{ClientSoma, ClientTerminal};
-use data::{GameEvent, GamePorts, GameSettings, Map, PlayerSetup, UpdateScheme};
-use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite};
+use data::{GameSettings, Map, PlayerSetup, Unit, Upgrade};
+use launcher::GamePorts;
+use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
+
+/// an event from the game
+#[derive(Debug, Clone)]
+pub enum GameEvent {
+    /// game has loaded - not called for fast restarts
+    GameLoaded,
+    /// game has started
+    GameStarted,
+    /// game has ended
+    GameEnded,
+
+    /// a unit was destroyed
+    UnitDestroyed(Rc<Unit>),
+    /// a unit was created
+    UnitCreated(Rc<Unit>),
+    /// a unit does not have any orders
+    UnitIdle(Rc<Unit>),
+    /// a unit was detected
+    UnitDetected(Rc<Unit>),
+
+    /// an upgrade completed
+    UpgradeCompleted(Upgrade),
+    /// a unit finished constructing a building
+    BuildingCompleted(Rc<Unit>),
+
+    /// number of nydus worms detected
+    NydusWormsDetected(u32),
+    /// number of nukes launched
+    NukesDetected(u32),
+
+    /// step the agent or observer
+    Step,
+}
 
 /// controls given to an agent
 pub struct AgentControl {

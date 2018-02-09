@@ -25,19 +25,20 @@ use futures::prelude::*;
 use sc2::{
     AgentControl,
     Error,
+    GameEvent,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
     Player,
     Result,
+    UpdateScheme,
 };
 use sc2::data::{
     Ability,
+    Action,
     ActionTarget,
     Alliance,
-    Command,
     Difficulty,
-    GameEvent,
     GameSettings,
     Map,
     Observation,
@@ -45,7 +46,6 @@ use sc2::data::{
     Point2,
     Race,
     Unit,
-    UpdateScheme,
     Vector2,
 };
 use tokio_core::reactor;
@@ -169,20 +169,22 @@ impl MarineMicroBot {
 
         if let Some(zergling) = self.targeted_zergling.clone() {
             if !self.move_back {
-                await!(self.control.action().send_command(Command::Action {
-                    units: marines,
-                    ability: Ability::Attack,
-                    target: Some(ActionTarget::UnitTag(zergling.tag)),
-                }))?;
+                await!(
+                    self.control.action().send_action(
+                        Action::new(Ability::Attack)
+                            .units(marines.iter())
+                            .target(ActionTarget::Unit(zergling.tag))
+                    )
+                )?;
             } else {
                 if let Some(backup_target) = self.backup_target {
-                    await!(self.control.action().send_command(
-                        Command::Action {
-                            units: marines,
-                            ability: Ability::Smart,
-                            target: Some(ActionTarget::Location(backup_target)),
-                        }
-                    ))?;
+                    await!(
+                        self.control.action().send_action(
+                            Action::new(Ability::Smart)
+                                .units(marines.iter())
+                                .target(ActionTarget::Location(backup_target))
+                        )
+                    )?;
 
                     if na::distance(&marine_pos, &backup_target) < 1.5 {
                         self.move_back = false;

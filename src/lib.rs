@@ -40,10 +40,10 @@ mod synapses;
 
 pub mod data;
 
-pub use self::agent::{Agent, AgentBuilder, AgentControl, Player};
+pub use self::agent::{Agent, AgentBuilder, AgentControl, GameEvent, Player};
 pub use self::computer::{Computer, ComputerBuilder};
 pub use self::launcher::{Launcher, LauncherBuilder};
-pub use self::melee::{Melee, MeleeBuilder};
+pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
 
 #[cfg(feature = "with-organelle")]
 pub use self::action::{

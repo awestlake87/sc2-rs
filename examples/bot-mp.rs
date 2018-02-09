@@ -24,18 +24,19 @@ use rand::random;
 use sc2::{
     AgentControl,
     Error,
+    GameEvent,
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
     Player,
     Result,
+    UpdateScheme,
 };
 use sc2::data::{
     Ability,
+    Action,
     ActionTarget,
     Alliance,
-    Command,
-    GameEvent,
     GameSettings,
     Map,
     MapInfo,
@@ -45,7 +46,6 @@ use sc2::data::{
     Race,
     Tag,
     UnitType,
-    UpdateScheme,
     Vector2,
 };
 use tokio_core::reactor;
@@ -186,13 +186,13 @@ impl TerranBot {
         for u in units {
             match self.find_enemy_structure(&*observation) {
                 Some(enemy_tag) => {
-                    await!(self.control.action().send_command(
-                        Command::Action {
-                            units: vec![Rc::clone(&u)],
-                            ability: Ability::Attack,
-                            target: Some(ActionTarget::UnitTag(enemy_tag)),
-                        }
-                    ))?;
+                    await!(
+                        self.control.action().send_action(
+                            Action::new(Ability::Attack)
+                                .units([Rc::clone(&u)].iter())
+                                .target(ActionTarget::Unit(enemy_tag))
+                        )
+                    )?;
 
                     return Ok(self);
                 },
@@ -201,13 +201,13 @@ impl TerranBot {
 
             match self.find_enemy_pos(&*map_info) {
                 Some(target_pos) => {
-                    await!(self.control.action().send_command(
-                        Command::Action {
-                            units: vec![Rc::clone(&u)],
-                            ability: Ability::Smart,
-                            target: Some(ActionTarget::Location(target_pos)),
-                        }
-                    ))?;
+                    await!(
+                        self.control.action().send_action(
+                            Action::new(Ability::Smart)
+                                .units([Rc::clone(&u)].iter())
+                                .target(ActionTarget::Location(target_pos))
+                        )
+                    )?;
 
                     return Ok(self);
                 },
@@ -292,11 +292,9 @@ impl TerranBot {
         if units.is_empty() {
             Ok(self)
         } else {
-            await!(self.control.action().send_command(Command::Action {
-                units: vec![Rc::clone(&units[0])],
-                ability: ability,
-                target: None,
-            }))?;
+            await!(self.control.action().send_action(
+                Action::new(ability).units([Rc::clone(&units[0])].iter())
+            ))?;
             Ok(self)
         }
     }
@@ -324,13 +322,15 @@ impl TerranBot {
 
             let u = random::<usize>() % units.len();
 
-            await!(self.control.action().send_command(Command::Action {
-                units: vec![Rc::clone(&units[u])],
-                ability: ability,
-                target: Some(ActionTarget::Location(
-                    units[u].get_pos_2d() + r * 5.0,
-                )),
-            }))?;
+            await!(
+                self.control.action().send_action(
+                    Action::new(ability)
+                        .units([Rc::clone(&units[u])].iter())
+                        .target(ActionTarget::Location(
+                            units[u].get_pos_2d() + r * 5.0,
+                        )),
+                )
+            )?;
 
             Ok(self)
         } else {

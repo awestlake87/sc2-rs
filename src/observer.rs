@@ -8,6 +8,7 @@ use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
 
 use super::{Error, FromProto, IntoSc2, Result};
+use agent::GameEvent;
 use client::ClientTerminal;
 use data::{
     Ability,
@@ -17,11 +18,9 @@ use data::{
     Buff,
     BuffData,
     DisplayType,
-    GameEvent,
     MapInfo,
     Observation,
     Point2,
-    SpatialAction,
     Tag,
     Unit,
     UnitType,
@@ -140,7 +139,7 @@ struct ObserverTask {
     upgrades: HashSet<Upgrade>,
 
     actions: Vec<Action>,
-    spatial_actions: Vec<SpatialAction>,
+    // spatial_actions: Vec<SpatialAction>,
 }
 
 impl ObserverTask {
@@ -163,7 +162,7 @@ impl ObserverTask {
             upgrades: HashSet::new(),
 
             actions: vec![],
-            spatial_actions: vec![],
+            // spatial_actions: vec![],
         }
     }
 
@@ -370,7 +369,7 @@ impl ObserverTask {
 
         if is_new_frame {
             self.actions.clear();
-            self.spatial_actions.clear();
+            // self.spatial_actions.clear();
         }
 
         for action in rsp.get_observation().get_actions() {
@@ -391,27 +390,27 @@ impl ObserverTask {
             self.actions.push(cmd.clone().into_sc2()?);
         }
 
-        for action in rsp.get_observation().get_actions() {
-            if !action.has_action_feature_layer() {
-                continue;
-            }
+        // for action in rsp.get_observation().get_actions() {
+        //     if !action.has_action_feature_layer() {
+        //         continue;
+        //     }
 
-            let fl = action.get_action_feature_layer();
+        //     let fl = action.get_action_feature_layer();
 
-            if fl.has_unit_command() {
-                self.spatial_actions
-                    .push(fl.get_unit_command().clone().into_sc2()?);
-            } else if fl.has_camera_move() {
-                self.spatial_actions
-                    .push(fl.get_camera_move().clone().into_sc2()?);
-            } else if fl.has_unit_selection_point() {
-                self.spatial_actions
-                    .push(fl.get_unit_selection_point().clone().into_sc2()?);
-            } else if fl.has_unit_selection_rect() {
-                self.spatial_actions
-                    .push(fl.get_unit_selection_rect().clone().into_sc2()?);
-            }
-        }
+        //     if fl.has_unit_command() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_command().clone().into_sc2()?);
+        //     } else if fl.has_camera_move() {
+        //         self.spatial_actions
+        //             .push(fl.get_camera_move().clone().into_sc2()?);
+        //     } else if fl.has_unit_selection_point() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_selection_point().clone().into_sc2()?);
+        //     } else if fl.has_unit_selection_rect() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_selection_rect().clone().into_sc2()?);
+        //     }
+        // }
 
         let mut events = vec![];
 
@@ -540,7 +539,7 @@ impl ObserverTask {
         for data in rsp.mut_data().take_abilities().into_iter() {
             let a = AbilityData::from_proto(data)?;
 
-            let ability = a.ability;
+            let ability = a.get_id();
             ability_data.insert(ability, a);
         }
 
@@ -554,7 +553,7 @@ impl ObserverTask {
         for data in rsp.mut_data().take_buffs().into_iter() {
             let b = BuffData::from_proto(data)?;
 
-            let buff = b.buff;
+            let buff = b.get_id();
             buff_data.insert(buff, b);
         }
 

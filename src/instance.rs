@@ -4,7 +4,8 @@ use std::process;
 use url::Url;
 
 use super::{ErrorKind, Result};
-use data::{PortSet, Rect};
+use data::Rect;
+use launcher::PortSet;
 
 #[derive(Debug, Copy, Clone)]
 pub enum InstanceKind {
