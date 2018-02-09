@@ -1,3 +1,5 @@
+use sc2_proto::data;
+
 use super::super::{ErrorKind, FromProto, IntoProto, Result};
 
 /// list of known StarCraft II buffs
@@ -107,6 +109,34 @@ impl FromProto<u32> for Buff {
 impl IntoProto<u32> for Buff {
     fn into_proto(self) -> Result<u32> {
         Ok(self as u32)
+    }
+}
+
+/// buff data
+#[derive(Debug, Clone)]
+pub struct BuffData {
+    buff: Buff,
+    name: String,
+}
+
+impl BuffData {
+    /// stable buff ID
+    pub fn get_id(&self) -> Buff {
+        self.buff
+    }
+
+    /// buff name (corresponds to the game's catalog)
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl FromProto<data::BuffData> for BuffData {
+    fn from_proto(mut data: data::BuffData) -> Result<Self> {
+        Ok(BuffData {
+            buff: Buff::from_proto(data.get_buff_id())?,
+            name: data.take_name(),
+        })
     }
 }
 

@@ -1,7 +1,7 @@
-use sc2_proto::raw;
+use sc2_proto::{common, data, raw};
 
-use super::{Ability, Buff, Point2, Point3};
-use super::super::{FromProto, Result};
+use super::super::{FromProto, IntoSc2, Result};
+use data::{Ability, Buff, Point2, Point3, Race};
 
 /// unique tag for a unit instance
 pub type Tag = u64;
@@ -10,94 +10,260 @@ pub type Tag = u64;
 #[derive(Debug, Clone)]
 pub struct Unit {
     /// whether the unit is shown on screen or not
-    pub display_type: DisplayType,
+    display_type: DisplayType,
     /// relationship of the unit to this player
-    pub alliance: Alliance,
+    alliance: Alliance,
 
     /// a unique id for the instance of a unit
-    pub tag: Tag,
+    tag: Tag,
     /// the type of unit
-    pub unit_type: UnitType,
+    unit_type: UnitType,
     /// which player owns this unit
-    pub owner: i32,
+    owner: i32,
 
-    /// position of the unit in the world
-    pub pos: Point3,
+    pos: Point3,
     /// direction the unit faces in radians
-    pub facing: f32,
+    facing: f32,
     /// radius of the unit
-    pub radius: f32,
+    radius: f32,
     /// gives progress under construction (range [0.0, 1.0] where 1.0 is
     /// done)
-    pub build_progress: f32,
+    build_progress: f32,
 
     /// whether the unit is cloaked
-    pub cloak: CloakState,
+    cloak: CloakState,
 
     /// range of detector for detector units
-    pub detect_range: f32,
+    detect_range: f32,
     /// range of radar for radar units
-    pub radar_range: f32,
+    radar_range: f32,
 
     /// whether this unit is currently selected
-    pub is_selected: bool,
+    is_selected: bool,
     /// whether this unit is visible and within the camera frustum
-    pub is_on_screen: bool,
+    is_on_screen: bool,
     /// whether this unit is detected by a sensor tower
-    pub is_blip: bool,
+    is_blip: bool,
 
     /// health of the unit (not set for snapshots)
-    pub health: f32,
+    health: f32,
     /// max health of the unit (not set for snapshots)
-    pub health_max: f32,
+    health_max: f32,
     /// shield of the unit (not set for snapshots)
-    pub shield: f32,
+    shield: f32,
     /// energy of the unit (not set for snapshots)
-    pub energy: f32,
+    energy: f32,
     /// amount of minerals if unit is a mineral field (not set for
     /// snapshot)
-    pub mineral_contents: i32,
+    mineral_contents: u32,
     /// amount of vespene if unit is a geyser (not set for snapshots)
-    pub vespene_contents: i32,
+    vespene_contents: u32,
     /// whether the unit is flying (not set for snapshots)
-    pub is_flying: bool,
+    is_flying: bool,
     /// whether the unit is burrowed (not set for snapshots)
-    pub is_burrowed: bool,
+    is_burrowed: bool,
     /// time remaining for a weapon on cooldown (not set for snapshots)
-    pub weapon_cooldown: f32,
+    weapon_cooldown: f32,
 
     /// orders on this unit (only valid for this player's units)
-    pub orders: Vec<UnitOrder>,
+    orders: Vec<UnitOrder>,
     /// addon like a tech lab or reactor (only valid for this player's
     /// units)
-    pub add_on_tag: Tag,
+    add_on_tag: Tag,
     /// passengers in this transport (only valid for this player's units)
-    pub passengers: Vec<PassengerUnit>,
+    passengers: Vec<PassengerUnit>,
     /// number of cargo slots used (only valid for this player's units)
-    pub cargo_space_taken: i32,
+    cargo_space_taken: u32,
     /// max number of cargo slots (only valid for this player's units)
-    pub cargo_space_max: i32,
+    cargo_space_max: u32,
     /// number of harvesters associated with town hall
-    pub assigned_harvesters: i32,
+    assigned_harvesters: u32,
     /// number of harvesters that can be assigned to a town hall
-    pub ideal_harvesters: i32,
+    ideal_harvesters: u32,
     /// target unit of a unit (only valid for this player's units)
-    pub engaged_target_tag: Tag,
+    engaged_target_tag: Tag,
     /// buffs on this unit (only valid for this player's units)
-    pub buffs: Vec<Buff>,
+    buffs: Vec<Buff>,
     /// whether this unit is powered by a pylon
-    pub is_powered: bool,
+    is_powered: bool,
 
     /// whether this unit is alive or not
-    pub is_alive: bool,
+    is_alive: bool,
     /// the last time the unit was seen
-    pub last_seen_game_loop: u32,
+    last_seen_game_loop: u32,
 }
 
 impl Unit {
     /// mark this unit as dead
     pub fn mark_dead(&mut self) {
         self.is_alive = false;
+    }
+
+    /// set the step where the unit was last seen
+    pub fn set_last_seen_step(&mut self, step: u32) {
+        self.last_seen_game_loop = step;
+    }
+
+    /// whether the unit is shown on screen or not
+    pub fn get_display_type(&self) -> DisplayType {
+        self.display_type
+    }
+    /// relationship of the unit to this player
+    pub fn get_alliance(&self) -> Alliance {
+        self.alliance
+    }
+
+    /// a unique id for the instance of a unit
+    pub fn get_tag(&self) -> Tag {
+        self.tag
+    }
+    /// the type of unit
+    pub fn get_unit_type(&self) -> UnitType {
+        self.unit_type
+    }
+    /// which player owns this unit
+    pub fn get_owner(&self) -> i32 {
+        self.owner
+    }
+
+    /// position of the unit in the world
+    pub fn get_pos(&self) -> Point3 {
+        self.pos
+    }
+
+    /// just the x and y coordinates of the unit position
+    pub fn get_pos_2d(&self) -> Point2 {
+        Point2::new(self.pos.x, self.pos.y)
+    }
+
+    /// direction the unit faces in radians
+    pub fn get_facing(&self) -> f32 {
+        self.facing
+    }
+    /// radius of the unit
+    pub fn get_radius(&self) -> f32 {
+        self.radius
+    }
+    /// gives progress under construction (range [0.0, 1.0] where 1.0 is
+    /// done)
+    pub fn get_build_progress(&self) -> f32 {
+        self.build_progress
+    }
+
+    /// whether the unit is cloaked
+    pub fn get_cloak_state(&self) -> CloakState {
+        self.cloak
+    }
+
+    /// range of detector for detector units
+    pub fn get_detect_range(&self) -> f32 {
+        self.detect_range
+    }
+    /// range of radar for radar units
+    pub fn get_radar_range(&self) -> f32 {
+        self.radar_range
+    }
+
+    /// whether this unit is currently selected
+    pub fn is_selected(&self) -> bool {
+        self.is_selected
+    }
+    /// whether this unit is visible and within the camera frustum
+    pub fn is_on_screen(&self) -> bool {
+        self.is_on_screen
+    }
+    /// whether this unit is detected by a sensor tower
+    pub fn is_blip(&self) -> bool {
+        self.is_blip
+    }
+
+    /// health of the unit (not set for snapshots)
+    pub fn get_health(&self) -> f32 {
+        self.health
+    }
+    /// max health of the unit (not set for snapshots)
+    pub fn get_health_cap(&self) -> f32 {
+        self.health_max
+    }
+    /// shield of the unit (not set for snapshots)
+    pub fn get_shield(&self) -> f32 {
+        self.shield
+    }
+    /// energy of the unit (not set for snapshots)
+    pub fn get_energy(&self) -> f32 {
+        self.energy
+    }
+    /// amount of minerals if unit is a mineral field (not set for
+    /// snapshot)
+    pub fn get_mineral_contents(&self) -> u32 {
+        self.mineral_contents
+    }
+    /// amount of vespene if unit is a geyser (not set for snapshots)
+    pub fn get_vespene_contents(&self) -> u32 {
+        self.vespene_contents
+    }
+    /// whether the unit is flying (not set for snapshots)
+    pub fn is_flying(&self) -> bool {
+        self.is_flying
+    }
+    /// whether the unit is burrowed (not set for snapshots)
+    pub fn is_burrowed(&self) -> bool {
+        self.is_burrowed
+    }
+    /// time remaining for a weapon on cooldown (not set for snapshots)
+    pub fn get_weapon_cooldown(&self) -> f32 {
+        self.weapon_cooldown
+    }
+
+    /// orders on this unit (only valid for this player's units)
+    pub fn get_orders(&self) -> &[UnitOrder] {
+        &self.orders
+    }
+    /// addon like a tech lab or reactor (only valid for this player's
+    /// units)
+    pub fn get_add_on_tag(&self) -> Tag {
+        self.add_on_tag
+    }
+    /// passengers in this transport (only valid for this player's units)
+    pub fn get_passengers(&self) -> &[PassengerUnit] {
+        &self.passengers
+    }
+    /// number of cargo slots used (only valid for this player's units)
+    pub fn get_cargo_space_taken(&self) -> u32 {
+        self.cargo_space_taken
+    }
+    /// max number of cargo slots (only valid for this player's units)
+    pub fn get_cargo_space_cap(&self) -> u32 {
+        self.cargo_space_max
+    }
+    /// number of harvesters associated with town hall
+    pub fn get_assigned_harvesters(&self) -> u32 {
+        self.assigned_harvesters
+    }
+    /// number of harvesters that can be assigned to a town hall
+    pub fn get_ideal_harvesters(&self) -> u32 {
+        self.ideal_harvesters
+    }
+    /// target unit of a unit (only valid for this player's units)
+    pub fn get_engaged_target_tag(&self) -> Tag {
+        self.engaged_target_tag
+    }
+    /// buffs on this unit (only valid for this player's units)
+    pub fn get_buffs(&self) -> &[Buff] {
+        &self.buffs
+    }
+    /// whether this unit is powered by a pylon
+    pub fn is_powered(&self) -> bool {
+        self.is_powered
+    }
+
+    /// whether this unit is alive or not
+    pub fn is_alive(&self) -> bool {
+        self.is_alive
+    }
+    /// the last time the unit was seen
+    pub fn get_last_seen_step(&self) -> u32 {
+        self.last_seen_game_loop
     }
 }
 
@@ -138,8 +304,8 @@ impl FromProto<raw::Unit> for Unit {
             health_max: unit.get_health_max(),
             shield: unit.get_shield(),
             energy: unit.get_energy(),
-            mineral_contents: unit.get_mineral_contents(),
-            vespene_contents: unit.get_vespene_contents(),
+            mineral_contents: unit.get_mineral_contents() as u32,
+            vespene_contents: unit.get_vespene_contents() as u32,
             is_flying: unit.get_is_flying(),
             is_burrowed: unit.get_is_burrowed(),
             weapon_cooldown: unit.get_weapon_cooldown(),
@@ -163,10 +329,10 @@ impl FromProto<raw::Unit> for Unit {
 
                 passengers
             },
-            cargo_space_taken: unit.get_cargo_space_taken(),
-            cargo_space_max: unit.get_cargo_space_max(),
-            assigned_harvesters: unit.get_assigned_harvesters(),
-            ideal_harvesters: unit.get_ideal_harvesters(),
+            cargo_space_taken: unit.get_cargo_space_taken() as u32,
+            cargo_space_max: unit.get_cargo_space_max() as u32,
+            assigned_harvesters: unit.get_assigned_harvesters() as u32,
+            ideal_harvesters: unit.get_ideal_harvesters() as u32,
             engaged_target_tag: unit.get_engaged_target_tag(),
             buffs: {
                 let mut buffs = vec![];
@@ -912,12 +1078,26 @@ pub enum UnitOrderTarget {
 /// an order that is active on a unit
 #[derive(Debug, Copy, Clone)]
 pub struct UnitOrder {
+    ability: Ability,
+    target: Option<UnitOrderTarget>,
+    progress: f32,
+}
+
+impl UnitOrder {
     /// ability that triggered the order
-    pub ability: Ability,
+    pub fn get_ability(&self) -> Ability {
+        self.ability
+    }
+
     /// target unit of the order
-    pub target: Option<UnitOrderTarget>,
+    pub fn get_target(&self) -> Option<UnitOrderTarget> {
+        self.target
+    }
+
     /// progress of the order
-    pub progress: f32,
+    pub fn get_progress(&self) -> f32 {
+        self.progress
+    }
 }
 
 impl FromProto<raw::UnitOrder> for UnitOrder {
@@ -947,18 +1127,39 @@ impl FromProto<raw::UnitOrder> for UnitOrder {
 /// a passenger on a transport
 #[derive(Debug, Copy, Clone)]
 pub struct PassengerUnit {
+    tag: Tag,
+    health: f32,
+    health_max: f32,
+    shield: f32,
+    energy: f32,
+    unit_type: UnitType,
+}
+
+impl PassengerUnit {
     /// tag of the unit in transport
-    pub tag: Tag,
+    pub fn get_tag(&self) -> Tag {
+        self.tag
+    }
     /// health of the unit in transport
-    pub health: f32,
+    pub fn get_health(&self) -> f32 {
+        self.health
+    }
     /// max health of the unit in transport
-    pub health_max: f32,
+    pub fn get_health_cap(&self) -> f32 {
+        self.health_max
+    }
     /// shield of the unit in transport
-    pub shield: f32,
+    pub fn get_shield(&self) -> f32 {
+        self.shield
+    }
     /// energy of the unit in transport
-    pub energy: f32,
+    pub fn get_energy(&self) -> f32 {
+        self.energy
+    }
     /// type of unit in transport
-    pub unit_type: UnitType,
+    pub fn get_unit_type(&self) -> UnitType {
+        self.unit_type
+    }
 }
 
 impl FromProto<raw::PassengerUnit> for PassengerUnit {
@@ -970,6 +1171,331 @@ impl FromProto<raw::PassengerUnit> for PassengerUnit {
             shield: passenger.get_shield(),
             energy: passenger.get_energy(),
             unit_type: UnitType::from_proto(passenger.get_unit_type())?,
+        })
+    }
+}
+
+/// category of unit
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum Attribute {
+    Light,
+    Armored,
+    Biological,
+    Mechanical,
+    Robotic,
+    Psionic,
+    Massive,
+    Structure,
+    Hover,
+    Heroic,
+    Summoned,
+}
+
+impl FromProto<data::Attribute> for Attribute {
+    fn from_proto(a: data::Attribute) -> Result<Self> {
+        Ok(match a {
+            data::Attribute::Light => Attribute::Light,
+            data::Attribute::Armored => Attribute::Armored,
+            data::Attribute::Biological => Attribute::Biological,
+            data::Attribute::Mechanical => Attribute::Mechanical,
+            data::Attribute::Robotic => Attribute::Robotic,
+            data::Attribute::Psionic => Attribute::Psionic,
+            data::Attribute::Massive => Attribute::Massive,
+            data::Attribute::Structure => Attribute::Structure,
+            data::Attribute::Hover => Attribute::Hover,
+            data::Attribute::Heroic => Attribute::Heroic,
+            data::Attribute::Summoned => Attribute::Summoned,
+        })
+    }
+}
+
+/// damage bonus of a unit
+#[derive(Debug, Copy, Clone)]
+pub struct DamageBonus {
+    attribute: Attribute,
+    bonus: f32,
+}
+
+impl DamageBonus {
+    /// affected attribute
+    pub fn get_attribute(&self) -> Attribute {
+        self.attribute
+    }
+
+    /// damage bonus
+    pub fn get_bonus(&self) -> f32 {
+        self.bonus
+    }
+}
+
+impl FromProto<data::DamageBonus> for DamageBonus {
+    fn from_proto(b: data::DamageBonus) -> Result<Self> {
+        Ok(Self {
+            attribute: b.get_attribute().into_sc2()?,
+            bonus: b.get_bonus(),
+        })
+    }
+}
+
+/// target type of a weapon
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum WeaponTargetType {
+    Ground,
+    Air,
+    Any,
+}
+
+impl FromProto<data::Weapon_TargetType> for WeaponTargetType {
+    fn from_proto(target: data::Weapon_TargetType) -> Result<Self> {
+        Ok(match target {
+            data::Weapon_TargetType::Ground => WeaponTargetType::Ground,
+            data::Weapon_TargetType::Air => WeaponTargetType::Air,
+            data::Weapon_TargetType::Any => WeaponTargetType::Any,
+        })
+    }
+}
+
+/// unit weapon
+#[derive(Debug, Clone)]
+pub struct Weapon {
+    target_type: WeaponTargetType,
+    damage: f32,
+    damage_bonus: Vec<DamageBonus>,
+    attacks: u32,
+    range: f32,
+    speed: f32,
+}
+
+impl Weapon {
+    /// weapon's target type
+    pub fn get_target_type(&self) -> WeaponTargetType {
+        self.target_type
+    }
+    /// weapon damage
+    pub fn get_damage(&self) -> f32 {
+        self.damage
+    }
+    /// any damage bonuses that apply to the weapon
+    pub fn get_damage_bonus(&self) -> &[DamageBonus] {
+        &self.damage_bonus
+    }
+    /// number of hits per attack (eg. Colossus has 2 beams)
+    pub fn get_attacks(&self) -> u32 {
+        self.attacks
+    }
+    /// attack range
+    pub fn get_range(&self) -> f32 {
+        self.range
+    }
+    /// time between attacks
+    pub fn get_speed(&self) -> f32 {
+        self.speed
+    }
+}
+
+impl FromProto<data::Weapon> for Weapon {
+    fn from_proto(mut w: data::Weapon) -> Result<Self> {
+        Ok(Self {
+            target_type: w.get_field_type().into_sc2()?,
+            damage: w.get_damage(),
+            damage_bonus: {
+                let mut bonuses = vec![];
+
+                for b in w.take_damage_bonus().into_iter() {
+                    bonuses.push(b.into_sc2()?);
+                }
+
+                bonuses
+            },
+            attacks: w.get_attacks(),
+            range: w.get_range(),
+            speed: w.get_speed(),
+        })
+    }
+}
+
+/// data about a unit type
+///
+/// this data is derived from the catalog (xml) data of the game and upgrades
+#[derive(Debug, Clone)]
+pub struct UnitTypeData {
+    unit_type: UnitType,
+    name: String,
+    available: bool,
+    cargo_size: u32,
+    mineral_cost: u32,
+    vespene_cost: u32,
+
+    attributes: Vec<Attribute>,
+    movement_speed: f32,
+    armor: f32,
+    weapons: Vec<Weapon>,
+    food_required: f32,
+    food_provided: f32,
+    ability: Ability,
+    race: Option<Race>,
+    build_time: f32,
+    has_minerals: bool,
+    has_vespene: bool,
+
+    tech_alias: Vec<UnitType>,
+    unit_alias: UnitType,
+    tech_requirement: UnitType,
+    require_attached: bool,
+}
+
+impl UnitTypeData {
+    /// stable unit ID
+    pub fn get_id(&self) -> UnitType {
+        self.unit_type
+    }
+    /// unit type name (corresponds to the game's catalog)
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+    /// whether this unit is available to the current mods/map
+    pub fn is_available(&self) -> bool {
+        self.available
+    }
+    /// number of cargo slots this unit occupies in a transport
+    pub fn get_cargo_size(&self) -> u32 {
+        self.cargo_size
+    }
+    /// cost in minerals to build this unit
+    pub fn get_mineral_cost(&self) -> u32 {
+        self.mineral_cost
+    }
+    /// cost in vespene to build this unit
+    pub fn get_vespene_cost(&self) -> u32 {
+        self.vespene_cost
+    }
+
+    /// unit attributes (may change based on upgrades)
+    pub fn get_attributes(&self) -> &[Attribute] {
+        &self.attributes
+    }
+    /// movement speed of this unit
+    pub fn get_movement_speed(&self) -> f32 {
+        self.movement_speed
+    }
+    /// armor of this unit
+    pub fn get_armor(&self) -> f32 {
+        self.armor
+    }
+    /// weapons on this unit
+    pub fn get_weapons(&self) -> &[Weapon] {
+        &self.weapons
+    }
+    /// how much food this unit requires
+    pub fn get_food_required(&self) -> f32 {
+        self.food_required
+    }
+    /// how much food this unit provides
+    pub fn get_food_provided(&self) -> f32 {
+        self.food_provided
+    }
+    /// which ability id creates this unit
+    pub fn get_ability(&self) -> Ability {
+        self.ability
+    }
+    /// the race this unit belongs to
+    pub fn get_race(&self) -> Option<Race> {
+        self.race
+    }
+    /// how long a unit takes to build
+    pub fn get_build_time(&self) -> f32 {
+        self.build_time
+    }
+    /// whether this unit can have minerals (mineral patches)
+    pub fn has_minerals(&self) -> bool {
+        self.has_minerals
+    }
+    /// whether this unit can have vespene (vespene geysers)
+    pub fn has_vespene(&self) -> bool {
+        self.has_vespene
+    }
+
+    /// units this is equivalent to in terms of satisfying tech
+    /// requirements
+    pub fn get_tech_alias(&self) -> &[UnitType] {
+        &self.tech_alias
+    }
+    /// units that are morphed variants of the same unit
+    pub fn get_unit_alias(&self) -> UnitType {
+        self.unit_alias
+    }
+    /// structure required to build this unit (or any with same tech alias)
+    pub fn get_tech_requirement(&self) -> UnitType {
+        self.tech_requirement
+    }
+    /// whether tech requirement is an addon
+    pub fn get_require_attached(&self) -> bool {
+        self.require_attached
+    }
+}
+
+impl FromProto<data::UnitTypeData> for UnitTypeData {
+    fn from_proto(mut data: data::UnitTypeData) -> Result<Self> {
+        Ok(Self {
+            unit_type: data.get_unit_id().into_sc2()?,
+            name: data.get_name().to_string(),
+            available: data.get_available(),
+            cargo_size: data.get_cargo_size(),
+            mineral_cost: data.get_mineral_cost(),
+            vespene_cost: data.get_vespene_cost(),
+
+            attributes: {
+                let mut attributes = vec![];
+
+                for a in data.take_attributes().into_iter() {
+                    attributes.push(a.into_sc2()?);
+                }
+
+                attributes
+            },
+
+            movement_speed: data.get_movement_speed(),
+            armor: data.get_armor(),
+            weapons: {
+                let mut weapons = vec![];
+
+                for w in data.take_weapons().into_iter() {
+                    weapons.push(w.into_sc2()?);
+                }
+
+                weapons
+            },
+            food_required: data.get_food_required(),
+            food_provided: data.get_food_provided(),
+
+            ability: data.get_ability_id().into_sc2()?,
+            race: {
+                if data.has_race() && data.get_race() != common::Race::NoRace {
+                    Some(data.get_race().into_sc2()?)
+                } else {
+                    None
+                }
+            },
+            build_time: data.get_build_time(),
+            has_minerals: data.get_has_minerals(),
+            has_vespene: data.get_has_vespene(),
+
+            tech_alias: {
+                let mut aliases = vec![];
+
+                for a in data.get_tech_alias() {
+                    aliases.push(UnitType::from_proto(*a)?);
+                }
+
+                aliases
+            },
+            unit_alias: UnitType::from_proto(data.get_unit_alias())?,
+            tech_requirement: UnitType::from_proto(
+                data.get_tech_requirement(),
+            )?,
+            require_attached: data.get_require_attached(),
         })
     }
 }

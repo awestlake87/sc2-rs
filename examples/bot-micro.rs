@@ -1,35 +1,56 @@
+#![feature(proc_macro, conservative_impl_trait, generators)]
+
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
 extern crate serde_derive;
 
 extern crate docopt;
+extern crate futures_await as futures;
 extern crate glob;
-extern crate organelle;
+extern crate nalgebra as na;
+extern crate rand;
 extern crate serde;
+extern crate tokio_core;
 
 extern crate sc2;
 
+use std::f32;
+use std::mem;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use docopt::Docopt;
-use organelle::{Dendrite, Impulse, Organelle, ResultExt, Soma};
+use futures::prelude::*;
 use sc2::{
-    Axon,
-    FrameData,
-    GameSettings,
-    LauncherSettings,
+    AgentControl,
+    Error,
+    GameEvent,
+    Launcher,
+    LauncherBuilder,
+    MeleeBuilder,
+    Observation,
+    Player,
+    Result,
+    UpdateScheme,
+};
+use sc2::data::{
+    Ability,
+    Action,
+    ActionTarget,
+    Alliance,
+    Difficulty,
+    GameSetup,
     Map,
     PlayerSetup,
+    Point2,
     Race,
-    Result,
-    Signal,
-    Synapse,
+    Unit,
+    Vector2,
 };
+use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 pub const USAGE: &'static str = "
 StarCraft II Rust API Example.
 
@@ -62,173 +83,190 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<LauncherSettings> {
-    let default_settings = LauncherSettings::default();
+pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
+    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
 
-    Ok(LauncherSettings {
-        use_wine: args.flag_wine,
-        dir: args.flag_dir.clone(),
-        base_port: {
-            if let Some(port) = args.flag_port {
-                port
-            } else {
-                default_settings.base_port
-            }
-        },
-    })
+    if let Some(dir) = args.flag_dir.clone() {
+        builder = builder.install_dir(dir);
+    }
+
+    if let Some(port) = args.flag_port {
+        builder = builder.base_port(port);
+    }
+
+    Ok(builder.create()?)
 }
 
-pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
+pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSettings { map: map })
+    Ok(GameSetup::new(map))
 }
 
-pub enum MarineMicroSoma {
-    Init(Init),
-    Setup(Setup),
+struct MarineMicroBot {
+    control: AgentControl,
 
-    InGame(InGame),
+    targeted_zergling: Option<Rc<Unit>>,
+    move_back: bool,
+    backup_target: Option<Point2>,
+    backup_start: Option<Point2>,
 }
 
-impl MarineMicroSoma {
-    pub fn organelle(interval: u32) -> Result<Self> {
-        Ok(MarineMicroSoma::Init(Init {
-            axon: Axon::new(
-                vec![Dendrite::RequireOne(Synapse::Agent)],
-                vec![],
-            )?,
-            interval: interval,
-        }))
+impl Player for MarineMicroBot {
+    type Error = Error;
+
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
+        Ok((self, PlayerSetup::Player(Race::Terran)))
     }
-}
 
-impl Soma for MarineMicroSoma {
-    type Signal = Signal;
-    type Synapse = Synapse;
+    #[async(boxed)]
+    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+        match e {
+            GameEvent::GameStarted => {
+                self.move_back = false;
+                self.targeted_zergling = None;
 
-    fn update(
-        self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<MarineMicroSoma> {
-        match self {
-            MarineMicroSoma::Init(state) => state.update(msg),
-            MarineMicroSoma::Setup(state) => state.update(msg),
-
-            MarineMicroSoma::InGame(state) => state.update(msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
-    }
-}
-
-pub struct Init {
-    axon: Axon,
-    interval: u32,
-}
-
-impl Init {
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Start => Setup::setup(self.axon, self.interval),
-
-                _ => bail!("unexpected message"),
-            }
-        } else {
-            Ok(MarineMicroSoma::Init(self))
+                Ok(self)
+            },
+            GameEvent::UnitDestroyed(unit) => {
+                await!(self.on_unit_destroyed(unit))
+            },
+            GameEvent::Step => await!(self.on_step()),
+            _ => Ok(self),
         }
     }
 }
 
-pub struct Setup {
-    axon: Axon,
-    interval: u32,
-}
+impl MarineMicroBot {
+    fn new(control: AgentControl) -> Self {
+        Self {
+            control: control,
 
-impl Setup {
-    fn setup(axon: Axon, interval: u32) -> Result<MarineMicroSoma> {
-        Ok(MarineMicroSoma::Setup(Setup {
-            axon: axon,
-            interval: interval,
-        }))
+            targeted_zergling: None,
+            move_back: false,
+            backup_target: None,
+            backup_start: None,
+        }
     }
 
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::PlayerSetup(PlayerSetup::Player {
-                            race: Race::Terran,
-                        }),
+    #[async]
+    fn on_step(mut self) -> Result<Self> {
+        let observation = await!(self.control.observer().observe())?;
+
+        let marines = observation
+            .filter_units(|u| u.get_alliance() == Alliance::Domestic);
+
+        let marine_pos = match get_center_of_mass(&marines) {
+            Some(pos) => pos,
+            None => return Ok(self),
+        };
+
+        self.targeted_zergling = get_nearest_enemy(&*observation, marine_pos);
+
+        if let Some(zergling) = self.targeted_zergling.clone() {
+            if !self.move_back {
+                await!(
+                    self.control.action().send_action(
+                        Action::new(Ability::Attack)
+                            .units(marines.iter())
+                            .target(ActionTarget::Unit(zergling.get_tag()))
+                    )
+                )?;
+            } else {
+                if let Some(backup_target) = self.backup_target {
+                    await!(
+                        self.control.action().send_action(
+                            Action::new(Ability::Smart)
+                                .units(marines.iter())
+                                .target(ActionTarget::Location(backup_target))
+                        )
                     )?;
 
-                    Ok(MarineMicroSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::RequestUpdateInterval) => {
-                    self.axon.send_req_input(
-                        Synapse::Agent,
-                        Signal::UpdateInterval(self.interval),
-                    )?;
-
-                    Ok(MarineMicroSoma::Setup(self))
-                },
-                Impulse::Signal(_, Signal::GameStarted) => {
-                    InGame::start(self.axon)
-                },
-
-                _ => bail!("unexpected message"),
+                    if na::distance(&marine_pos, &backup_target) < 1.5 {
+                        self.move_back = false;
+                    }
+                }
             }
-        } else {
-            Ok(MarineMicroSoma::Setup(self))
+        }
+
+        Ok(self)
+    }
+
+    #[async]
+    fn on_unit_destroyed(mut self, unit: Rc<Unit>) -> Result<Self> {
+        let observation = await!(self.control.observer().observe())?;
+
+        if let Some(targeted_zergling) =
+            mem::replace(&mut self.targeted_zergling, None)
+        {
+            if unit.get_tag() == targeted_zergling.get_tag() {
+                let marines = observation
+                    .filter_units(|u| u.get_alliance() == Alliance::Domestic);
+                let zerglings = observation
+                    .filter_units(|u| u.get_alliance() == Alliance::Enemy);
+
+                let marine_pos = match get_center_of_mass(&marines) {
+                    Some(pos) => pos,
+                    None => return Ok(self),
+                };
+                let zerg_pos = match get_center_of_mass(&zerglings) {
+                    Some(pos) => pos,
+                    None => return Ok(self),
+                };
+
+                let diff = marine_pos - zerg_pos;
+                let direction = na::normalize(&diff);
+
+                self.move_back = true;
+                self.backup_start = Some(marine_pos);
+                self.backup_target = Some(Point2::from_coordinates(
+                    marine_pos.coords + direction * 3.0,
+                ));
+            }
+        }
+        Ok(self)
+    }
+}
+
+fn get_center_of_mass(units: &[Rc<Unit>]) -> Option<Point2> {
+    if units.len() == 0 {
+        None
+    } else {
+        let sum = units
+            .iter()
+            .fold(Vector2::new(0.0, 0.0), |acc, u| acc + u.get_pos_2d().coords);
+
+        Some(Point2::from_coordinates(sum / (units.len() as f32)))
+    }
+}
+
+fn get_nearest_enemy(
+    observation: &Observation,
+    pos: Point2,
+) -> Option<Rc<Unit>> {
+    let units =
+        observation.filter_units(|u| u.get_alliance() == Alliance::Enemy);
+
+    let mut min = f32::MAX;
+    let mut nearest = None;
+
+    for u in units {
+        let d = na::distance_squared(&u.get_pos_2d(), &pos);
+
+        if d < min {
+            min = d;
+            nearest = Some(u);
         }
     }
+
+    nearest
 }
 
-pub struct InGame {
-    axon: Axon,
-}
-
-impl InGame {
-    fn start(axon: Axon) -> Result<MarineMicroSoma> {
-        Ok(MarineMicroSoma::InGame(InGame { axon: axon }))
-    }
-
-    fn update(
-        mut self,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MarineMicroSoma> {
-        if let Some(msg) = self.axon.update(msg)? {
-            match msg {
-                Impulse::Signal(_, Signal::Observation(frame)) => {
-                    self.on_frame(frame)
-                },
-
-                _ => bail!("unexpected message"),
-            }
-        } else {
-            Ok(MarineMicroSoma::InGame(self))
-        }
-    }
-
-    fn on_frame(self, _: Rc<FrameData>) -> Result<MarineMicroSoma> {
-        self.axon
-            .send_req_input(Synapse::Agent, Signal::UpdateComplete)?;
-
-        Ok(MarineMicroSoma::InGame(self))
-    }
-}
-
-quick_main!(|| -> Result<()> {
+quick_main!(|| -> sc2::Result<()> {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -238,24 +276,25 @@ quick_main!(|| -> Result<()> {
         return Ok(());
     }
 
-    let mut organelle =
-        Organelle::new(sc2::MeleeSoma::organelle(sc2::MeleeSettings {
-            launcher: get_launcher_settings(&args)?,
-            players: (
-                sc2::AgentSoma::organelle(MarineMicroSoma::organelle(
-                    args.flag_step_size.unwrap_or(1),
-                )?)?,
-                sc2::ComputerSoma::sheath(
-                    sc2::Race::Zerg,
-                    sc2::Difficulty::VeryEasy,
-                )?,
-            ),
-            suite: sc2::MeleeSuite::OneAndDone(get_game_settings(&args)?),
-        })?);
+    let mut core = reactor::Core::new().unwrap();
+    let handle = core.handle();
 
-    organelle.add_soma(sc2::CtrlcBreakerSoma::sheath()?);
+    let melee = MeleeBuilder::new(
+        sc2::AgentBuilder::factory(|control| MarineMicroBot::new(control))
+            .handle(handle.clone())
+            .create()?,
+        sc2::ComputerBuilder::new()
+            .race(Race::Zerg)
+            .difficulty(Difficulty::VeryEasy)
+            .create()?,
+    ).launcher_settings(get_launcher_settings(&args)?)
+        .one_and_done(get_game_setup(&args)?)
+        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .break_on_ctrlc(args.flag_wine)
+        .handle(handle)
+        .create()?;
 
-    organelle.run()?;
+    core.run(melee.into_future())?;
 
     Ok(())
 });

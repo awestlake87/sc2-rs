@@ -2,299 +2,302 @@ use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::rc::Rc;
 
-use organelle;
-use organelle::{Dendrite, Handle, Impulse, Neuron, ResultExt, Sheath};
+use futures::prelude::*;
+use futures::unsync::{mpsc, oneshot};
+use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
 
-use super::{
+use super::{Error, FromProto, IntoSc2, Result};
+use agent::GameEvent;
+use client::ClientTerminal;
+use data::{
     Ability,
     AbilityData,
     Action,
     Alliance,
-    Axon,
     Buff,
     BuffData,
     DisplayType,
-    FrameData,
-    FromProto,
-    GameData,
-    GameEvent,
-    GameState,
-    IntoSc2,
-    MapState,
+    Effect,
+    ImageData,
+    MapInfo,
     Point2,
-    Result,
-    Signal,
-    SpatialAction,
-    Synapse,
+    PowerSource,
+    Score,
     Tag,
     Unit,
     UnitType,
     UnitTypeData,
     Upgrade,
     UpgradeData,
+    Visibility,
 };
-use client::{ClientRequest, ClientResult, Transactor};
+use synapses::{Dendrite, Synapse, Terminal};
 
-pub enum ObserverSoma {
-    Init(Init),
+/// state of the game (changes every frame)
+#[derive(Debug, Clone)]
+pub struct Observation {
+    /// the player id associated with the participant
+    player_id: u32,
+    /// the previous game step
+    previous_step: u32,
+    /// the current game step
+    current_step: u32,
+    /// position of the center of the camera
+    camera_pos: Point2,
 
-    Started(Started),
+    /// a list of all known units at the moment
+    units: Vec<Rc<Unit>>,
 
-    GameDataReady(GameDataReady),
+    /// all power sources associated with the current player
+    power_sources: Vec<PowerSource>,
+    /// all active effects in vision of the current player
+    effects: Vec<Effect>,
+    /// all upgrades
+    upgrades: Vec<Upgrade>,
 
-    FetchGameData(FetchGameData),
-    FetchTerrainData(FetchTerrainData),
+    /// current mineral count
+    minerals: u32,
+    /// current vespene count
+    vespene: u32,
+    /// the total supply cap given the players max supply
+    food_cap: u32,
+    /// the total supply used by the player
+    food_used: u32,
+    /// the total supply consumed by army units alone
+    food_army: u32,
+    /// the total supply consumed by workers alone
+    food_workers: u32,
+    /// the number of workers that currently have no orders
+    idle_worker_count: u32,
+    /// the number of army units
+    army_count: u32,
+    /// the number of warp gates owned by the player
+    warp_gate_count: u32,
+    /// the number of larva owned by the player
+    larva_count: u32,
 
-    Observe(Observe),
+    /// creep image (sample pixels to find tiles with creep)
+    creep: ImageData,
+    /// visibility image (sample pixels to find visible tiles)
+    visibility: ImageData,
+
+    /// detailed current set of scores
+    score: Score,
+}
+
+impl Observation {
+    /// the player id associated with the participant
+    pub fn get_player_id(&self) -> u32 {
+        self.player_id
+    }
+    /// the previous game step
+    pub fn get_previous_step(&self) -> u32 {
+        self.previous_step
+    }
+    /// the current game step
+    pub fn get_current_step(&self) -> u32 {
+        self.current_step
+    }
+    /// position of the center of the camera
+    pub fn get_camera_pos(&self) -> Point2 {
+        self.camera_pos
+    }
+
+    /// a list of all known units at the moment
+    pub fn get_units(&self) -> &[Rc<Unit>] {
+        &self.units
+    }
+
+    /// all power sources associated with the current player
+    pub fn get_power_sources(&self) -> &[PowerSource] {
+        &self.power_sources
+    }
+    /// all active effects in vision of the current player
+    pub fn get_effects(&self) -> &[Effect] {
+        &self.effects
+    }
+    /// all upgrades
+    pub fn get_upgrades(&self) -> &[Upgrade] {
+        &self.upgrades
+    }
+
+    /// current mineral count
+    pub fn get_minerals(&self) -> u32 {
+        self.minerals
+    }
+    /// current vespene count
+    pub fn get_vespene(&self) -> u32 {
+        self.vespene
+    }
+    /// the total supply cap given the players max supply
+    pub fn get_food_cap(&self) -> u32 {
+        self.food_cap
+    }
+    /// the total supply used by the player
+    pub fn get_food_used(&self) -> u32 {
+        self.food_used
+    }
+    /// the total supply consumed by army units alone
+    pub fn get_food_army(&self) -> u32 {
+        self.food_army
+    }
+    /// the total supply consumed by workers alone
+    pub fn get_food_workers(&self) -> u32 {
+        self.food_workers
+    }
+    /// the number of workers that currently have no orders
+    pub fn get_idle_worker_count(&self) -> u32 {
+        self.idle_worker_count
+    }
+    /// the number of army units
+    pub fn get_army_count(&self) -> u32 {
+        self.army_count
+    }
+    /// the number of warp gates owned by the player
+    pub fn get_warp_gate_count(&self) -> u32 {
+        self.warp_gate_count
+    }
+    /// the number of larva owned by the player
+    pub fn get_larva_count(&self) -> u32 {
+        self.larva_count
+    }
+
+    /// creep image (sample pixels to find tiles with creep)
+    pub fn get_creep(&self) -> &ImageData {
+        &self.creep
+    }
+    /// visibility image (sample pixels to find visible tiles)
+    pub fn get_visibility(&self) -> &ImageData {
+        &self.visibility
+    }
+
+    /// detailed current set of scores
+    pub fn get_score(&self) -> &Score {
+        &self.score
+    }
+
+    /// filter all units based on a custom condition
+    pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
+    where
+        F: Fn(&Unit) -> bool,
+    {
+        self.units
+            .iter()
+            .filter(|u| filter(u))
+            .map(|u| Rc::clone(u))
+            .collect()
+    }
+    /// check if the given point contains creep
+    pub fn sample_creep(&self, _: Point2) -> bool {
+        unimplemented!("has creep")
+    }
+    /// get the visibility of the given point for the current player
+    pub fn sample_visibility(&self, _: Point2) -> Visibility {
+        unimplemented!("get visibility")
+    }
+}
+
+pub struct ObserverSoma {
+    client: Option<ClientTerminal>,
+    controller: Option<ObserverControlDendrite>,
+    users: Vec<ObserverDendrite>,
 }
 
 impl ObserverSoma {
-    pub fn sheath() -> Result<Sheath<Self>> {
-        Ok(Sheath::new(
-            ObserverSoma::Init(Init {}),
-            vec![Dendrite::RequireOne(Synapse::Observer)],
-            vec![Dendrite::RequireOne(Synapse::Client)],
-        )?)
+    pub fn axon() -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                client: None,
+                controller: None,
+                users: vec![],
+            },
+            vec![
+                Constraint::One(Synapse::ObserverControl),
+                Constraint::Variadic(Synapse::Observer),
+            ],
+            vec![Constraint::One(Synapse::Client)],
+        ))
     }
 }
 
-impl Neuron for ObserverSoma {
-    type Signal = Signal;
+impl Soma for ObserverSoma {
     type Synapse = Synapse;
+    type Error = Error;
 
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<Self> {
-        match self {
-            ObserverSoma::Init(state) => state.update(axon, msg),
+    #[async(boxed)]
+    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
+                self.client = Some(tx);
 
-            ObserverSoma::Started(state) => state.update(axon, msg),
-
-            ObserverSoma::FetchGameData(state) => state.update(axon, msg),
-            ObserverSoma::FetchTerrainData(state) => state.update(axon, msg),
-
-            ObserverSoma::GameDataReady(state) => state.update(axon, msg),
-
-            ObserverSoma::Observe(state) => state.update(axon, msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
-    }
-}
-
-pub struct Init;
-
-impl Init {
-    fn update(
-        self,
-        _axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Start => Started::start(),
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-}
-
-pub struct Started;
-
-impl Started {
-    fn start() -> Result<ObserverSoma> {
-        Ok(ObserverSoma::Started(Started {}))
-    }
-
-    fn restart(axon: &Axon) -> Result<ObserverSoma> {
-        axon.send_req_input(Synapse::Observer, Signal::GameEnded)?;
-
-        Ok(ObserverSoma::Started(Started {}))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Signal(_, Signal::Ready)
-            | Impulse::Signal(_, Signal::ClientClosed)
-            | Impulse::Signal(_, Signal::ClientError(_)) => {
-                Ok(ObserverSoma::Started(self))
+                Ok(self)
             },
-            Impulse::Signal(src, Signal::FetchGameData) => {
-                self.on_fetch_game_data(axon, src)
+            Impulse::AddDendrite(
+                _,
+                Synapse::ObserverControl,
+                Dendrite::ObserverControl(rx),
+            ) => {
+                self.controller = Some(rx);
+
+                Ok(self)
+            },
+            Impulse::AddDendrite(
+                _,
+                Synapse::Observer,
+                Dendrite::Observer(rx),
+            ) => {
+                self.users.push(rx);
+
+                Ok(self)
             },
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
+            Impulse::Start(_, main_tx, handle) => {
+                assert!(self.controller.is_some());
+                assert!(self.client.is_some());
 
-    fn on_fetch_game_data(
-        self,
-        axon: &Axon,
-        src: Handle,
-    ) -> Result<ObserverSoma> {
-        assert_eq!(src, axon.req_input(Synapse::Observer)?);
+                let (tx, rx) = mpsc::channel(10);
 
-        FetchGameData::fetch(axon)
-    }
-}
+                // merge all queues
+                for user in self.users {
+                    handle.spawn(
+                        tx.clone()
+                            .send_all(user.rx.map_err(|_| unreachable!()))
+                            .map(|_| ())
+                            .map_err(|_| ()),
+                    );
+                }
 
-pub struct FetchGameData {
-    transactor: Transactor,
-}
+                let task = ObserverTask::new(
+                    self.controller.unwrap(),
+                    self.client.unwrap(),
+                    rx,
+                );
 
-impl FetchGameData {
-    fn fetch(axon: &Axon) -> Result<ObserverSoma> {
-        let mut req = sc2api::Request::new();
-        req.mut_data().set_unit_type_id(true);
+                handle.spawn(task.run().or_else(move |e| {
+                    main_tx
+                        .send(Impulse::Error(e.into()))
+                        .map(|_| ())
+                        .map_err(|_| ())
+                }));
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-        Ok(ObserverSoma::FetchGameData(FetchGameData {
-            transactor: transactor,
-        }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
-                self.on_game_data(axon, src, result)
+                Ok(Self {
+                    controller: None,
+                    client: None,
+                    users: vec![],
+                })
             },
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
+            _ => bail!("unexpected impulse"),
         }
-    }
-
-    fn on_game_data(
-        self,
-        axon: &Axon,
-        src: Handle,
-        result: ClientResult,
-    ) -> Result<ObserverSoma> {
-        let mut rsp = self.transactor.expect(src, result)?;
-
-        let mut unit_type_data = HashMap::new();
-        let mut ability_data = HashMap::new();
-        let mut upgrade_data = HashMap::new();
-        let mut buff_data = HashMap::new();
-
-        for data in rsp.mut_data().take_units().into_iter() {
-            let u = UnitTypeData::from_proto(data)?;
-
-            let unit_type = u.unit_type;
-            unit_type_data.insert(unit_type, u);
-        }
-
-        for data in rsp.mut_data().take_abilities().into_iter() {
-            let a = AbilityData::from_proto(data)?;
-
-            let ability = a.ability;
-            ability_data.insert(ability, a);
-        }
-
-        for data in rsp.mut_data().take_upgrades().into_iter() {
-            let u = UpgradeData::from_proto(data)?;
-
-            let upgrade = u.upgrade;
-            upgrade_data.insert(upgrade, u);
-        }
-
-        for data in rsp.mut_data().take_buffs().into_iter() {
-            let b = BuffData::from_proto(data)?;
-
-            let buff = b.buff;
-            buff_data.insert(buff, b);
-        }
-
-        FetchTerrainData::fetch(
-            axon,
-            unit_type_data,
-            ability_data,
-            upgrade_data,
-            buff_data,
-        )
     }
 }
 
-pub struct FetchTerrainData {
-    transactor: Transactor,
+struct ObserverTask {
+    controller: Option<ObserverControlDendrite>,
+    client: ClientTerminal,
+    request_rx: Option<mpsc::Receiver<ObserverRequest>>,
 
-    unit_type_data: HashMap<UnitType, UnitTypeData>,
-    ability_data: HashMap<Ability, AbilityData>,
-    upgrade_data: HashMap<Upgrade, UpgradeData>,
-    buff_data: HashMap<Buff, BuffData>,
-}
-
-impl FetchTerrainData {
-    fn fetch(
-        axon: &Axon,
-        unit_type_data: HashMap<UnitType, UnitTypeData>,
-        ability_data: HashMap<Ability, AbilityData>,
-        upgrade_data: HashMap<Upgrade, UpgradeData>,
-        buff_data: HashMap<Buff, BuffData>,
-    ) -> Result<ObserverSoma> {
-        let mut req = sc2api::Request::new();
-        req.mut_game_info();
-
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-        Ok(ObserverSoma::FetchTerrainData(FetchTerrainData {
-            transactor: transactor,
-
-            unit_type_data: unit_type_data,
-            ability_data: ability_data,
-            upgrade_data: upgrade_data,
-            buff_data: buff_data,
-        }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::ClientResult(rsp)) => {
-                self.on_terrain_info(axon, src, rsp)
-            },
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-
-    fn on_terrain_info(
-        self,
-        axon: &Axon,
-        src: Handle,
-        result: ClientResult,
-    ) -> Result<ObserverSoma> {
-        let mut rsp = self.transactor.expect(src, result)?;
-
-        let game_data = Rc::from(GameData {
-            unit_type_data: self.unit_type_data,
-            ability_data: self.ability_data,
-            upgrade_data: self.upgrade_data,
-            buff_data: self.buff_data,
-
-            terrain_info: rsp.take_game_info().into_sc2()?,
-        });
-
-        GameDataReady::start(axon, game_data)
-    }
-}
-
-struct ObserverData {
     previous_step: u32,
     current_step: u32,
     previous_units: HashMap<Tag, Rc<Unit>>,
@@ -304,148 +307,205 @@ struct ObserverData {
     upgrades: HashSet<Upgrade>,
 
     actions: Vec<Action>,
-    spatial_actions: Vec<SpatialAction>,
-
-    game_data: Rc<GameData>,
+    // spatial_actions: Vec<SpatialAction>,
 }
 
-pub struct GameDataReady {
-    data: ObserverData,
-}
+impl ObserverTask {
+    fn new(
+        controller: ObserverControlDendrite,
+        client: ClientTerminal,
+        request_rx: mpsc::Receiver<ObserverRequest>,
+    ) -> Self {
+        Self {
+            controller: Some(controller),
+            client: client,
+            request_rx: Some(request_rx),
 
-impl GameDataReady {
-    fn start(axon: &Axon, game_data: Rc<GameData>) -> Result<ObserverSoma> {
-        axon.send_req_input(Synapse::Observer, Signal::GameDataReady)?;
+            previous_step: 0,
+            current_step: 0,
+            previous_units: HashMap::new(),
+            units: HashMap::new(),
 
-        Ok(ObserverSoma::GameDataReady(GameDataReady {
-            data: ObserverData {
-                previous_step: 0,
-                current_step: 0,
-                previous_units: HashMap::new(),
-                units: HashMap::new(),
+            previous_upgrades: HashSet::new(),
+            upgrades: HashSet::new(),
 
-                previous_upgrades: HashSet::new(),
-                upgrades: HashSet::new(),
-
-                actions: vec![],
-                spatial_actions: vec![],
-                game_data: game_data,
-            },
-        }))
-    }
-
-    fn ready(data: ObserverData) -> Result<ObserverSoma> {
-        Ok(ObserverSoma::GameDataReady(GameDataReady { data: data }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::Observe) => {
-                assert_eq!(src, axon.req_input(Synapse::Observer)?);
-                Observe::observe(axon, self.data)
-            },
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
+            actions: vec![],
+            // spatial_actions: vec![],
         }
     }
-}
 
-pub struct Observe {
-    transactor: Transactor,
+    #[async]
+    fn run(mut self) -> Result<()> {
+        let queue = mem::replace(&mut self.controller, None)
+            .unwrap()
+            .rx
+            .map(|req| Either::Control(req))
+            .select(
+                mem::replace(&mut self.request_rx, None)
+                    .unwrap()
+                    .map(|req| Either::Request(req)),
+            );
 
-    data: ObserverData,
-}
+        let mut observation = None;
+        let mut map_info = None;
+        let mut unit_data = None;
+        let mut ability_data = None;
+        let mut upgrade_data = None;
+        let mut buff_data = None;
 
-impl Observe {
-    fn observe(axon: &Axon, data: ObserverData) -> Result<ObserverSoma> {
+        #[async]
+        for req in queue.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                Either::Control(ObserverControlRequest::Reset(tx)) => {
+                    // clear data cache every game
+                    map_info = None;
+                    unit_data = None;
+
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to ack reset"))?;
+                },
+                Either::Control(ObserverControlRequest::Step(tx)) => {
+                    let (observer, new_observation, events, game_ended) =
+                        await!(self.get_observation())?;
+
+                    self = observer;
+                    observation = Some(new_observation);
+
+                    tx.send((events, game_ended))
+                        .map_err(|_| Error::from("unable to ack step"))?;
+                },
+
+                Either::Request(ObserverRequest::Observe(tx)) => {
+                    // observation should exist because step should create it
+                    tx.send(Rc::clone(observation.as_ref().unwrap()))
+                        .map_err(|_| {
+                            Error::from("unable to return observation")
+                        })?;
+                },
+                Either::Request(ObserverRequest::GetMapInfo(tx)) => {
+                    if map_info.is_none() {
+                        let (observer, new_map_info) =
+                            await!(self.get_map_info())?;
+
+                        self = observer;
+                        map_info = Some(new_map_info);
+                    }
+
+                    tx.send(Rc::clone(map_info.as_ref().unwrap()))
+                        .map_err(|_| Error::from("unable to return map info"))?;
+                },
+                Either::Request(ObserverRequest::GetUnitData(_))
+                | Either::Request(ObserverRequest::GetAbilityData(_))
+                | Either::Request(ObserverRequest::GetUpgradeData(_))
+                | Either::Request(ObserverRequest::GetBuffData(_)) => {
+                    if unit_data.is_none() {
+                        let (
+                            observer,
+                            new_unit_data,
+                            new_ability_data,
+                            new_upgrade_data,
+                            new_buff_data,
+                        ) = await!(self.get_game_data())?;
+
+                        self = observer;
+                        unit_data = Some(new_unit_data);
+                        ability_data = Some(new_ability_data);
+                        upgrade_data = Some(new_upgrade_data);
+                        buff_data = Some(new_buff_data);
+                    }
+
+                    match req {
+                        Either::Request(ObserverRequest::GetUnitData(tx)) => {
+                            tx.send(Rc::clone(unit_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return unit data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetAbilityData(
+                            tx,
+                        )) => {
+                            tx.send(Rc::clone(ability_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return ability data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetUpgradeData(
+                            tx,
+                        )) => {
+                            tx.send(Rc::clone(upgrade_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return upgrade data")
+                                })?;
+                        },
+                        Either::Request(ObserverRequest::GetBuffData(tx)) => {
+                            tx.send(Rc::clone(buff_data.as_ref().unwrap()))
+                                .map_err(|_| {
+                                    Error::from("unable to return buff data")
+                                })?;
+                        },
+
+                        _ => unreachable!(),
+                    }
+                },
+            }
+        }
+
+        Ok(())
+    }
+
+    #[async]
+    fn get_observation(
+        mut self,
+    ) -> Result<(Self, Rc<Observation>, Vec<GameEvent>, bool)> {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
-        let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-        Ok(ObserverSoma::Observe(Observe {
-            transactor: transactor,
-
-            data: data,
-        }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ObserverSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::ClientResult(result)) => {
-                self.on_observe(axon, src, result)
-            },
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-
-    fn on_observe(
-        self,
-        axon: &Axon,
-        src: Handle,
-        result: ClientResult,
-    ) -> Result<ObserverSoma> {
-        let mut rsp = self.transactor.expect(src, result)?;
-
-        if rsp.get_status() != sc2api::Status::in_game {
-            return Started::restart(axon);
-        }
+        let mut rsp = await!(self.client.clone().request(req))?;
 
         let mut observation = rsp.take_observation().take_observation();
 
-        let mut data = self.data;
-
-        data.previous_step = data.current_step;
-        data.current_step = observation.get_game_loop();
-        let is_new_frame = data.current_step != data.previous_step;
+        self.previous_step = self.current_step;
+        self.current_step = observation.get_game_loop();
+        let is_new_frame = self.current_step != self.previous_step;
 
         let player_common = observation.take_player_common();
         let mut raw = observation.take_raw_data();
         let mut player_raw = raw.take_player();
 
-        data.previous_units = mem::replace(&mut data.units, HashMap::new());
+        self.previous_units = mem::replace(&mut self.units, HashMap::new());
         for unit in raw.take_units().into_iter() {
             match Unit::from_proto(unit) {
                 Ok(mut unit) => {
-                    let tag = unit.tag;
+                    let tag = unit.get_tag();
 
-                    unit.last_seen_game_loop = data.current_step;
+                    unit.set_last_seen_step(self.current_step);
 
-                    data.units.insert(tag, Rc::from(unit));
+                    self.units.insert(tag, Rc::from(unit));
                 },
                 _ => (),
             }
         }
 
-        data.previous_upgrades =
-            mem::replace(&mut data.upgrades, HashSet::new());
+        self.previous_upgrades =
+            mem::replace(&mut self.upgrades, HashSet::new());
 
         for u in player_raw.take_upgrade_ids().into_iter() {
-            data.upgrades.insert(Upgrade::from_proto(u)?);
+            self.upgrades.insert(Upgrade::from_proto(u)?);
         }
 
-        let new_state = GameState {
+        let mut map_state = raw.take_map_state();
+
+        let new_observation = Rc::from(Observation {
             player_id: player_common.get_player_id(),
-            previous_step: data.previous_step,
-            current_step: data.current_step,
+            previous_step: self.previous_step,
+            current_step: self.current_step,
             camera_pos: {
                 let camera = player_raw.get_camera();
 
                 Point2::new(camera.get_x(), camera.get_y())
             },
 
-            units: data.units.values().map(|u| Rc::clone(u)).collect(),
+            units: self.units.values().map(|u| Rc::clone(u)).collect(),
             power_sources: {
                 let mut power_sources = vec![];
 
@@ -455,7 +515,7 @@ impl Observe {
 
                 power_sources
             },
-            upgrades: data.upgrades.iter().map(|u| *u).collect(),
+            upgrades: self.upgrades.iter().map(|u| *u).collect(),
             effects: vec![],
 
             minerals: player_common.get_minerals(),
@@ -469,12 +529,15 @@ impl Observe {
             warp_gate_count: player_common.get_warp_gate_count(),
             larva_count: player_common.get_larva_count(),
 
+            creep: map_state.take_creep().into_sc2()?,
+            visibility: map_state.take_visibility().into_sc2()?,
+
             score: observation.take_score().into_sc2()?,
-        };
+        });
 
         if is_new_frame {
-            data.actions.clear();
-            data.spatial_actions.clear();
+            self.actions.clear();
+            // self.spatial_actions.clear();
         }
 
         for action in rsp.get_observation().get_actions() {
@@ -492,30 +555,30 @@ impl Observe {
                 continue;
             }
 
-            data.actions.push(cmd.clone().into_sc2()?);
+            self.actions.push(cmd.clone().into_sc2()?);
         }
 
-        for action in rsp.get_observation().get_actions() {
-            if !action.has_action_feature_layer() {
-                continue;
-            }
+        // for action in rsp.get_observation().get_actions() {
+        //     if !action.has_action_feature_layer() {
+        //         continue;
+        //     }
 
-            let fl = action.get_action_feature_layer();
+        //     let fl = action.get_action_feature_layer();
 
-            if fl.has_unit_command() {
-                data.spatial_actions
-                    .push(fl.get_unit_command().clone().into_sc2()?);
-            } else if fl.has_camera_move() {
-                data.spatial_actions
-                    .push(fl.get_camera_move().clone().into_sc2()?);
-            } else if fl.has_unit_selection_point() {
-                data.spatial_actions
-                    .push(fl.get_unit_selection_point().clone().into_sc2()?);
-            } else if fl.has_unit_selection_rect() {
-                data.spatial_actions
-                    .push(fl.get_unit_selection_rect().clone().into_sc2()?);
-            }
-        }
+        //     if fl.has_unit_command() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_command().clone().into_sc2()?);
+        //     } else if fl.has_camera_move() {
+        //         self.spatial_actions
+        //             .push(fl.get_camera_move().clone().into_sc2()?);
+        //     } else if fl.has_unit_selection_point() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_selection_point().clone().into_sc2()?);
+        //     } else if fl.has_unit_selection_rect() {
+        //         self.spatial_actions
+        //             .push(fl.get_unit_selection_rect().clone().into_sc2()?);
+        //     }
+        // }
 
         let mut events = vec![];
 
@@ -523,7 +586,7 @@ impl Observe {
             let event = raw.get_event();
 
             for tag in event.get_dead_units() {
-                match data.previous_units.get(tag) {
+                match self.previous_units.get(tag) {
                     Some(ref mut unit) => {
                         events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
                     },
@@ -532,13 +595,15 @@ impl Observe {
             }
         }
 
-        for ref unit in data.units.values() {
-            match data.previous_units.get(&unit.tag) {
+        for ref unit in self.units.values() {
+            match self.previous_units.get(&unit.get_tag()) {
                 Some(ref prev_unit) => {
-                    if unit.orders.is_empty() && !prev_unit.orders.is_empty() {
+                    if unit.get_orders().is_empty()
+                        && !prev_unit.get_orders().is_empty()
+                    {
                         events.push(GameEvent::UnitIdle(Rc::clone(unit)));
-                    } else if unit.build_progress >= 1.0
-                        && prev_unit.build_progress < 1.0
+                    } else if unit.get_build_progress() >= 1.0
+                        && prev_unit.get_build_progress() < 1.0
                     {
                         events.push(GameEvent::BuildingCompleted(Rc::clone(
                             unit,
@@ -546,8 +611,8 @@ impl Observe {
                     }
                 },
                 None => {
-                    if unit.alliance == Alliance::Enemy
-                        && unit.display_type == DisplayType::Visible
+                    if unit.get_alliance() == Alliance::Enemy
+                        && unit.get_display_type() == DisplayType::Visible
                     {
                         events.push(GameEvent::UnitDetected(Rc::clone(unit)));
                     } else {
@@ -560,9 +625,9 @@ impl Observe {
         }
 
         let prev_upgrades =
-            mem::replace(&mut data.previous_upgrades, HashSet::new());
+            mem::replace(&mut self.previous_upgrades, HashSet::new());
 
-        for upgrade in &data.upgrades {
+        for upgrade in &self.upgrades {
             match prev_upgrades.get(upgrade) {
                 Some(_) => (),
                 None => {
@@ -571,7 +636,7 @@ impl Observe {
             }
         }
 
-        data.previous_upgrades = prev_upgrades;
+        self.previous_upgrades = prev_upgrades;
 
         let mut nukes = 0;
         let mut nydus_worms = 0;
@@ -591,20 +656,271 @@ impl Observe {
             events.push(GameEvent::NydusWormsDetected(nydus_worms));
         }
 
-        let mut map_state = raw.take_map_state();
+        let game_ended = if rsp.get_status() != sc2api::Status::in_game {
+            true
+        } else {
+            false
+        };
 
-        let frame = Rc::from(FrameData {
-            state: new_state,
-            data: Rc::clone(&data.game_data),
-            events: events,
-            map: Rc::from(MapState {
-                creep: map_state.take_creep().into_sc2()?,
-                visibility: map_state.take_visibility().into_sc2()?,
-            }),
-        });
-
-        axon.send_req_input(Synapse::Observer, Signal::Observation(frame))?;
-
-        GameDataReady::ready(data)
+        Ok((self, new_observation, events, game_ended))
     }
+
+    #[async]
+    fn get_map_info(self) -> Result<(Self, Rc<MapInfo>)> {
+        let mut req = sc2api::Request::new();
+        req.mut_game_info();
+
+        let mut rsp = await!(self.client.clone().request(req))?;
+
+        let info = Rc::from(MapInfo::from_proto(rsp.take_game_info())?);
+
+        Ok((self, info))
+    }
+
+    #[async]
+    fn get_game_data(
+        self,
+    ) -> Result<
+        (
+            Self,
+            Rc<HashMap<UnitType, UnitTypeData>>,
+            Rc<HashMap<Ability, AbilityData>>,
+            Rc<HashMap<Upgrade, UpgradeData>>,
+            Rc<HashMap<Buff, BuffData>>,
+        ),
+    > {
+        let mut req = sc2api::Request::new();
+        req.mut_data().set_unit_type_id(true);
+
+        let mut rsp = await!(self.client.clone().request(req))?;
+
+        let mut unit_type_data = HashMap::new();
+        let mut ability_data = HashMap::new();
+        let mut upgrade_data = HashMap::new();
+        let mut buff_data = HashMap::new();
+
+        for data in rsp.mut_data().take_units().into_iter() {
+            let u = UnitTypeData::from_proto(data)?;
+
+            let unit_type = u.get_id();
+            unit_type_data.insert(unit_type, u);
+        }
+
+        for data in rsp.mut_data().take_abilities().into_iter() {
+            let a = AbilityData::from_proto(data)?;
+
+            let ability = a.get_id();
+            ability_data.insert(ability, a);
+        }
+
+        for data in rsp.mut_data().take_upgrades().into_iter() {
+            let u = UpgradeData::from_proto(data)?;
+
+            let upgrade = u.get_id();
+            upgrade_data.insert(upgrade, u);
+        }
+
+        for data in rsp.mut_data().take_buffs().into_iter() {
+            let b = BuffData::from_proto(data)?;
+
+            let buff = b.get_id();
+            buff_data.insert(buff, b);
+        }
+
+        Ok((
+            self,
+            Rc::from(unit_type_data),
+            Rc::from(ability_data),
+            Rc::from(upgrade_data),
+            Rc::from(buff_data),
+        ))
+    }
+}
+
+#[derive(Debug)]
+enum ObserverControlRequest {
+    Reset(oneshot::Sender<()>),
+    Step(oneshot::Sender<(Vec<GameEvent>, bool)>),
+}
+
+#[derive(Debug)]
+enum ObserverRequest {
+    Observe(oneshot::Sender<Rc<Observation>>),
+
+    GetMapInfo(oneshot::Sender<Rc<MapInfo>>),
+
+    GetUnitData(oneshot::Sender<Rc<HashMap<UnitType, UnitTypeData>>>),
+    GetAbilityData(oneshot::Sender<Rc<HashMap<Ability, AbilityData>>>),
+    GetUpgradeData(oneshot::Sender<Rc<HashMap<Upgrade, UpgradeData>>>),
+    GetBuffData(oneshot::Sender<Rc<HashMap<Buff, BuffData>>>),
+}
+
+enum Either {
+    Control(ObserverControlRequest),
+    Request(ObserverRequest),
+}
+
+#[derive(Debug, Clone)]
+pub struct ObserverControlTerminal {
+    tx: mpsc::Sender<ObserverControlRequest>,
+}
+impl ObserverControlTerminal {
+    #[async]
+    pub fn reset(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverControlRequest::Reset(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send reset"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv reset ack")))
+    }
+
+    /// returns a list of game events that have occurred since last step
+    #[async]
+    pub fn step(self) -> Result<(Vec<GameEvent>, bool)> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverControlRequest::Step(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send step"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv step ack")))
+    }
+}
+
+#[derive(Debug)]
+pub struct ObserverControlDendrite {
+    rx: mpsc::Receiver<ObserverControlRequest>,
+}
+
+/// an interface for the observer soma
+#[derive(Debug, Clone)]
+pub struct ObserverTerminal {
+    tx: mpsc::Sender<ObserverRequest>,
+}
+
+impl ObserverTerminal {
+    /// observe the current game state
+    #[async]
+    pub fn observe(self) -> Result<Rc<Observation>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::Observe(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send observation"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv observation")))
+    }
+
+    /// get information about the current map
+    #[async]
+    pub fn get_map_info(self) -> Result<Rc<MapInfo>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetMapInfo(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send map info request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv map info")))
+    }
+
+    /// get data about each unit type
+    #[async]
+    pub fn get_unit_data(self) -> Result<Rc<HashMap<UnitType, UnitTypeData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUnitData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send unit data request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv unit data")))
+    }
+
+    /// get data about each ability
+    #[async]
+    pub fn get_ability_data(self) -> Result<Rc<HashMap<Ability, AbilityData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetAbilityData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send ability data request"
+                ))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv ability data")))
+    }
+
+    /// get data about each upgrade
+    #[async]
+    pub fn get_upgrade_data(self) -> Result<Rc<HashMap<Upgrade, UpgradeData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUpgradeData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send upgrade data request"
+                ))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
+    }
+
+    /// get data about each buff
+    #[async]
+    pub fn get_buff_data(self) -> Result<Rc<HashMap<Buff, BuffData>>> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(ObserverRequest::GetBuffData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send buff data request"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to recv buff data")))
+    }
+}
+
+#[derive(Debug)]
+pub struct ObserverDendrite {
+    rx: mpsc::Receiver<ObserverRequest>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct ObserverControlSynapse;
+
+pub fn synapse() -> (ObserverTerminal, ObserverDendrite) {
+    let (tx, rx) = mpsc::channel(10);
+
+    (ObserverTerminal { tx: tx }, ObserverDendrite { rx: rx })
+}
+
+pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
+    let (tx, rx) = mpsc::channel(1);
+
+    (
+        ObserverControlTerminal { tx: tx },
+        ObserverControlDendrite { rx: rx },
+    )
 }

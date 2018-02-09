@@ -77,17 +77,9 @@ impl Difficulty {
 #[derive(Debug, Copy, Clone)]
 pub enum PlayerSetup {
     /// add a built-in StarCraft II bot with the given race and difficulty
-    Computer {
-        /// race of the computer
-        race: Race,
-        /// difficulty setting
-        difficulty: Difficulty,
-    },
+    Computer(Race, Difficulty),
     /// add a user-controlled player
-    Player {
-        /// race of the player
-        race: Race,
-    },
+    Player(Race),
     //Observer,
 }
 
@@ -95,7 +87,7 @@ impl PlayerSetup {
     /// does the PlayerSetup represent a player
     pub fn is_player(&self) -> bool {
         match self {
-            &PlayerSetup::Player { .. } => true,
+            &PlayerSetup::Player(_) => true,
             _ => false,
         }
     }
@@ -103,7 +95,7 @@ impl PlayerSetup {
     /// does the PlayerSetup represent a computer
     pub fn is_computer(&self) -> bool {
         match self {
-            &PlayerSetup::Computer { .. } => true,
+            &PlayerSetup::Computer(_, _) => true,
             _ => false,
         }
     }

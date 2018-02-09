@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
 #![recursion_limit = "1024"]
+#![feature(proc_macro, conservative_impl_trait, generators)]
 
 //! StarCraft II API for Rust
 //!
@@ -11,7 +12,7 @@ extern crate error_chain;
 
 extern crate bytes;
 extern crate ctrlc;
-extern crate futures;
+extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
 extern crate organelle;
@@ -28,76 +29,41 @@ extern crate uuid;
 
 mod agent;
 mod client;
+mod action;
 mod computer;
 mod ctrlc_breaker;
-mod data;
-mod frame;
 mod instance;
 mod launcher;
 mod melee;
 mod observer;
+mod synapses;
 
-use std::collections::HashMap;
+pub mod data;
+
+pub use self::agent::{Agent, AgentBuilder, AgentControl, GameEvent, Player};
+pub use self::computer::{Computer, ComputerBuilder};
+pub use self::launcher::{Launcher, LauncherBuilder};
+pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
+pub use self::observer::Observation;
+
+#[cfg(feature = "with-organelle")]
+pub use self::action::{
+    synapse as action_synapse,
+    ActionDendrite,
+    ActionTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::agent::{synapse as agent_synapse, AgentDendrite, AgentTerminal};
+#[cfg(feature = "with-organelle")]
+pub use self::observer::{
+    synapse as observer_synapse,
+    ObserverDendrite,
+    ObserverTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
+
 use std::path::PathBuf;
-use std::rc::Rc;
-
-use futures::sync::mpsc::Sender;
-use url::Url;
-use uuid::Uuid;
-
-pub use self::agent::AgentSoma;
-pub use self::client::{ClientRequest, ClientResult};
-pub use self::computer::ComputerSoma;
-pub use self::ctrlc_breaker::CtrlcBreakerSoma;
-pub use self::data::{
-    Ability,
-    AbilityData,
-    Action,
-    ActionTarget,
-    Alliance,
-    Buff,
-    BuffData,
-    Color,
-    Difficulty,
-    DisplayType,
-    Effect,
-    GamePorts,
-    GameSettings,
-    ImageData,
-    Map,
-    PlayerSetup,
-    Point2,
-    Point3,
-    PortSet,
-    PowerSource,
-    Race,
-    Rect,
-    Rect2,
-    Score,
-    SpatialAction,
-    Tag,
-    TerrainInfo,
-    Unit,
-    UnitType,
-    UnitTypeData,
-    Upgrade,
-    UpgradeData,
-    Vector2,
-    Vector3,
-    Visibility,
-};
-pub use self::frame::{
-    Command,
-    DebugCommand,
-    DebugTextTarget,
-    FrameData,
-    GameData,
-    GameEvent,
-    GameState,
-    MapState,
-};
-pub use self::launcher::{LauncherSettings, LauncherSoma};
-pub use self::melee::{MeleeSettings, MeleeSoma, MeleeSuite};
 
 error_chain! {
     links {
@@ -105,8 +71,13 @@ error_chain! {
     }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
-        UrlParseError(url::ParseError) #[doc="link to url parse errors"];
+
+        Ctrlc(ctrlc::Error) #[doc="link to Ctrl-C errors"];
+        FutureCanceled(futures::Canceled) #[doc="link to futures"];
+        UrlParse(url::ParseError) #[doc="link to url parse errors"];
         Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
+        Timer(tokio_timer::TimerError) #[doc="link to timer errors"];
+        Tungstenite(tungstenite::Error) #[doc="link to tungstenite errors"];
     }
     errors {
         /// exe was not supplied to the coordinator
@@ -160,6 +131,12 @@ error_chain! {
     }
 }
 
+impl From<Error> for organelle::Error {
+    fn from(e: Error) -> organelle::Error {
+        organelle::Error::with_chain(e, organelle::ErrorKind::SomaError)
+    }
+}
+
 trait FromProto<T>
 where
     Self: Sized,
@@ -185,106 +162,3 @@ trait IntoProto<T> {
     /// convert into protobuf data
     fn into_proto(self) -> Result<T>;
 }
-
-/// the messages that can be sent between Sc2 capable
-#[derive(Debug)]
-pub enum Signal {
-    /// get instances pool
-    GetInstancePool,
-    /// get the ports pool
-    GetPortsPool,
-    /// launch an instance
-    LaunchInstance,
-    /// the pool of instances to choose from
-    InstancePool(HashMap<Uuid, (Url, PortSet)>),
-    /// the pool of game ports to choose from (num_instances / 2)
-    PortsPool(Vec<GamePorts>),
-
-    /// allow a soma to take complete control of an instance
-    ProvideInstance(Uuid, Url),
-
-    /// attempt to connect to instance
-    ClientAttemptConnect(Url),
-    /// internal-use client successfully connected to instance
-    ClientConnected(Sender<tungstenite::Message>),
-    /// internal-use client received a message
-    ClientReceive(tungstenite::Message),
-    /// send some request to the game instance
-    ClientRequest(ClientRequest),
-    /// result of transaction with game instance
-    ClientResult(ClientResult),
-    /// internal-use message used to indicate when a transaction has timed
-    /// out
-    ClientTimeout(Uuid),
-    /// disconnect from the instance
-    ClientDisconnect,
-    /// client has closed
-    ClientClosed,
-    /// client encountered a websocket error
-    ClientError(Rc<Error>),
-
-    /// agent is ready for a game to begin
-    Ready,
-
-    /// request player setup
-    RequestPlayerSetup(GameSettings),
-    /// respond with player setup
-    PlayerSetup(PlayerSetup),
-
-    /// create a game with the given settings and list of participants
-    CreateGame(GameSettings, Vec<PlayerSetup>),
-    /// game was created with the given settings
-    GameCreated,
-    /// notify agents that game is ready to join with the given player
-    /// setup
-    GameReady(PlayerSetup, Option<GamePorts>),
-    /// join an existing game
-    JoinGame(GamePorts),
-    /// fetch the game data
-    FetchGameData,
-    /// game data ready
-    GameDataReady,
-    /// request update interval from player
-    RequestUpdateInterval,
-    /// respond with update interval in game steps
-    UpdateInterval(u32),
-    /// game started
-    GameStarted,
-
-    /// observe the game state
-    Observe,
-    /// current game state
-    Observation(Rc<FrameData>),
-    /// issue a command to the game instance
-    Command(Command),
-    /// issue a debug command to the game instance
-    DebugCommand(DebugCommand),
-    /// notify the stepper that the soma is done updating
-    UpdateComplete,
-
-    /// game ended
-    GameEnded,
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-/// defines the roles that govern how connections between somas are made
-pub enum Synapse {
-    /// launches new game instances or kills them
-    Launcher,
-    /// broadcasts idle instances
-    InstancePool,
-    /// provides instances to clients
-    InstanceProvider,
-
-    /// controls agents or observer
-    Controller,
-    /// provides agent interface to bots
-    Agent,
-    /// provides client interface to agents or observers
-    Client,
-    /// observes game state
-    Observer,
-}
-
-/// type alias for an Sc2 Axon
-pub type Axon = organelle::Axon<Signal, Synapse>;

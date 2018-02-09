@@ -1,664 +1,720 @@
-use std::collections::HashMap;
+use std::{self, mem};
 
+use futures::prelude::*;
+use futures::unsync::{mpsc, oneshot};
 use organelle;
-use organelle::{
-    Dendrite,
-    Handle,
-    Impulse,
-    Neuron,
-    Organelle,
-    ResultExt,
-    Sheath,
-    Soma,
-};
+use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
+use tokio_core::reactor;
 use url::Url;
-use uuid::Uuid;
 
-use super::{
-    Axon,
-    GamePorts,
-    GameSettings,
-    PlayerSetup,
-    PortSet,
-    Result,
-    Signal,
-    Synapse,
-};
+use super::{Error, Result};
+use ctrlc_breaker::CtrlcBreakerSoma;
+use data::{GameSetup, PlayerSetup};
+use launcher::{GamePorts, Launcher, LauncherSoma, LauncherTerminal};
+use synapses::{Dendrite, Synapse, Terminal};
 
-use launcher::{LauncherSettings, LauncherSoma};
+/// update scheme for the agents to use
+#[derive(Debug, Copy, Clone)]
+pub enum UpdateScheme {
+    /// update as fast as possible
+    Realtime,
+    /// step the game with a fixed interval
+    Interval(u32),
+}
+
+/// empty trait to prevent users from passing their own somas to MeleeBuilder
+pub trait MeleeCompetitor {
+    type Soma: Soma + 'static;
+
+    fn into_soma(self) -> Self::Soma;
+}
+
+/// build a Melee coordinator
+pub struct MeleeBuilder<
+    P1: MeleeCompetitor + 'static,
+    P2: MeleeCompetitor + 'static,
+> {
+    players: (P1, P2),
+    launcher: Option<Launcher>,
+    suite: Option<MeleeSuite>,
+    update_scheme: UpdateScheme,
+    break_on_ctrlc: bool,
+    handle: Option<reactor::Handle>,
+}
+
+impl<P1, P2> MeleeBuilder<P1, P2>
+where
+    P1: MeleeCompetitor + 'static,
+    P2: MeleeCompetitor + 'static,
+{
+    /// start building a melee soma with the given agent or computer somas
+    pub fn new(player1: P1, player2: P2) -> Self {
+        Self {
+            players: (player1, player2),
+
+            launcher: None,
+            suite: None,
+            update_scheme: UpdateScheme::Realtime,
+            break_on_ctrlc: false,
+            handle: None,
+        }
+    }
+
+    /// the settings for the launcher soma
+    pub fn launcher_settings(self, settings: Launcher) -> Self {
+        Self {
+            launcher: Some(settings),
+            ..self
+        }
+    }
+
+    /// play one game with the given settings
+    pub fn one_and_done(self, game: GameSetup) -> Self {
+        Self {
+            suite: Some(MeleeSuite::OneAndDone(game)),
+            ..self
+        }
+    }
+
+    /// keep restarting game with the given settings
+    pub fn repeat_forever(self, game: GameSetup) -> Self {
+        Self {
+            suite: Some(MeleeSuite::EndlessRepeat(game)),
+            ..self
+        }
+    }
+
+    /// the method of updating the game instance
+    pub fn update_scheme(self, scheme: UpdateScheme) -> Self {
+        Self {
+            update_scheme: scheme,
+            ..self
+        }
+    }
+
+    /// stop running upon CTRL-C
+    ///
+    /// this is only necessary with Wine. CTRL-C doesn't seem to kill it for
+    /// some reason by default.
+    pub fn break_on_ctrlc(self, flag: bool) -> Self {
+        Self {
+            break_on_ctrlc: flag,
+            ..self
+        }
+    }
+
+    /// the tokio core handle to use
+    pub fn handle(self, handle: reactor::Handle) -> Self {
+        Self {
+            handle: Some(handle),
+            ..self
+        }
+    }
+
+    /// build the melee coordinator
+    pub fn create(self) -> Result<Melee>
+    where
+        P1::Soma: Soma,
+        P2::Soma: Soma,
+
+        <P1::Soma as Soma>::Synapse: organelle::Synapse,
+        <P2::Soma as Soma>::Synapse: organelle::Synapse,
+
+        <P1::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
+        <P2::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
+
+        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
+            + Into<Terminal>,
+        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+            + Into<Dendrite>,
+        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
+            + Into<Dendrite>,
+    {
+        if self.launcher.is_none() {
+            bail!("missing launcher settings")
+        } else if self.suite.is_none() {
+            bail!("missing melee suite")
+        } else if self.handle.is_none() {
+            bail!("missing reactor handle")
+        }
+
+        let handle = self.handle.unwrap();
+
+        let mut organelle = Organelle::new(
+            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme)?,
+            handle.clone(),
+        );
+
+        let launcher =
+            organelle.add_soma(LauncherSoma::axon(self.launcher.unwrap())?);
+
+        let melee = organelle.nucleus();
+
+        let player1 = organelle.add_soma(self.players.0.into_soma());
+        let player2 = organelle.add_soma(self.players.1.into_soma());
+
+        if self.break_on_ctrlc {
+            organelle.add_soma(CtrlcBreakerSoma::axon());
+        }
+
+        organelle.connect(melee, launcher, Synapse::Launcher)?;
+
+        organelle.connect(melee, player1, Synapse::Melee)?;
+        organelle.connect(melee, player2, Synapse::Melee)?;
+
+        Ok(Melee {
+            handle: handle,
+            organelle: organelle,
+        })
+    }
+}
+
+/// coordinates matches between the given players
+pub struct Melee {
+    handle: reactor::Handle,
+    organelle: Organelle<Axon<MeleeSoma>>,
+}
+
+impl IntoFuture for Melee {
+    type Item = ();
+    type Error = Error;
+    type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
+
+    #[async(boxed)]
+    fn into_future(self) -> Result<()> {
+        await!(self.organelle.run(self.handle))?;
+        Ok(())
+    }
+}
 
 /// suite of games to choose from when pitting bots against each other
-pub enum MeleeSuite {
-    /// play one game with the given settings
-    OneAndDone(GameSettings),
+enum MeleeSuite {
+    OneAndDone(GameSetup),
     /// repeat this game indefinitely
-    EndlessRepeat(GameSettings),
+    EndlessRepeat(GameSetup),
 }
 
-/// settings for the melee soma
-pub struct MeleeSettings<L1: Soma + 'static, L2: Soma + 'static> {
-    /// the settings for the launcher soma
-    pub launcher: LauncherSettings,
-    /// the player organelles
-    pub players: (L1, L2),
-    /// the suite of games to choose from
-    pub suite: MeleeSuite,
+/// create a melee synapse
+pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
+    let (tx, rx) = mpsc::channel(1);
+
+    (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
 }
 
-/// soma designed to pit two bots against each other in Sc2 games
-pub enum MeleeSoma {
-    /// wait for axon to gather effector, inputs, and outputs
-    Init(Init),
-
-    /// fetch player info in order to decide how many instances it needs
-    Setup(Setup),
-    /// gather instances and game ports, then transition to PVP or PVC
-    Launch(Launch),
-
-    /// coordinate two instances for player vs player
-    PlayerVsPlayer(PlayerVsPlayer),
-    /// coordinate one instance for player vs the built-in Sc2 AI
-    PlayerVsComputer(PlayerVsComputer),
-
-    /// melee suite is exhausted and organelle is awaiting shutdown
-    Completed(Completed),
+/// controller that pits agents against each other
+pub struct MeleeSoma {
+    suite: Option<MeleeSuite>,
+    launcher: Option<LauncherTerminal>,
+    agents: Vec<Option<MeleeTerminal>>,
+    update_scheme: UpdateScheme,
 }
 
 impl MeleeSoma {
     /// melee soma only works as a controller in a melee organelle
-    fn sheath(suite: MeleeSuite) -> Result<Sheath<Self>> {
-        Ok(Sheath::new(
-            MeleeSoma::Init(Init { suite: suite }),
+    fn axon(
+        suite: MeleeSuite,
+        update_scheme: UpdateScheme,
+    ) -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                suite: Some(suite),
+                launcher: None,
+                agents: vec![],
+                update_scheme: update_scheme,
+            },
             vec![],
             vec![
-                Dendrite::RequireOne(Synapse::Launcher),
-                Dendrite::Variadic(Synapse::Controller),
-                Dendrite::Variadic(Synapse::InstanceProvider),
+                Constraint::One(Synapse::Launcher),
+                Constraint::Variadic(Synapse::Melee),
             ],
-        )?)
-    }
-
-    /// create the melee organelle
-    pub fn organelle<L1, L2>(
-        settings: MeleeSettings<L1, L2>,
-    ) -> Result<Organelle<Sheath<Self>>>
-    where
-        L1: Soma,
-        L2: Soma,
-
-        Signal: From<L1::Signal> + From<L2::Signal>,
-        Synapse: From<L1::Synapse> + From<L2::Synapse>,
-
-        L1::Signal: From<Signal>,
-        L2::Signal: From<Signal>,
-
-        L1::Synapse: From<Synapse>,
-        L2::Synapse: From<Synapse>,
-    {
-        let mut organelle = Organelle::new(MeleeSoma::sheath(settings.suite)?);
-
-        let launcher =
-            organelle.add_soma(LauncherSoma::sheath(settings.launcher)?);
-
-        let melee = organelle.get_main_handle();
-
-        let player1 = organelle.add_soma(settings.players.0);
-        let player2 = organelle.add_soma(settings.players.1);
-
-        organelle.connect(melee, launcher, Synapse::Launcher);
-
-        organelle.connect(melee, player1, Synapse::Controller);
-        organelle.connect(melee, player2, Synapse::Controller);
-        organelle.connect(melee, player1, Synapse::InstanceProvider);
-        organelle.connect(melee, player2, Synapse::InstanceProvider);
-
-        Ok(organelle)
+        ))
     }
 }
 
-impl Neuron for MeleeSoma {
-    type Signal = Signal;
+impl Soma for MeleeSoma {
     type Synapse = Synapse;
+    type Error = Error;
 
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Self::Signal, Self::Synapse>,
-    ) -> organelle::Result<Self> {
-        match self {
-            MeleeSoma::Init(state) => state.update(axon, msg),
-            MeleeSoma::Setup(state) => state.update(axon, msg),
-            MeleeSoma::Launch(state) => state.update(axon, msg),
-            MeleeSoma::PlayerVsPlayer(state) => state.update(axon, msg),
-            MeleeSoma::PlayerVsComputer(state) => state.update(axon, msg),
-            MeleeSoma::Completed(state) => state.update(axon, msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
+    #[async(boxed)]
+    fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
+        match msg {
+            Impulse::AddTerminal(
+                _,
+                Synapse::Launcher,
+                Terminal::Launcher(tx),
+            ) => {
+                self.launcher = Some(tx);
+                Ok(self)
+            },
+            Impulse::AddTerminal(_, Synapse::Melee, Terminal::Melee(tx)) => {
+                self.agents.push(Some(tx));
+                Ok(self)
+            },
+            Impulse::Start(_, main_tx, handle) => {
+                assert!(self.launcher.is_some());
+                assert!(self.suite.is_some());
+
+                if self.agents.len() != 2 {
+                    bail!("expected 2 agents, got {}", self.agents.len())
+                }
+
+                assert!(self.agents[0].is_some() && self.agents[1].is_some());
+
+                let main_tx2 = main_tx.clone();
+
+                handle.spawn(
+                    run_melee(
+                        mem::replace(&mut self.suite, None).unwrap(),
+                        self.update_scheme,
+                        mem::replace(&mut self.launcher, None).unwrap(),
+                        (
+                            mem::replace(&mut self.agents[0], None).unwrap(),
+                            mem::replace(&mut self.agents[1], None).unwrap(),
+                        ),
+                        main_tx2,
+                    ).or_else(move |e| {
+                        main_tx
+                            .send(Impulse::Error(e.into()))
+                            .map(|_| ())
+                            .map_err(|_| ())
+                    }),
+                );
+
+                Ok(self)
+            },
+
+            _ => bail!("unexpected impulse"),
+        }
     }
 }
 
-pub struct Init {
+#[async]
+fn run_melee(
     suite: MeleeSuite,
-}
+    update_scheme: UpdateScheme,
+    launcher: LauncherTerminal,
+    agents: (MeleeTerminal, MeleeTerminal),
+    main_tx: mpsc::Sender<Impulse<Synapse>>,
+) -> Result<()> {
+    let (game, _suite) = match suite {
+        MeleeSuite::OneAndDone(game) => (game, None),
+        MeleeSuite::EndlessRepeat(game) => {
+            let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
 
-impl Init {
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Start => Setup::setup(axon, self.suite),
+            (game, suite)
+        },
+    };
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-}
+    let player1 = await!(agents.0.clone().get_player_setup(game.clone()))?;
+    let player2 = await!(agents.1.clone().get_player_setup(game.clone()))?;
 
-pub struct Setup {
-    suite: Option<MeleeSuite>,
-
-    agents: (Handle, Handle),
-    clients: (Handle, Handle),
-
-    game: GameSettings,
-    players: (Option<PlayerSetup>, Option<PlayerSetup>),
-}
-
-impl Setup {
-    fn setup(axon: &Axon, suite: MeleeSuite) -> Result<MeleeSoma> {
-        let clients = axon.var_output(Synapse::InstanceProvider)?.clone();
-        let agents = axon.var_output(Synapse::Controller)?.clone();
-
-        if clients.len() != 2 {
-            bail!("expected 2 clients, got {}", clients.len())
-        }
-
-        if agents.len() != 2 {
-            bail!("expected 2 agents, got {}", agents.len())
-        }
-
-        let (game, suite) = match suite {
-            MeleeSuite::OneAndDone(game) => (game, None),
-            MeleeSuite::EndlessRepeat(game) => {
-                let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
-
-                (game, suite)
-            },
-        };
-
-        axon.effector()?
-            .send(agents[0], Signal::RequestPlayerSetup(game.clone()));
-        axon.effector()?
-            .send(agents[1], Signal::RequestPlayerSetup(game.clone()));
-
-        Ok(MeleeSoma::Setup(Setup {
-            suite: suite,
-
-            agents: (agents[0], agents[1]),
-            clients: (clients[0], clients[1]),
-
-            game: game,
-            players: (None, None),
-        }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::PlayerSetup(setup)) => {
-                self.on_player_setup(axon, src, setup)
-            },
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-
-    fn on_player_setup(
-        mut self,
-        axon: &Axon,
-        src: Handle,
-        setup: PlayerSetup,
-    ) -> Result<MeleeSoma> {
-        if src == self.agents.0 {
-            self.players.0 = Some(setup);
-        } else if src == self.agents.1 {
-            self.players.1 = Some(setup);
+    let is_pvp = {
+        if player1.is_player() && player2.is_computer() {
+            false
+        } else if player1.is_computer() && player2.is_player() {
+            false
+        } else if player1.is_player() && player2.is_player() {
+            true
         } else {
-            bail!("invalid source for player setup")
+            bail!("invalid player setups")
         }
+    };
 
-        match self.players {
-            (Some(setup1), Some(setup2)) => Launch::launch(
-                axon,
-                self.suite,
-                self.agents,
-                self.clients,
-                (setup1, setup2),
-                self.game,
-            ),
+    if is_pvp {
+        // launch both at the same time
+        let instances = {
+            let launch1 = launcher.clone().launch();
+            let launch2 = launcher.clone().launch();
 
-            _ => Ok(MeleeSoma::Setup(self)),
-        }
-    }
-}
-
-pub struct Launch {
-    suite: Option<MeleeSuite>,
-    launcher: Handle,
-
-    agents: (Handle, Handle),
-    clients: (Handle, Handle),
-
-    game: GameSettings,
-    players: (PlayerSetup, PlayerSetup),
-    instances: HashMap<Uuid, (Url, PortSet)>,
-    ports: Vec<GamePorts>,
-
-    is_pvp: bool,
-    instances_requested: u32,
-}
-
-impl Launch {
-    fn launch(
-        axon: &Axon,
-        suite: Option<MeleeSuite>,
-        agents: (Handle, Handle),
-        clients: (Handle, Handle),
-        players: (PlayerSetup, PlayerSetup),
-        game: GameSettings,
-    ) -> Result<MeleeSoma> {
-        let is_pvp = {
-            if players.0.is_player() && players.1.is_computer() {
-                false
-            } else if players.0.is_computer() && players.1.is_player() {
-                false
-            } else if players.0.is_player() && players.1.is_player() {
-                true
-            } else {
-                bail!("invalid player setups")
-            }
+            await!(launch1.join(launch2))?
         };
 
-        let launcher = axon.req_output(Synapse::Launcher)?;
-        axon.effector()?.send(launcher, Signal::GetInstancePool);
-        axon.effector()?.send(launcher, Signal::GetPortsPool);
+        // connect to both at the same time
+        {
+            let connect1 = agents.0.clone().connect(instances.0.get_url()?);
+            let connect2 = agents.1.clone().connect(instances.1.get_url()?);
 
-        Ok(MeleeSoma::Launch(Launch {
-            suite: suite,
-            launcher: launcher,
-
-            agents: agents,
-            clients: clients,
-
-            game: game,
-            players: players,
-            instances: HashMap::new(),
-            ports: vec![],
-
-            is_pvp: is_pvp,
-            instances_requested: 0,
-        }))
-    }
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::InstancePool(instances)) => {
-                self.on_instance_pool(axon, src, instances)
-            },
-            Impulse::Signal(src, Signal::PortsPool(ports)) => {
-                self.on_ports_pool(axon, src, ports)
-            },
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
+            await!(connect1.join(connect2))?;
         }
+
+        await!(
+            agents
+                .0
+                .clone()
+                .create_game(game.clone(), vec![player1, player2])
+        )?;
+
+        let mut ports = await!(launcher.clone().get_game_ports())?;
+
+        ports.client_ports.push(instances.0.ports);
+        ports.client_ports.push(instances.1.ports);
+
+        {
+            let join1 =
+                agents.0.clone().join_game(player1, Some(ports.clone()));
+            let join2 = agents.1.clone().join_game(player2, Some(ports));
+
+            await!(join1.join(join2))?;
+        }
+
+        {
+            let run1 = agents.0.clone().run_game(update_scheme);
+            let run2 = agents.1.clone().run_game(update_scheme);
+
+            await!(run1.join(run2))?;
+        }
+
+        // just quit for now
+        await!(
+            main_tx
+                .send(Impulse::Stop)
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to stop"))
+        )?;
+    } else {
+        let (player, computer) = if player1.is_computer() {
+            ((agents.1, player2), (agents.0, player1))
+        } else if player2.is_computer() {
+            ((agents.0, player1), (agents.1, player2))
+        } else {
+            unreachable!()
+        };
+
+        assert!(player.1.is_player() && computer.1.is_computer());
+
+        let instance = await!(launcher.clone().launch())?;
+
+        await!(player.0.clone().connect(instance.get_url()?))?;
+        await!(
+            player
+                .0
+                .clone()
+                .create_game(game.clone(), vec![player.1, computer.1])
+        )?;
+        await!(player.0.clone().join_game(player.1, None))?;
+
+        await!(player.0.clone().run_game(update_scheme))?;
+
+        // just quit for now
+        await!(
+            main_tx
+                .send(Impulse::Stop)
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to stop"))
+        )?;
     }
 
-    fn on_instance_pool(
-        mut self,
-        axon: &Axon,
-        src: Handle,
-        instances: HashMap<Uuid, (Url, PortSet)>,
-    ) -> Result<MeleeSoma> {
-        assert_eq!(src, self.launcher);
+    Ok(())
+}
 
-        self.instances = instances;
+#[derive(Debug)]
+enum MeleeRequest {
+    PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
+    Connect(Url, oneshot::Sender<()>),
 
-        self.launch_instances(axon)?;
-        self.try_provide_instances(axon)
+    CreateGame(GameSetup, Vec<PlayerSetup>, oneshot::Sender<()>),
+    JoinGame(PlayerSetup, Option<GamePorts>, oneshot::Sender<()>),
+    RunGame(UpdateScheme, oneshot::Sender<()>),
+}
+
+/// wrapper around a sender to provide a melee interface
+#[derive(Debug, Clone)]
+pub struct MeleeTerminal {
+    tx: mpsc::Sender<MeleeRequest>,
+}
+
+/// interface to be enforced by melee dendrites
+pub trait MeleeContract: Sized {
+    /// errors from the dendrite
+    type Error: std::error::Error + Send + Into<Error>;
+
+    /// fetch the player setup from the agent
+    fn get_player_setup(
+        self,
+        game: GameSetup,
+    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
+
+    /// connect to an instance
+    fn connect(self, url: Url)
+        -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// create a game
+    fn create_game(
+        self,
+        game: GameSetup,
+        players: Vec<PlayerSetup>,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// join a game
+    fn join_game(
+        self,
+        setup: PlayerSetup,
+        ports: Option<GamePorts>,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    /// run the game
+    fn run_game(
+        self,
+        update_scheme: UpdateScheme,
+    ) -> Box<Future<Item = Self, Error = Self::Error>>;
+}
+
+/// wrapper around a receiver to provide a controlled interface
+#[derive(Debug)]
+pub struct MeleeDendrite {
+    rx: mpsc::Receiver<MeleeRequest>,
+}
+
+impl MeleeDendrite {
+    fn new(rx: mpsc::Receiver<MeleeRequest>) -> Self {
+        Self { rx: rx }
     }
 
-    fn on_ports_pool(
-        mut self,
-        axon: &Axon,
-        src: Handle,
-        ports: Vec<GamePorts>,
-    ) -> Result<MeleeSoma> {
-        assert_eq!(src, self.launcher);
+    /// wrap a dendrite and use the contract to respond to any requests
+    #[async]
+    pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
+    where
+        T: MeleeContract + 'static,
+    {
+        #[async]
+        for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                MeleeRequest::PlayerSetup(game, tx) => {
+                    let result = await!(dendrite.get_player_setup(game))
+                        .map_err(|e| e.into())?;
 
-        self.ports = ports;
+                    tx.send(result.1).unwrap();
 
-        self.launch_instances(axon)?;
-        self.try_provide_instances(axon)
-    }
+                    dendrite = result.0;
+                },
+                MeleeRequest::Connect(url, tx) => {
+                    dendrite =
+                        await!(dendrite.connect(url)).map_err(|e| e.into())?;
 
-    fn launch_instances(&mut self, axon: &Axon) -> Result<()> {
-        if self.is_pvp {
-            if self.instances.len() < 2 && self.instances_requested < 2 {
-                // launch as many instances as needed
-                while self.instances_requested < 2 {
-                    axon.send_req_output(
-                        Synapse::Launcher,
-                        Signal::LaunchInstance,
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::CreateGame(game, players, tx) => {
+                    dendrite = await!(
+                        dendrite
+                            .create_game(game, players)
+                            .map_err(|e| e.into())
                     )?;
 
-                    self.instances_requested += 1;
-                }
-            }
-        } else {
-            if self.instances.len() < 1 && self.instances_requested == 0 {
-                axon.send_req_output(
-                    Synapse::Launcher,
-                    Signal::LaunchInstance,
-                )?;
-                self.instances_requested = 1;
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::JoinGame(setup, ports, tx) => {
+                    dendrite = await!(
+                        dendrite.join_game(setup, ports).map_err(|e| e.into())
+                    )?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::RunGame(update_scheme, tx) => {
+                    dendrite = await!(
+                        dendrite.run_game(update_scheme).map_err(|e| e.into())
+                    )?;
+
+                    tx.send(()).unwrap();
+                },
             }
         }
 
         Ok(())
     }
-
-    fn try_provide_instances(self, axon: &Axon) -> Result<MeleeSoma> {
-        if self.is_pvp {
-            if self.instances.len() >= 2 && self.ports.len() >= 1 {
-                let (id1, &(ref url1, ref ports1)) =
-                    self.instances.iter().nth(0).unwrap();
-                let (id2, &(ref url2, ref ports2)) =
-                    self.instances.iter().nth(1).unwrap();
-                let mut ports = self.ports[0].clone();
-
-                ports.client_ports = vec![*ports1, *ports2];
-
-                axon.effector()?.send(
-                    self.clients.0,
-                    Signal::ProvideInstance(*id1, url1.clone()),
-                );
-                axon.effector()?.send(
-                    self.clients.1,
-                    Signal::ProvideInstance(*id2, url2.clone()),
-                );
-
-                PlayerVsPlayer::start(
-                    self.suite,
-                    self.agents,
-                    self.players,
-                    self.game,
-                    ports,
-                )
-            } else {
-                Ok(MeleeSoma::Launch(self))
-            }
-        } else if self.instances.len() >= 1 {
-            let (id, &(ref url, _)) = self.instances.iter().nth(0).unwrap();
-
-            let ((player, player_setup), (computer, computer_setup)) = {
-                if self.players.0.is_player() {
-                    (
-                        (self.agents.0, self.players.0),
-                        (self.agents.1, self.players.1),
-                    )
-                } else {
-                    assert!(self.players.1.is_player());
-
-                    (
-                        (self.agents.1, self.players.1),
-                        (self.agents.0, self.players.0),
-                    )
-                }
-            };
-
-            axon.effector()?
-                .send(player, Signal::ProvideInstance(*id, url.clone()));
-
-            PlayerVsComputer::start(
-                self.suite,
-                (player, player_setup),
-                (computer, computer_setup),
-                self.game,
-            )
-        } else {
-            Ok(MeleeSoma::Launch(self))
-        }
-    }
 }
 
-pub struct PlayerVsPlayer {
-    suite: Option<MeleeSuite>,
-
-    agents: (Handle, Handle),
-
-    game: GameSettings,
-    ports: GamePorts,
-    players: (PlayerSetup, PlayerSetup),
-
-    ready: (bool, bool),
-    ended: (bool, bool),
-}
-
-impl PlayerVsPlayer {
-    fn start(
-        suite: Option<MeleeSuite>,
-        agents: (Handle, Handle),
-        players: (PlayerSetup, PlayerSetup),
-        game: GameSettings,
-        ports: GamePorts,
-    ) -> Result<MeleeSoma> {
-        Ok(MeleeSoma::PlayerVsPlayer(PlayerVsPlayer {
-            suite: suite,
-
-            agents: agents,
-
-            game: game,
-            ports: ports,
-            players: players,
-
-            ready: (false, false),
-            ended: (false, false),
-        }))
+impl MeleeTerminal {
+    fn new(tx: mpsc::Sender<MeleeRequest>) -> Self {
+        Self { tx: tx }
     }
-    fn update(
+
+    /// get a player setup from the agent
+    #[async]
+    pub fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::PlayerSetup(game, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
+
+    /// tell agent to connect to instance
+    #[async]
+    pub fn connect(self, url: Url) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::Connect(url, tx))
+                .map_err(|_| Error::from("unable to request player setup"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+    }
+
+    /// tell agent to create a game
+    #[async]
+    pub fn create_game(
         self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::Ready) => {
-                self.on_agent_ready(axon, src)
-            },
-            Impulse::Signal(src, Signal::GameCreated) => {
-                self.on_game_created(axon, src)
-            },
-            Impulse::Signal(src, Signal::GameEnded) => {
-                self.on_game_ended(axon, src)
-            },
+        game: GameSetup,
+        players: Vec<PlayerSetup>,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
+        await!(
+            self.tx
+                .send(MeleeRequest::CreateGame(game, players, tx))
+                .map_err(|_| Error::from("unable to create game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to create game")))
     }
 
-    fn on_agent_ready(mut self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        if src == self.agents.0 {
-            self.ready.0 = true;
-        } else if src == self.agents.1 {
-            self.ready.1 = true;
-        } else {
-            bail!("expected source of Ready to be an agent")
-        }
-
-        if self.ready == (true, true) {
-            axon.effector()?.send(
-                self.agents.0,
-                Signal::CreateGame(
-                    self.game.clone(),
-                    vec![self.players.0, self.players.1],
-                ),
-            );
-        }
-
-        Ok(MeleeSoma::PlayerVsPlayer(self))
-    }
-
-    fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        assert_eq!(src, self.agents.0);
-
-        axon.effector()?.send(
-            self.agents.0,
-            Signal::GameReady(self.players.0, Some(self.ports.clone())),
-        );
-        axon.effector()?.send(
-            self.agents.1,
-            Signal::GameReady(self.players.1, Some(self.ports.clone())),
-        );
-
-        Ok(MeleeSoma::PlayerVsPlayer(self))
-    }
-
-    fn on_game_ended(mut self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        if src == self.agents.0 {
-            self.ended.0 = true;
-        } else if src == self.agents.1 {
-            self.ended.1 = true;
-        } else {
-            bail!("expected src of GameEnded to be an agent")
-        }
-
-        if self.ended == (true, true) {
-            if self.suite.is_none() {
-                Completed::complete(axon)
-            } else {
-                Setup::setup(axon, self.suite.unwrap())
-            }
-        } else {
-            Ok(MeleeSoma::PlayerVsPlayer(self))
-        }
-    }
-}
-
-/// MeleeSoma state that pits players against the built-in AI
-pub struct PlayerVsComputer {
-    suite: Option<MeleeSuite>,
-
-    game: GameSettings,
-    player_setup: PlayerSetup,
-    computer_setup: PlayerSetup,
-
-    player: Handle,
-}
-
-impl PlayerVsComputer {
-    fn start(
-        suite: Option<MeleeSuite>,
-        player: (Handle, PlayerSetup),
-        computer: (Handle, PlayerSetup),
-        game: GameSettings,
-    ) -> Result<MeleeSoma> {
-        Ok(MeleeSoma::PlayerVsComputer(PlayerVsComputer {
-            suite: suite,
-
-            game: game,
-            player_setup: player.1,
-            computer_setup: computer.1,
-
-            player: player.0,
-        }))
-    }
-    fn update(
+    /// tell agent to join a game
+    #[async]
+    pub fn join_game(
         self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Signal(src, Signal::Ready) => {
-                self.on_agent_ready(axon, src)
-            },
-            Impulse::Signal(src, Signal::GameCreated) => {
-                self.on_game_created(axon, src)
-            },
-            Impulse::Signal(src, Signal::GameEnded) => {
-                self.on_game_ended(axon, src)
-            },
+        setup: PlayerSetup,
+        ports: Option<GamePorts>,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
+        await!(
+            self.tx
+                .send(MeleeRequest::JoinGame(setup, ports, tx))
+                .map_err(|_| Error::from("unable to join game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to join game")))
     }
 
-    fn on_agent_ready(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        if src != self.player {
-            bail!("expected source of Ready to be the agent")
-        }
+    /// run the game to completion
+    #[async]
+    pub fn run_game(self, update_scheme: UpdateScheme) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
 
-        axon.effector()?.send(
-            self.player,
-            Signal::CreateGame(
-                self.game.clone(),
-                vec![self.player_setup, self.computer_setup],
-            ),
-        );
+        await!(
+            self.tx
+                .send(MeleeRequest::RunGame(update_scheme, tx))
+                .map_err(|_| Error::from("unable to run game"))
+        )?;
 
-        Ok(MeleeSoma::PlayerVsComputer(self))
-    }
-
-    fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        if src != self.player {
-            bail!("expected source of GameCreated to be the agent")
-        }
-
-        axon.effector()?
-            .send(self.player, Signal::GameReady(self.player_setup, None));
-
-        Ok(MeleeSoma::PlayerVsComputer(self))
-    }
-
-    fn on_game_ended(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-        if src != self.player {
-            bail!("expected source of GameEnded to be an agent")
-        }
-
-        if self.suite.is_none() {
-            Completed::complete(axon)
-        } else {
-            Setup::setup(axon, self.suite.unwrap())
-        }
+        await!(rx.map_err(|_| Error::from("unable to run game")))
     }
 }
 
-pub struct Completed;
+// /// MeleeSoma state that pits players against the built-in AI
+// pub struct PlayerVsComputer {
+//     suite: Option<MeleeSuite>,
 
-impl Completed {
-    fn complete(axon: &Axon) -> Result<MeleeSoma> {
-        axon.effector()?.stop();
+//     game: GameSettings,
+//     player_setup: PlayerSetup,
+//     computer_setup: PlayerSetup,
 
-        Ok(MeleeSoma::Completed(Completed {}))
-    }
+//     player: Handle,
+// }
 
-    fn update(
-        self,
-        _axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<MeleeSoma> {
-        match msg {
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-}
+// impl PlayerVsComputer {
+//     fn start(
+//         suite: Option<MeleeSuite>,
+//         player: (Handle, PlayerSetup),
+//         computer: (Handle, PlayerSetup),
+//         game: GameSettings,
+//     ) -> Result<MeleeSoma> {
+//         Ok(MeleeSoma::PlayerVsComputer(PlayerVsComputer {
+//             suite: suite,
+
+//             game: game,
+//             player_setup: player.1,
+//             computer_setup: computer.1,
+
+//             player: player.0,
+//         }))
+//     }
+//     fn update(
+//         self,
+//         axon: &Axon,
+//         msg: Impulse<Signal, Synapse>,
+//     ) -> Result<MeleeSoma> {
+//         match msg {
+//             Impulse::Signal(src, Signal::Ready) => {
+//                 self.on_agent_ready(axon, src)
+//             },
+//             Impulse::Signal(src, Signal::GameCreated) => {
+//                 self.on_game_created(axon, src)
+//             },
+//             Impulse::Signal(src, Signal::GameEnded) => {
+//                 self.on_game_ended(axon, src)
+//             },
+
+// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
+// msg),             _ => bail!("unexpected protocol message"),
+//         }
+//     }
+
+//     fn on_agent_ready(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
+//         if src != self.player {
+//             bail!("expected source of Ready to be the agent")
+//         }
+
+//         axon.effector()?.send(
+//             self.player,
+//             Signal::CreateGame(
+//                 self.game.clone(),
+//                 vec![self.player_setup, self.computer_setup],
+//             ),
+//         );
+
+//         Ok(MeleeSoma::PlayerVsComputer(self))
+//     }
+
+//     fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
+//         if src != self.player {
+//             bail!("expected source of GameCreated to be the agent")
+//         }
+
+//         axon.effector()?
+//             .send(self.player, Signal::GameReady(self.player_setup, None));
+
+//         Ok(MeleeSoma::PlayerVsComputer(self))
+//     }
+
+//     fn on_game_ended(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
+//         if src != self.player {
+//             bail!("expected source of GameEnded to be an agent")
+//         }
+
+//         if self.suite.is_none() {
+//             Completed::complete(axon)
+//         } else {
+//             Setup::setup(axon, self.suite.unwrap())
+//         }
+//     }
+// }
+
+// pub struct Completed;
+
+// impl Completed {
+//     fn complete(axon: &Axon) -> Result<MeleeSoma> {
+//         axon.effector()?.stop();
+
+//         Ok(MeleeSoma::Completed(Completed {}))
+//     }
+
+//     fn update(
+//         self,
+//         _axon: &Axon,
+//         msg: Impulse<Signal, Synapse>,
+//     ) -> Result<MeleeSoma> {
+//         match msg {
+// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
+// msg),             _ => bail!("unexpected protocol message"),
+//         }
+//     }
+// }

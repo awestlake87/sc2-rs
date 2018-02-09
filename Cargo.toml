@@ -1,6 +1,6 @@
 [package]
 name = "sc2"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 description = "organelle networks for StarCraft II Client API"
 license = "MIT"
@@ -8,24 +8,27 @@ documentation = "https://docs.rs/sc2-rs"
 homepage = "https://github.com/awestlake87/sc2-rs"
 repository = "https://github.com/awestlake87/sc2-rs"
 
+[features]
+with-organelle = []
+
 [dependencies]
 bytes = "0"
 ctrlc = "3"
-error-chain = "0"
-futures = "0"
-glob = "0"
-nalgebra = "0"
-organelle = "0"
-protobuf = "1"
-rand = "0"
-regex = "0"
-sc2-proto = "0"
-tokio-core = "0"
-tokio-timer = "0"
-tokio-tungstenite = "0"
-tungstenite = "0"
-url = "1"
-uuid = { version = "0", features = ["serde", "v4"] }
+error-chain = "0.11"
+futures-await = "0.1"
+glob = "0.2"
+nalgebra = "0.13"
+organelle = { version = "0.7", features = ["visualizer"] }
+protobuf = "1.4"
+rand = "0.4"
+regex = "0.2"
+sc2-proto = "0.1"
+tokio-core = "0.1"
+tokio-timer = "0.1"
+tokio-tungstenite = "0.5"
+tungstenite = "0.5"
+url = "1.6"
+uuid = { version = "0.5", features = ["serde", "v4"] }
 
 [[example]]
 name = "bot-micro"
@@ -36,6 +39,16 @@ path = "examples/bot-micro.rs"
 name = "bot-mp"
 crate-type = ["bin"]
 path = "examples/bot-mp.rs"
+
+[[example]]
+name = "bot-simple"
+crate-type = ["bin"]
+path = "examples/bot-simple.rs"
+
+[[example]]
+name = "debug"
+crate-type = ["bin"]
+path = "examples/debug.rs"
 
 [dev-dependencies]
 docopt = "0"

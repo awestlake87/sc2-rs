@@ -1,96 +1,155 @@
-use organelle;
-use organelle::{Dendrite, Impulse, Neuron, ResultExt, Sheath};
+use futures::prelude::*;
+use organelle::{Axon, Constraint, Impulse, Soma};
+use url::Url;
 
-use super::{Axon, Difficulty, PlayerSetup, Race, Result, Signal, Synapse};
+use super::{Error, Result};
+use data::{Difficulty, GameSetup, PlayerSetup, Race};
+use launcher::GamePorts;
+use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
+use synapses::{Dendrite, Synapse};
 
-/// soma that acts as the built-in SC2 AI
-pub enum ComputerSoma {
-    /// initialize the axon
-    Init(Init),
-    /// respond to the setup queries
-    Setup(Setup),
+/// build a built-in AI opponent
+pub struct ComputerBuilder {
+    race: Race,
+    difficulty: Difficulty,
+}
+
+impl ComputerBuilder {
+    /// create the builder
+    pub fn new() -> Self {
+        Self {
+            race: Race::Random,
+            difficulty: Difficulty::Medium,
+        }
+    }
+
+    /// set the race of the AI (default is Random)
+    pub fn race(self, race: Race) -> Self {
+        Self { race: race, ..self }
+    }
+
+    /// set the difficulty of the AI (default is Medium)
+    pub fn difficulty(self, difficulty: Difficulty) -> Self {
+        Self {
+            difficulty: difficulty,
+            ..self
+        }
+    }
+
+    /// build the built-in AI
+    pub fn create(self) -> Result<Computer> {
+        Ok(Computer {
+            0: ComputerSoma::axon(self.race, self.difficulty)?,
+        })
+    }
+}
+
+impl MeleeCompetitor for Computer {
+    type Soma = Axon<ComputerSoma>;
+
+    fn into_soma(self) -> Self::Soma {
+        self.0
+    }
+}
+
+/// a built-in AI opponent soma
+pub struct Computer(Axon<ComputerSoma>);
+
+pub struct ComputerSoma {
+    setup: PlayerSetup,
+    melee: Option<MeleeDendrite>,
 }
 
 impl ComputerSoma {
-    /// create a new computer soma
-    pub fn sheath(race: Race, difficulty: Difficulty) -> Result<Sheath<Self>> {
-        Ok(Sheath::new(
-            ComputerSoma::Init(Init {
-                setup: PlayerSetup::Computer {
-                    race: race,
-                    difficulty: difficulty,
-                },
-            }),
-            vec![
-                Dendrite::RequireOne(Synapse::Controller),
-                Dendrite::RequireOne(Synapse::InstanceProvider),
-            ],
+    fn axon(race: Race, difficulty: Difficulty) -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                setup: PlayerSetup::Computer(race, difficulty),
+                melee: None,
+            },
+            vec![Constraint::One(Synapse::Melee)],
             vec![],
-        )?)
+        ))
     }
 }
 
-impl Neuron for ComputerSoma {
-    type Signal = Signal;
+impl Soma for ComputerSoma {
     type Synapse = Synapse;
+    type Error = Error;
 
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> organelle::Result<Self> {
-        match self {
-            ComputerSoma::Init(state) => state.update(axon, msg),
-            ComputerSoma::Setup(state) => state.update(axon, msg),
-        }.chain_err(|| organelle::ErrorKind::SomaError)
-    }
-}
+    #[async(boxed)]
+    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(melee)) => {
+                Ok(Self {
+                    melee: Some(melee),
 
-pub struct Init {
-    setup: PlayerSetup,
-}
-
-impl Init {
-    fn update(
-        self,
-        _axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ComputerSoma> {
-        match msg {
-            Impulse::Start => Setup::setup(self.setup),
-
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
-        }
-    }
-}
-
-pub struct Setup {
-    setup: PlayerSetup,
-}
-
-impl Setup {
-    fn setup(setup: PlayerSetup) -> Result<ComputerSoma> {
-        Ok(ComputerSoma::Setup(Setup { setup: setup }))
-    }
-
-    fn update(
-        self,
-        axon: &Axon,
-        msg: Impulse<Signal, Synapse>,
-    ) -> Result<ComputerSoma> {
-        match msg {
-            Impulse::Signal(_, Signal::RequestPlayerSetup(_)) => {
-                axon.send_req_input(
-                    Synapse::Controller,
-                    Signal::PlayerSetup(self.setup),
-                )?;
-
-                Ok(ComputerSoma::Setup(self))
+                    ..self
+                })
             },
 
-            Impulse::Signal(_, msg) => bail!("unexpected message {:#?}", msg),
-            _ => bail!("unexpected protocol message"),
+            Impulse::Start(_, main_tx, handle) => {
+                handle.spawn(
+                    self.melee
+                        .unwrap()
+                        .wrap(ComputerDendrite::new(self.setup))
+                        .or_else(move |e| {
+                            main_tx
+                                .send(Impulse::Error(e.into()))
+                                .map(|_| ())
+                                .map_err(|_| ())
+                        }),
+                );
+
+                Ok(Self {
+                    melee: None,
+                    ..self
+                })
+            },
+            _ => bail!("unexpected impulse"),
         }
+    }
+}
+
+struct ComputerDendrite {
+    setup: PlayerSetup,
+}
+
+impl MeleeContract for ComputerDendrite {
+    type Error = Error;
+
+    #[async(boxed)]
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
+        let setup = self.setup;
+        Ok((self, setup))
+    }
+    /// connect to an instance
+    #[async(boxed)]
+    fn connect(self, _: Url) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// create a game
+    #[async(boxed)]
+    fn create_game(self, _: GameSetup, _: Vec<PlayerSetup>) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// join a game
+    #[async(boxed)]
+    fn join_game(self, _: PlayerSetup, _: Option<GamePorts>) -> Result<Self> {
+        Ok(self)
+    }
+
+    /// run the game
+    #[async(boxed)]
+    fn run_game(self, _: UpdateScheme) -> Result<Self> {
+        Ok(self)
+    }
+}
+
+impl ComputerDendrite {
+    fn new(setup: PlayerSetup) -> Self {
+        Self { setup: setup }
     }
 }

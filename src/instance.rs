@@ -3,9 +3,11 @@ use std::process;
 
 use url::Url;
 
-use super::{ErrorKind, PortSet, Rect, Result};
+use super::{ErrorKind, Result};
+use data::Rect;
+use launcher::PortSet;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum InstanceKind {
     Native,
     Wine,
@@ -21,6 +23,7 @@ pub struct InstanceSettings {
     pub ports: PortSet,
 }
 
+#[derive(Debug)]
 pub struct Instance {
     kind: InstanceKind,
     exe: PathBuf,
