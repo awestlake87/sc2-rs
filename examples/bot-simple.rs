@@ -38,7 +38,7 @@ use sc2::data::{
     Action,
     ActionTarget,
     Alliance,
-    GameSettings,
+    GameSetup,
     Map,
     MapInfo,
     PlayerSetup,
@@ -93,13 +93,13 @@ pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
     Ok(builder.create()?)
 }
 
-pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
+pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSettings { map: map })
+    Ok(GameSetup::new(map))
 }
 
 struct SimpleBot {
@@ -112,7 +112,7 @@ impl Player for SimpleBot {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
@@ -143,7 +143,7 @@ impl SimpleBot {
         let observation = await!(self.control.observer().observe())?;
         let map_info = await!(self.control.observer().get_map_info())?;
 
-        let step = observation.current_step;
+        let step = observation.get_current_step();
 
         if step % 100 == 0 {
             let units =
@@ -166,7 +166,7 @@ impl SimpleBot {
 }
 
 fn find_random_location(map_info: &MapInfo) -> Point2 {
-    let area = map_info.playable_area;
+    let area = map_info.get_playable_area();
     let (w, h) = area.get_dimensions();
 
     Point2::new(
@@ -196,7 +196,7 @@ quick_main!(|| -> sc2::Result<()> {
             .handle(handle.clone())
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .repeat_forever(get_game_settings(&args)?)
+        .repeat_forever(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)

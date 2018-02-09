@@ -28,6 +28,7 @@ use sc2::{
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
+    Observation,
     Player,
     Result,
     UpdateScheme,
@@ -37,10 +38,9 @@ use sc2::data::{
     Action,
     ActionTarget,
     Alliance,
-    GameSettings,
+    GameSetup,
     Map,
     MapInfo,
-    Observation,
     PlayerSetup,
     Point2,
     Race,
@@ -99,13 +99,13 @@ pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
     Ok(builder.create()?)
 }
 
-pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
+pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSettings { map: map })
+    Ok(GameSetup::new(map))
 }
 
 struct TerranBot {
@@ -116,7 +116,7 @@ impl Player for TerranBot {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
@@ -165,11 +165,11 @@ impl TerranBot {
     }
 
     fn find_enemy_pos(&self, map_info: &MapInfo) -> Option<Point2> {
-        if map_info.enemy_start_locations.is_empty() {
+        if map_info.get_enemy_start_locations().is_empty() {
             None
         } else {
             //TODO: should be random I think
-            Some(map_info.enemy_start_locations[0])
+            Some(map_info.get_enemy_start_locations()[0])
         }
     }
 
@@ -224,7 +224,7 @@ impl TerranBot {
         observation: Rc<Observation>,
     ) -> Result<Self> {
         // if we are not supply capped, don't build a supply depot
-        if observation.food_used + 2 <= observation.food_cap {
+        if observation.get_food_used() + 2 <= observation.get_food_cap() {
             return Ok(self);
         }
 
@@ -360,7 +360,7 @@ quick_main!(|| -> sc2::Result<()> {
             .handle(handle.clone())
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .repeat_forever(get_game_settings(&args)?)
+        .repeat_forever(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)

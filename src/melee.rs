@@ -9,7 +9,7 @@ use url::Url;
 
 use super::{Error, Result};
 use ctrlc_breaker::CtrlcBreakerSoma;
-use data::{GameSettings, PlayerSetup};
+use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSoma, LauncherTerminal};
 use synapses::{Dendrite, Synapse, Terminal};
 
@@ -69,7 +69,7 @@ where
     }
 
     /// play one game with the given settings
-    pub fn one_and_done(self, game: GameSettings) -> Self {
+    pub fn one_and_done(self, game: GameSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::OneAndDone(game)),
             ..self
@@ -77,7 +77,7 @@ where
     }
 
     /// keep restarting game with the given settings
-    pub fn repeat_forever(self, game: GameSettings) -> Self {
+    pub fn repeat_forever(self, game: GameSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::EndlessRepeat(game)),
             ..self
@@ -191,9 +191,9 @@ impl IntoFuture for Melee {
 
 /// suite of games to choose from when pitting bots against each other
 enum MeleeSuite {
-    OneAndDone(GameSettings),
+    OneAndDone(GameSetup),
     /// repeat this game indefinitely
-    EndlessRepeat(GameSettings),
+    EndlessRepeat(GameSetup),
 }
 
 /// create a melee synapse
@@ -411,10 +411,10 @@ fn run_melee(
 
 #[derive(Debug)]
 enum MeleeRequest {
-    PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
+    PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
     Connect(Url, oneshot::Sender<()>),
 
-    CreateGame(GameSettings, Vec<PlayerSetup>, oneshot::Sender<()>),
+    CreateGame(GameSetup, Vec<PlayerSetup>, oneshot::Sender<()>),
     JoinGame(PlayerSetup, Option<GamePorts>, oneshot::Sender<()>),
     RunGame(UpdateScheme, oneshot::Sender<()>),
 }
@@ -433,7 +433,7 @@ pub trait MeleeContract: Sized {
     /// fetch the player setup from the agent
     fn get_player_setup(
         self,
-        game: GameSettings,
+        game: GameSetup,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
 
     /// connect to an instance
@@ -443,7 +443,7 @@ pub trait MeleeContract: Sized {
     /// create a game
     fn create_game(
         self,
-        game: GameSettings,
+        game: GameSetup,
         players: Vec<PlayerSetup>,
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
 
@@ -532,7 +532,7 @@ impl MeleeTerminal {
 
     /// get a player setup from the agent
     #[async]
-    pub fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+    pub fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
 
         await!(
@@ -562,7 +562,7 @@ impl MeleeTerminal {
     #[async]
     pub fn create_game(
         self,
-        game: GameSettings,
+        game: GameSetup,
         players: Vec<PlayerSetup>,
     ) -> Result<()> {
         let (tx, rx) = oneshot::channel();

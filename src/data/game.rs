@@ -55,7 +55,18 @@ pub enum Map {
 
 /// settings for a game
 #[derive(Debug, Clone)]
-pub struct GameSettings {
-    /// which map to play on
-    pub map: Map,
+pub struct GameSetup {
+    map: Map,
+}
+
+impl GameSetup {
+    /// create a game setup for the given map
+    pub fn new(map: Map) -> Self {
+        Self { map: map }
+    }
+
+    /// get the map
+    pub fn get_map(&self) -> &Map {
+        &self.map
+    }
 }

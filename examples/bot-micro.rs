@@ -29,6 +29,7 @@ use sc2::{
     Launcher,
     LauncherBuilder,
     MeleeBuilder,
+    Observation,
     Player,
     Result,
     UpdateScheme,
@@ -39,9 +40,8 @@ use sc2::data::{
     ActionTarget,
     Alliance,
     Difficulty,
-    GameSettings,
+    GameSetup,
     Map,
-    Observation,
     PlayerSetup,
     Point2,
     Race,
@@ -97,13 +97,13 @@ pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
     Ok(builder.create()?)
 }
 
-pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
+pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSettings { map: map })
+    Ok(GameSetup::new(map))
 }
 
 struct MarineMicroBot {
@@ -119,7 +119,7 @@ impl Player for MarineMicroBot {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
@@ -287,7 +287,7 @@ quick_main!(|| -> sc2::Result<()> {
             .difficulty(Difficulty::VeryEasy)
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .one_and_done(get_game_settings(&args)?)
+        .one_and_done(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)

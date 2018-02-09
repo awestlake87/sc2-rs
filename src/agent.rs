@@ -12,7 +12,7 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
 use client::{ClientSoma, ClientTerminal};
-use data::{GameSettings, Map, PlayerSetup, Unit, Upgrade};
+use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
@@ -360,10 +360,7 @@ impl MeleeContract for AgentMeleeDendrite {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(
-        self,
-        game: GameSettings,
-    ) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, game: GameSetup) -> Result<(Self, PlayerSetup)> {
         let setup = await!(self.agent.clone().get_player_setup(game))?;
 
         Ok((self, setup))
@@ -378,13 +375,13 @@ impl MeleeContract for AgentMeleeDendrite {
     #[async(boxed)]
     fn create_game(
         self,
-        settings: GameSettings,
+        settings: GameSetup,
         players: Vec<PlayerSetup>,
     ) -> Result<Self> {
         let mut req = sc2api::Request::new();
 
-        match settings.map {
-            Map::LocalMap(ref path) => {
+        match settings.get_map() {
+            &Map::LocalMap(ref path) => {
                 req.mut_create_game().mut_local_map().set_map_path(
                     match path.clone().into_os_string().into_string() {
                         Ok(s) => s,
@@ -392,7 +389,7 @@ impl MeleeContract for AgentMeleeDendrite {
                     },
                 );
             },
-            Map::BlizzardMap(ref map) => {
+            &Map::BlizzardMap(ref map) => {
                 req.mut_create_game().set_battlenet_map_name(map.clone());
             },
         };
@@ -523,7 +520,7 @@ impl MeleeContract for AgentMeleeDendrite {
 
 #[derive(Debug)]
 enum AgentRequest {
-    PlayerSetup(GameSettings, oneshot::Sender<PlayerSetup>),
+    PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
     Event(GameEvent, oneshot::Sender<()>),
 }
 
@@ -534,7 +531,7 @@ pub struct AgentTerminal {
 
 impl AgentTerminal {
     #[async]
-    fn get_player_setup(self, game: GameSettings) -> Result<PlayerSetup> {
+    fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
 
         await!(
@@ -572,7 +569,7 @@ pub trait Player: Sized {
     /// Use the game settings to decide on a player setup
     fn get_player_setup(
         self,
-        game: GameSettings,
+        game: GameSetup,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
 
     /// Called whenever the agent needs to handle a game event

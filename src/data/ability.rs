@@ -1,7 +1,6 @@
 use sc2_proto::data;
 
 use super::super::{FromProto, IntoProto, Result};
-use data::{Tag, UnitType};
 
 /// list of known StarCraft II abilities
 #[allow(missing_docs)]
@@ -991,20 +990,20 @@ impl IntoProto<u32> for Ability {
     }
 }
 
-/// data for an ability that is currently available
-#[derive(Debug, Copy, Clone)]
-pub struct AvailableAbility {
-    ability: Ability,
-    /* /// indicates whether the ability requires a point to invoke
-     * requires_point: bool, */
-}
+// /// data for an ability that is currently available
+// #[derive(Debug, Copy, Clone)]
+// pub struct AvailableAbility {
+//     ability: Ability,
+//     /* /// indicates whether the ability requires a point to invoke
+//      * requires_point: bool, */
+// }
 
-impl AvailableAbility {
-    /// the ability that is available
-    pub fn get_id(&self) -> Ability {
-        self.ability
-    }
-}
+// impl AvailableAbility {
+//     /// the ability that is available
+//     pub fn get_id(&self) -> Ability {
+//         self.ability
+//     }
+// }
 
 /// target type of the ability
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

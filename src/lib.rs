@@ -44,6 +44,7 @@ pub use self::agent::{Agent, AgentBuilder, AgentControl, GameEvent, Player};
 pub use self::computer::{Computer, ComputerBuilder};
 pub use self::launcher::{Launcher, LauncherBuilder};
 pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
+pub use self::observer::Observation;
 
 #[cfg(feature = "with-organelle")]
 pub use self::action::{

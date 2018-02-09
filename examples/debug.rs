@@ -36,7 +36,7 @@ use sc2::data::{
     DebugText,
     DebugTextTarget,
     Difficulty,
-    GameSettings,
+    GameSetup,
     Map,
     PlayerSetup,
     Point2,
@@ -91,13 +91,13 @@ pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
     Ok(builder.create()?)
 }
 
-pub fn get_game_settings(args: &Args) -> Result<GameSettings> {
+pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSettings { map: map })
+    Ok(GameSetup::new(map))
 }
 
 struct DebugBot {
@@ -108,7 +108,7 @@ impl Player for DebugBot {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player { race: Race::Terran }))
     }
 
@@ -143,7 +143,7 @@ impl DebugBot {
         )?;
 
         let mut commands: Vec<DebugCommand> = observation
-            .units
+            .get_units()
             .iter()
             .map(|u| {
                 DebugText::new(unit_type_data[&u.unit_type].name.clone())
@@ -183,7 +183,7 @@ quick_main!(|| -> sc2::Result<()> {
             .difficulty(Difficulty::VeryEasy)
             .create()?,
     ).launcher_settings(get_launcher_settings(&args)?)
-        .one_and_done(get_game_settings(&args)?)
+        .one_and_done(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle.clone())

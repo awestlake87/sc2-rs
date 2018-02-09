@@ -3,11 +3,11 @@ use std::mem;
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
-use sc2_proto::{debug, sc2api};
+use sc2_proto::sc2api;
 
 use super::{Error, IntoProto, Result};
 use client::ClientTerminal;
-use data::{Action, DebugCommand, DebugTextTarget};
+use data::{Action, DebugCommand};
 use synapses::{Dendrite, Synapse, Terminal};
 
 pub struct ActionSoma {

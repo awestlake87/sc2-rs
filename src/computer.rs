@@ -3,7 +3,7 @@ use organelle::{Axon, Constraint, Impulse, Soma};
 use url::Url;
 
 use super::{Error, Result};
-use data::{Difficulty, GameSettings, PlayerSetup, Race};
+use data::{Difficulty, GameSetup, PlayerSetup, Race};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use synapses::{Dendrite, Synapse};
@@ -122,7 +122,7 @@ impl MeleeContract for ComputerDendrite {
     type Error = Error;
 
     #[async(boxed)]
-    fn get_player_setup(self, _: GameSettings) -> Result<(Self, PlayerSetup)> {
+    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         let setup = self.setup;
         Ok((self, setup))
     }
@@ -134,7 +134,7 @@ impl MeleeContract for ComputerDendrite {
 
     /// create a game
     #[async(boxed)]
-    fn create_game(self, _: GameSettings, _: Vec<PlayerSetup>) -> Result<Self> {
+    fn create_game(self, _: GameSetup, _: Vec<PlayerSetup>) -> Result<Self> {
         Ok(self)
     }
 

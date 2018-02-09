@@ -9,7 +9,7 @@ mod player;
 mod score;
 mod unit;
 mod upgrade;
-mod observation;
+mod map_info;
 
 use na;
 use na::geometry;
@@ -30,9 +30,9 @@ pub use self::action::{
     DebugTextTarget,
 };
 pub use self::buff::{Buff, BuffData};
-pub use self::game::{GameResult, GameSettings, Map, PlayerResult};
+pub use self::game::{GameResult, GameSetup, Map, PlayerResult};
 pub use self::image::ImageData;
-pub use self::observation::{MapInfo, Observation};
+pub use self::map_info::MapInfo;
 pub use self::player::{Difficulty, PlayerSetup, Race};
 pub use self::score::Score;
 pub use self::unit::{Alliance, DisplayType, Tag, Unit, UnitType, UnitTypeData};
@@ -105,33 +105,33 @@ pub enum Visibility {
 #[derive(Debug, Clone)]
 pub struct EffectData {
     /// stable effect ID
-    pub effect: Ability,
+    effect: Ability,
     /// effect name (corresponds to game's catalog)
-    pub name: String,
+    name: String,
     /// a more recognizable name of the effect
-    pub friendly_name: String,
+    friendly_name: String,
     /// size of the circle the effect impacts
-    pub radius: f32,
+    radius: f32,
 }
 
 /// visuals of a persistent ability on the map (eg. PsiStorm)
 #[derive(Debug, Clone)]
 pub struct Effect {
     /// stable effect ID
-    pub effect: Ability,
+    effect: Ability,
     /// all the positions that this effect is impacting on the map
-    pub positions: Vec<Point2>,
+    positions: Vec<Point2>,
 }
 
 /// power source information for Protoss
 #[derive(Debug, Copy, Clone)]
 pub struct PowerSource {
     /// unit tag of the power source
-    pub tag: Tag,
+    tag: Tag,
     /// position of the power source
-    pub pos: Point2,
+    pos: Point2,
     /// radius of the power source
-    pub radius: f32,
+    radius: f32,
 }
 
 impl From<raw::PowerSource> for PowerSource {
@@ -151,18 +151,18 @@ impl From<raw::PowerSource> for PowerSource {
 #[derive(Debug, Copy, Clone)]
 pub struct ReplayPlayerInfo {
     /// id of the player
-    pub player_id: u32,
+    player_id: u32,
     /// player ranking
-    pub mmr: i32,
+    mmr: i32,
     /// player actions per minute
-    pub apm: i32,
+    apm: i32,
 
     /// actual player race
-    pub race: Race,
+    race: Race,
     /// selected player race (if Random or None, race will be different)
-    pub race_selected: Option<Race>,
+    race_selected: Option<Race>,
     /// if the player won or lost
-    pub game_result: Option<GameResult>,
+    game_result: Option<GameResult>,
 }
 
 impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
@@ -204,26 +204,26 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
 #[derive(Debug, Clone)]
 pub struct ReplayInfo {
     /// name of the map
-    pub map_name: String,
+    map_name: String,
     /// path to the map
-    pub map_path: String,
+    map_path: String,
     /// version of the game
-    pub game_version: String,
+    game_version: String,
     /// data version of the game
-    pub data_version: String,
+    data_version: String,
 
     /// duration in seconds
-    pub duration: f32,
+    duration: f32,
     /// duration in game steps
-    pub duration_steps: u32,
+    duration_steps: u32,
 
     /// data build of the game
-    pub data_build: u32,
+    data_build: u32,
     /// required base build of the game
-    pub base_build: u32,
+    base_build: u32,
 
     /// information about specific players
-    pub players: Vec<ReplayPlayerInfo>,
+    players: Vec<ReplayPlayerInfo>,
 }
 
 impl FromProto<sc2api::ResponseReplayInfo> for ReplayInfo {
