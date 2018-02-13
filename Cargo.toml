@@ -1,6 +1,6 @@
 [package]
 name = "sc2"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 description = "organelle networks for StarCraft II Client API"
 license = "MIT"
@@ -51,6 +51,6 @@ crate-type = ["bin"]
 path = "examples/debug.rs"
 
 [dev-dependencies]
-docopt = "0"
-serde = "1"
-serde_derive = "1"
+docopt = "0.8"
+serde = "1.0"
+serde_derive = "1.0"
