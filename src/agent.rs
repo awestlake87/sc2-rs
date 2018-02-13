@@ -482,6 +482,7 @@ impl MeleeContract for AgentMeleeDendrite {
     #[async(boxed)]
     fn run_game(self, update_scheme: UpdateScheme) -> Result<Self> {
         await!(self.observer.clone().reset())?;
+        await!(self.observer.clone().step())?;
 
         await!(self.agent.clone().handle_event(GameEvent::GameStarted))?;
 

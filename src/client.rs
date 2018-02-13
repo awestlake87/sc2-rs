@@ -283,7 +283,7 @@ fn run_client(
 
         match req {
             Some(ClientRequest::Request(req, tx)) => {
-                let buf = Vec::new();
+                let buf = vec![];
                 let mut writer = buf.writer();
 
                 {
