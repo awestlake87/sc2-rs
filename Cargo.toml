@@ -2,7 +2,7 @@
 name = "sc2"
 version = "0.3.1"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
-description = "organelle networks for StarCraft II Client API"
+description = "Rust implementation of the StarCraft II Client API"
 license = "MIT"
 documentation = "https://docs.rs/sc2-rs"
 homepage = "https://github.com/awestlake87/sc2-rs"
