@@ -8,9 +8,6 @@ documentation = "https://docs.rs/sc2-rs"
 homepage = "https://github.com/awestlake87/sc2-rs"
 repository = "https://github.com/awestlake87/sc2-rs"
 
-[features]
-with-organelle = []
-
 [dependencies]
 bytes = "0"
 ctrlc = "3"

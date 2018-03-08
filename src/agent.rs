@@ -10,12 +10,12 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
-use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
-use client::{ClientSoma, ClientTerminal};
+use action::{ActionClient, ActionControlClient, ActionBuilder};
+use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
-use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
+use observer::{ObserverClient, ObserverBuilder, ObserverControlClient};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// an event from the game
@@ -53,19 +53,19 @@ pub enum GameEvent {
 
 /// controls given to an agent
 pub struct AgentControl {
-    observer: ObserverTerminal,
-    action: ActionTerminal,
+    observer: ObserverClient,
+    action: ActionClient,
 }
 
 impl AgentControl {
     /// observe the game data and current state
-    pub fn observer(&self) -> ObserverTerminal {
-        self.observer.clone()
+    pub fn observer(&self) -> &ObserverClient {
+        &self.observer
     }
 
     /// dispatch commands and debug commands to the game instance
-    pub fn action(&self) -> ActionTerminal {
-        self.action.clone()
+    pub fn action(&self) -> &ActionClient {
+        &self.action
     }
 }
 
@@ -75,8 +75,8 @@ where
     F: FnOnce(AgentControl) -> T,
 {
     agent: Option<AgentDendrite>,
-    observer: Option<ObserverTerminal>,
-    action: Option<ActionTerminal>,
+    observer: Option<ObserverClient>,
+    action: Option<ActionClient>,
 
     factory: Option<F>,
 }
@@ -95,20 +95,6 @@ where
             Impulse::AddDendrite(_, Synapse::Agent, Dendrite::Agent(rx)) => {
                 Ok(Self {
                     agent: Some(rx),
-                    ..self
-                })
-            },
-            Impulse::AddTerminal(
-                _,
-                Synapse::Observer,
-                Terminal::Observer(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
-            Impulse::AddTerminal(_, Synapse::Action, Terminal::Action(tx)) => {
-                Ok(Self {
-                    action: Some(tx),
                     ..self
                 })
             },
@@ -196,42 +182,23 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         }
 
         let handle = self.handle.unwrap();
+        let client = ProtoClientBuilder::new();
+        let observer = ObserverBuilder::new().client(client.fork());
+        let action = ActionBuilder::new().client(client.fork());
 
-        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
+        let mut organelle =
+            Organelle::new(AgentSoma::axon(client.fork(), observer.fork_control(), action.fork_control())?, handle.clone());
 
         let agent = organelle.nucleus();
         let player = organelle.add_soma(self.soma);
 
-        let client = organelle.add_soma(ClientSoma::axon()?);
-        let observer = organelle.add_soma(ObserverSoma::axon()?);
-        let action = organelle.add_soma(ActionSoma::axon()?);
-
-        organelle.connect(agent, client, Synapse::Client)?;
-        organelle.connect(observer, client, Synapse::Client)?;
-        organelle.connect(action, client, Synapse::Client)?;
-
-        organelle.connect(agent, observer, Synapse::ObserverControl)?;
-        organelle.connect(agent, action, Synapse::ActionControl)?;
-
         organelle.connect(agent, player, Synapse::Agent)?;
-        organelle.connect(player, observer, Synapse::Observer)?;
-        organelle.connect(player, action, Synapse::Action)?;
+
+        client.spawn(&handle)?;
+        observer.spawn(&handle)?;
+        action.spawn(&handle)?;
 
         Ok(Agent { 0: organelle })
-    }
-}
-
-impl<T, F> AgentBuilder<AgentWrapper<T, F>>
-where
-    T: Player + 'static,
-    F: FnOnce(AgentControl) -> T,
-{
-    /// wrap a factory to be called with the agent controls when ready
-    pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
-        AgentBuilder::<AgentWrapper<T, F>> {
-            soma: AgentWrapper::new(factory),
-            handle: None,
-        }
     }
 }
 
@@ -251,27 +218,24 @@ impl MeleeCompetitor for Agent {
 /// manages a player soma
 pub struct AgentSoma {
     controller: Option<MeleeDendrite>,
-    client: Option<ClientTerminal>,
-    observer: Option<ObserverControlTerminal>,
-    agent: Option<AgentTerminal>,
-    action: Option<ActionControlTerminal>,
+    client: Option<ProtoClient>,
+    observer: Option<ObserverControlClient>,
+    agent: Option<AgentClient>,
+    action: Option<ActionControlClient>,
 }
 
 impl AgentSoma {
-    fn axon() -> Result<Axon<Self>> {
+    fn axon(client: ProtoClient, observer: ObserverControlClient, action: ActionControlClient) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 controller: None,
-                client: None,
-                observer: None,
+                client: Some(client),
+                observer: Some(observer),
                 agent: None,
-                action: None,
+                action: Some(action),
             },
             vec![Constraint::One(Synapse::Melee)],
             vec![
-                Constraint::One(Synapse::Client),
-                Constraint::One(Synapse::ObserverControl),
-                Constraint::One(Synapse::ActionControl),
                 Constraint::One(Synapse::Agent),
             ],
         ))
@@ -291,28 +255,6 @@ impl Soma for AgentSoma {
                     ..self
                 })
             },
-            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                Ok(Self {
-                    client: Some(tx),
-                    ..self
-                })
-            },
-            Impulse::AddTerminal(
-                _,
-                Synapse::ObserverControl,
-                Terminal::ObserverControl(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                Synapse::ActionControl,
-                Terminal::ActionControl(tx),
-            ) => Ok(Self {
-                action: Some(tx),
-                ..self
-            }),
             Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
                 self.agent = Some(tx);
 
@@ -350,10 +292,10 @@ impl Soma for AgentSoma {
 }
 
 pub struct AgentMeleeDendrite {
-    client: ClientTerminal,
-    observer: ObserverControlTerminal,
-    action: ActionControlTerminal,
-    agent: AgentTerminal,
+    client: ProtoClient,
+    observer: ObserverControlClient,
+    action: ActionControlClient,
+    agent: AgentClient,
 }
 
 impl MeleeContract for AgentMeleeDendrite {
@@ -528,11 +470,11 @@ enum AgentRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct AgentTerminal {
+pub struct AgentClient {
     tx: mpsc::Sender<AgentRequest>,
 }
 
-impl AgentTerminal {
+impl AgentClient {
     #[async]
     fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
@@ -624,10 +566,10 @@ impl AgentDendrite {
     }
 }
 
-pub fn synapse() -> (AgentTerminal, AgentDendrite) {
+pub fn synapse() -> (AgentClient, AgentDendrite) {
     let (tx, rx) = mpsc::channel(10);
 
-    (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
+    (AgentClient { tx: tx }, AgentDendrite { rx: rx })
 }
 
 // pub struct LeaveGame {
@@ -640,7 +582,7 @@ pub fn synapse() -> (AgentTerminal, AgentDendrite) {
 
 //         req.mut_leave_game();
 
-//         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
+//         let transactor = Transactor::send(axon, ProtoRequest::new(req))?;
 
 //         Ok(AgentSoma::LeaveGame(LeaveGame {
 //             transactor: transactor,
