@@ -4,73 +4,119 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
-use tokio_core::reactor;
 
 use super::{Error, IntoProto, Result};
-use client::ProtoClient;
+use client::ClientTerminal;
 use data::{Action, DebugCommand};
 use synapses::{Dendrite, Synapse, Terminal};
 
-pub struct ActionBuilder {
-    control_tx: mpsc::Sender<ActionControlRequest>,
-    control_rx: mpsc::Receiver<ActionControlRequest>,
-
-    action_tx: mpsc::Sender<ActionRequest>,
-    action_rx: mpsc::Receiver<ActionRequest>,
-
-    client: Option<ProtoClient>,
+pub struct ActionSoma {
+    control: Option<ActionControlDendrite>,
+    client: Option<ClientTerminal>,
+    users: Vec<ActionDendrite>,
 }
 
-impl ActionBuilder {
-    pub fn new() -> Self {
-        let (control_tx, control_rx) = mpsc::channel(1);
-        let (action_tx, action_rx) = mpsc::channel(10);
+impl ActionSoma {
+    pub fn axon() -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                control: None,
+                client: None,
+                users: vec![],
+            },
+            vec![
+                Constraint::Variadic(Synapse::Action),
+                Constraint::One(Synapse::ActionControl),
+            ],
+            vec![Constraint::One(Synapse::Client)],
+        ))
+    }
+}
 
-        Self {
-            control_tx: control_tx,
-            control_rx: control_rx,
+pub fn synapse() -> (ActionTerminal, ActionDendrite) {
+    let (tx, rx) = mpsc::channel(10);
 
-            action_tx: action_tx,
-            action_rx: action_rx,
+    (ActionTerminal { tx: tx }, ActionDendrite { rx: rx })
+}
 
-            client: None
+pub fn control_synapse() -> (ActionControlTerminal, ActionControlDendrite) {
+    let (tx, rx) = mpsc::channel(1);
+
+    (
+        ActionControlTerminal { tx: tx },
+        ActionControlDendrite { rx: rx },
+    )
+}
+
+impl Soma for ActionSoma {
+    type Synapse = Synapse;
+    type Error = Error;
+
+    #[async(boxed)]
+    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
+                Ok(Self {
+                    client: Some(tx),
+                    ..self
+                })
+            },
+            Impulse::AddDendrite(_, Synapse::Action, Dendrite::Action(rx)) => {
+                self.users.push(rx);
+
+                Ok(self)
+            },
+            Impulse::AddDendrite(
+                _,
+                Synapse::ActionControl,
+                Dendrite::ActionControl(rx),
+            ) => Ok(Self {
+                control: Some(rx),
+                ..self
+            }),
+
+            Impulse::Start(_, main_tx, handle) => {
+                let (tx, rx) = mpsc::channel(10);
+
+                // merge all queues
+                for user in self.users {
+                    handle.spawn(
+                        tx.clone()
+                            .send_all(user.rx.map_err(|_| unreachable!()))
+                            .map(|_| ())
+                            .map_err(|_| ()),
+                    );
+                }
+
+                let task = ActionTask::new(
+                    self.client.unwrap(),
+                    self.control.unwrap(),
+                    rx,
+                );
+
+                handle.spawn(task.run().or_else(move |e| {
+                    main_tx
+                        .send(Impulse::Error(e.into()))
+                        .map(|_| ())
+                        .map_err(|_| ())
+                }));
+
+                Ok(Self {
+                    client: None,
+                    control: None,
+                    users: vec![],
+                })
+            },
+
+            _ => bail!("unexpected impulse"),
         }
-    }
-
-    pub fn client(self, client: ProtoClient) -> Self {
-        Self {
-            client: Some(client),
-            ..self
-        }
-    }
-
-    pub fn fork_control(&self) -> ActionControlClient {
-        ActionControlClient { tx: self.control_tx.clone() }
-    }
-
-    pub fn fork(&self) -> ActionClient {
-        ActionClient { tx: self.action_tx.clone() }
-    }
-
-    pub fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        let task = ActionTask::new(
-            self.client.unwrap(),
-            self.control_rx,
-            self.action_rx,
-        );
-
-        handle.spawn(task.run()
-                .map_err(|_| ())
-        );
-
-        Ok(())
     }
 }
 
 struct ActionTask {
-    client: ProtoClient,
-    control_rx: Option<mpsc::Receiver<ActionControlRequest>>,
-    action_rx: Option<mpsc::Receiver<ActionRequest>>,
+    client: ClientTerminal,
+    control: Option<ActionControlDendrite>,
+    queue: Option<mpsc::Receiver<ActionRequest>>,
 
     action_batch: Vec<Action>,
     debug_batch: Vec<DebugCommand>,
@@ -78,14 +124,14 @@ struct ActionTask {
 
 impl ActionTask {
     fn new(
-        client: ProtoClient,
-        control_rx: mpsc::Receiver<ActionControlRequest>,
-        action_rx: mpsc::Receiver<ActionRequest>,
+        client: ClientTerminal,
+        control: ActionControlDendrite,
+        rx: mpsc::Receiver<ActionRequest>,
     ) -> Self {
         Self {
             client: client,
-            control_rx: Some(control_rx),
-            action_rx: Some(action_rx),
+            control: Some(control),
+            queue: Some(rx),
 
             action_batch: vec![],
             debug_batch: vec![],
@@ -94,10 +140,11 @@ impl ActionTask {
 
     #[async]
     fn run(mut self) -> Result<()> {
-        let requests = mem::replace(&mut self.action_rx, None).unwrap();
+        let requests = mem::replace(&mut self.queue, None).unwrap();
 
-        let queue = mem::replace(&mut self.control_rx, None)
+        let queue = mem::replace(&mut self.control, None)
             .unwrap()
+            .rx
             .map(|req| Either::Control(req))
             .select(requests.map(|req| Either::Request(req)));
 
@@ -180,11 +227,11 @@ enum Either {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActionControlClient {
+pub struct ActionControlTerminal {
     tx: mpsc::Sender<ActionControlRequest>,
 }
 
-impl ActionControlClient {
+impl ActionControlTerminal {
     /// step the action soma and send all commands to the game instance
     #[async]
     pub fn step(self) -> Result<()> {
@@ -199,48 +246,53 @@ impl ActionControlClient {
         await!(rx.map_err(|_| Error::from("unable to send debug ack")))
     }
 }
+
+#[derive(Debug)]
+pub struct ActionControlDendrite {
+    rx: mpsc::Receiver<ActionControlRequest>,
+}
+
 /// action interface for a game instance
 #[derive(Debug, Clone)]
-pub struct ActionClient {
+pub struct ActionTerminal {
     tx: mpsc::Sender<ActionRequest>,
 }
 
-impl ActionClient {
+impl ActionTerminal {
     /// send a command to the game instance
-    pub fn send_action(
-        &self,
-        action: Action,
-    ) -> impl Future<Item = (), Error = Error> {
+    #[async]
+    pub fn send_action(self, action: Action) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ActionRequest::SendAction(action, tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send command"))
-            )?;
-            await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
-        }
+        await!(
+            self.tx
+                .send(ActionRequest::SendAction(action, tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send command"))
+        )?;
+        await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
     }
 
     /// send a debug command to the game instance
-    pub fn send_debug<T>(&self, cmd: T) -> impl Future<Item = (), Error = Error>
+    #[async]
+    pub fn send_debug<T>(self, cmd: T) -> Result<()>
     where
         T: Into<DebugCommand> + 'static,
     {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ActionRequest::SendDebug(cmd.into(), tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send debug command"))
-            )?;
-            await!(rx.map_err(|_| Error::from("unable to send debug ack")))
-        }
+        await!(
+            self.tx
+                .send(ActionRequest::SendDebug(cmd.into(), tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send debug command"))
+        )?;
+        await!(rx.map_err(|_| Error::from("unable to send debug ack")))
     }
+}
+
+/// internal action receiver for action soma
+#[derive(Debug)]
+pub struct ActionDendrite {
+    rx: mpsc::Receiver<ActionRequest>,
 }

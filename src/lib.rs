@@ -46,9 +46,22 @@ pub use self::launcher::{Launcher, LauncherBuilder};
 pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
 pub use self::observer::Observation;
 
-pub use self::action::ActionClient;
-pub use self::agent::AgentClient;
-pub use self::observer::ObserverClient;
+#[cfg(feature = "with-organelle")]
+pub use self::action::{
+    synapse as action_synapse,
+    ActionDendrite,
+    ActionTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::agent::{synapse as agent_synapse, AgentDendrite, AgentTerminal};
+#[cfg(feature = "with-organelle")]
+pub use self::observer::{
+    synapse as observer_synapse,
+    ObserverDendrite,
+    ObserverTerminal,
+};
+#[cfg(feature = "with-organelle")]
+pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
 
 use std::path::PathBuf;
 

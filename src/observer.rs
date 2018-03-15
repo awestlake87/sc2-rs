@@ -6,11 +6,10 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
-use tokio_core::reactor;
 
 use super::{Error, FromProto, IntoSc2, Result};
 use agent::GameEvent;
-use client::ProtoClient;
+use client::ClientTerminal;
 use data::{
     Ability,
     AbilityData,
@@ -33,6 +32,7 @@ use data::{
     UpgradeData,
     Visibility,
 };
+use synapses::{Dendrite, Synapse, Terminal};
 
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
@@ -198,67 +198,104 @@ impl Observation {
     }
 }
 
-pub struct ObserverBuilder {
-    client: Option<ProtoClient>,
-
-    control_tx: mpsc::Sender<ObserverControlRequest>,
-    control_rx: mpsc::Receiver<ObserverControlRequest>,
-
-    observer_tx: mpsc::Sender<ObserverRequest>,
-    observer_rx: mpsc::Receiver<ObserverRequest>,
+pub struct ObserverSoma {
+    client: Option<ClientTerminal>,
+    controller: Option<ObserverControlDendrite>,
+    users: Vec<ObserverDendrite>,
 }
 
-impl ObserverBuilder {
-    pub fn new() -> Self {
-        let (control_tx, control_rx) = mpsc::channel(1);
-        let (observer_tx, observer_rx) = mpsc::channel(10);
+impl ObserverSoma {
+    pub fn axon() -> Result<Axon<Self>> {
+        Ok(Axon::new(
+            Self {
+                client: None,
+                controller: None,
+                users: vec![],
+            },
+            vec![
+                Constraint::One(Synapse::ObserverControl),
+                Constraint::Variadic(Synapse::Observer),
+            ],
+            vec![Constraint::One(Synapse::Client)],
+        ))
+    }
+}
 
-        Self {
-            client: None,
+impl Soma for ObserverSoma {
+    type Synapse = Synapse;
+    type Error = Error;
 
-            control_tx: control_tx,
-            control_rx: control_rx,
+    #[async(boxed)]
+    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+        match imp {
+            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
+                self.client = Some(tx);
 
-            observer_tx: observer_tx,
-            observer_rx: observer_rx,
+                Ok(self)
+            },
+            Impulse::AddDendrite(
+                _,
+                Synapse::ObserverControl,
+                Dendrite::ObserverControl(rx),
+            ) => {
+                self.controller = Some(rx);
+
+                Ok(self)
+            },
+            Impulse::AddDendrite(
+                _,
+                Synapse::Observer,
+                Dendrite::Observer(rx),
+            ) => {
+                self.users.push(rx);
+
+                Ok(self)
+            },
+
+            Impulse::Start(_, main_tx, handle) => {
+                assert!(self.controller.is_some());
+                assert!(self.client.is_some());
+
+                let (tx, rx) = mpsc::channel(10);
+
+                // merge all queues
+                for user in self.users {
+                    handle.spawn(
+                        tx.clone()
+                            .send_all(user.rx.map_err(|_| unreachable!()))
+                            .map(|_| ())
+                            .map_err(|_| ()),
+                    );
+                }
+
+                let task = ObserverTask::new(
+                    self.controller.unwrap(),
+                    self.client.unwrap(),
+                    rx,
+                );
+
+                handle.spawn(task.run().or_else(move |e| {
+                    main_tx
+                        .send(Impulse::Error(e.into()))
+                        .map(|_| ())
+                        .map_err(|_| ())
+                }));
+
+                Ok(Self {
+                    controller: None,
+                    client: None,
+                    users: vec![],
+                })
+            },
+
+            _ => bail!("unexpected impulse"),
         }
-    }
-
-    pub fn client(self, client: ProtoClient) -> Self {
-        Self {
-            client: Some(client),
-            ..self
-        }
-    }
-
-    pub fn fork_control(&self) -> ObserverControlClient {
-        ObserverControlClient {
-            tx: self.control_tx.clone(),
-        }
-    }
-
-    pub fn fork(&self) -> ObserverClient {
-        ObserverClient { tx: self.observer_tx.clone() }
-    }
-
-    pub fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        assert!(self.client.is_some());
-
-        let task = ObserverTask::new(
-            self.control_rx,
-            self.observer_rx,
-            self.client.unwrap(),
-        );
-
-        handle.spawn(task.run().map_err(|_| ()));
-
-        Ok(())
     }
 }
 
 struct ObserverTask {
-    control_rx: Option<mpsc::Receiver<ObserverControlRequest>>,
-    client: ProtoClient,
+    controller: Option<ObserverControlDendrite>,
+    client: ClientTerminal,
     request_rx: Option<mpsc::Receiver<ObserverRequest>>,
 
     previous_step: u32,
@@ -275,12 +312,12 @@ struct ObserverTask {
 
 impl ObserverTask {
     fn new(
-        control_rx: mpsc::Receiver<ObserverControlRequest>,
+        controller: ObserverControlDendrite,
+        client: ClientTerminal,
         request_rx: mpsc::Receiver<ObserverRequest>,
-        client: ProtoClient,
     ) -> Self {
         Self {
-            control_rx: Some(control_rx),
+            controller: Some(controller),
             client: client,
             request_rx: Some(request_rx),
 
@@ -299,8 +336,9 @@ impl ObserverTask {
 
     #[async]
     fn run(mut self) -> Result<()> {
-        let queue = mem::replace(&mut self.control_rx, None)
+        let queue = mem::replace(&mut self.controller, None)
             .unwrap()
+            .rx
             .map(|req| Either::Control(req))
             .select(
                 mem::replace(&mut self.request_rx, None)
@@ -723,10 +761,10 @@ enum Either {
 }
 
 #[derive(Debug, Clone)]
-pub struct ObserverControlClient {
+pub struct ObserverControlTerminal {
     tx: mpsc::Sender<ObserverControlRequest>,
 }
-impl ObserverControlClient {
+impl ObserverControlTerminal {
     #[async]
     pub fn reset(self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -757,131 +795,132 @@ impl ObserverControlClient {
     }
 }
 
+#[derive(Debug)]
+pub struct ObserverControlDendrite {
+    rx: mpsc::Receiver<ObserverControlRequest>,
+}
+
 /// an interface for the observer soma
 #[derive(Debug, Clone)]
-pub struct ObserverClient {
+pub struct ObserverTerminal {
     tx: mpsc::Sender<ObserverRequest>,
 }
 
-impl ObserverClient {
+impl ObserverTerminal {
     /// observe the current game state
-    pub fn observe(
-        &self,
-    ) -> impl Future<Item = Rc<Observation>, Error = Error> {
+    #[async]
+    pub fn observe(self) -> Result<Rc<Observation>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::Observe(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send observation"))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::Observe(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send observation"))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv observation")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv observation")))
     }
 
     /// get information about the current map
-    pub fn get_map_info(
-        &self,
-    ) -> impl Future<Item = Rc<MapInfo>, Error = Error> {
+    #[async]
+    pub fn get_map_info(self) -> Result<Rc<MapInfo>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::GetMapInfo(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send map info request"))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::GetMapInfo(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send map info request"))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv map info")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv map info")))
     }
 
     /// get data about each unit type
-    pub fn get_unit_data(
-        &self,
-    ) -> impl Future<Item = Rc<HashMap<UnitType, UnitTypeData>>, Error = Error>
-    {
+    #[async]
+    pub fn get_unit_data(self) -> Result<Rc<HashMap<UnitType, UnitTypeData>>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::GetUnitData(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send unit data request"))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUnitData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send unit data request"))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv unit data")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv unit data")))
     }
 
     /// get data about each ability
-    pub fn get_ability_data(
-        &self,
-    ) -> impl Future<Item = Rc<HashMap<Ability, AbilityData>>, Error = Error>
-    {
+    #[async]
+    pub fn get_ability_data(self) -> Result<Rc<HashMap<Ability, AbilityData>>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::GetAbilityData(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from(
-                        "unable to send ability data request"
-                    ))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::GetAbilityData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send ability data request"
+                ))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv ability data")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv ability data")))
     }
 
     /// get data about each upgrade
-    pub fn get_upgrade_data(
-        &self,
-    ) -> impl Future<Item = Rc<HashMap<Upgrade, UpgradeData>>, Error = Error>
-    {
+    #[async]
+    pub fn get_upgrade_data(self) -> Result<Rc<HashMap<Upgrade, UpgradeData>>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::GetUpgradeData(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from(
-                        "unable to send upgrade data request"
-                    ))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::GetUpgradeData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from(
+                    "unable to send upgrade data request"
+                ))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
     }
 
     /// get data about each buff
-    pub fn get_buff_data(
-        &self,
-    ) -> impl Future<Item = Rc<HashMap<Buff, BuffData>>, Error = Error> {
+    #[async]
+    pub fn get_buff_data(self) -> Result<Rc<HashMap<Buff, BuffData>>> {
         let (tx, rx) = oneshot::channel();
-        let sender = self.tx.clone();
 
-        async_block! {
-            await!(
-                sender
-                    .send(ObserverRequest::GetBuffData(tx))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send buff data request"))
-            )?;
+        await!(
+            self.tx
+                .send(ObserverRequest::GetBuffData(tx))
+                .map(|_| ())
+                .map_err(|_| Error::from("unable to send buff data request"))
+        )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv buff data")))
-        }
+        await!(rx.map_err(|_| Error::from("unable to recv buff data")))
     }
+}
+
+#[derive(Debug)]
+pub struct ObserverDendrite {
+    rx: mpsc::Receiver<ObserverRequest>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct ObserverControlSynapse;
+
+pub fn synapse() -> (ObserverTerminal, ObserverDendrite) {
+    let (tx, rx) = mpsc::channel(10);
+
+    (ObserverTerminal { tx: tx }, ObserverDendrite { rx: rx })
+}
+
+pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
+    let (tx, rx) = mpsc::channel(1);
+
+    (
+        ObserverControlTerminal { tx: tx },
+        ObserverControlDendrite { rx: rx },
+    )
 }
