@@ -77,7 +77,7 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
+pub fn create_launcher(args: &Args) -> Result<Launcher> {
     let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
@@ -183,7 +183,7 @@ quick_main!(|| -> sc2::Result<()> {
             .race(Race::Zerg)
             .difficulty(Difficulty::VeryEasy)
             .create()?,
-    ).launcher_settings(get_launcher_settings(&args)?)
+    ).launcher(create_launcher(&args)?)
         .one_and_done(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)

@@ -30,71 +30,6 @@ pub struct GamePorts {
     pub client_ports: Vec<PortSet>,
 }
 
-/// sender for launcher
-#[derive(Debug, Clone)]
-pub struct LauncherTerminal {
-    tx: unsync::mpsc::Sender<LauncherRequest>,
-}
-
-impl LauncherTerminal {
-    fn new(tx: unsync::mpsc::Sender<LauncherRequest>) -> Self {
-        Self { tx: tx }
-    }
-
-    /// launch an instance
-    #[async]
-    pub fn launch(self) -> Result<Instance> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(LauncherRequest::Launch(tx))
-                .map_err(|_| Error::from("unable to send launch request"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive instance")))
-    }
-
-    /// get a set of game ports
-    #[async]
-    pub fn get_game_ports(self) -> Result<GamePorts> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(LauncherRequest::Ports(tx))
-                .map_err(|_| Error::from("unable to send ports request"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive ports")))
-    }
-}
-
-#[derive(Debug)]
-enum LauncherRequest {
-    Launch(unsync::oneshot::Sender<Instance>),
-    Ports(unsync::oneshot::Sender<GamePorts>),
-}
-
-/// receiver for launcher
-#[derive(Debug)]
-pub struct LauncherDendrite {
-    rx: unsync::mpsc::Receiver<LauncherRequest>,
-}
-
-impl LauncherDendrite {
-    fn new(rx: unsync::mpsc::Receiver<LauncherRequest>) -> Self {
-        Self { rx: rx }
-    }
-}
-
-/// create a launcher synapse
-pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
-    let (tx, rx) = unsync::mpsc::channel(1);
-
-    (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
-}
-
 /// launches game instances upon request
 pub struct Launcher {
     exe: PathBuf,
@@ -168,7 +103,7 @@ impl LauncherBuilder {
 }
 
 impl Launcher {
-    fn launch(&mut self) -> Result<Instance> {
+    pub fn launch(&mut self) -> Result<Instance> {
         let mut instance = Instance::from_settings(InstanceSettings {
             kind: {
                 if self.use_wine {
@@ -199,25 +134,6 @@ impl Launcher {
         Ok(instance)
     }
 
-    #[async]
-    fn listen(mut self, dendrite: LauncherDendrite) -> Result<()> {
-        #[async]
-        for req in dendrite.rx.map_err(|_| Error::from("streams can't fail")) {
-            match req {
-                LauncherRequest::Launch(tx) => {
-                    tx.send(self.launch()?)
-                        .map_err(|_| Error::from("unable to send instance"))?;
-                },
-                LauncherRequest::Ports(tx) => {
-                    tx.send(self.create_game_ports())
-                        .map_err(|_| Error::from("unable to send game ports"))?;
-                },
-            }
-        }
-
-        Ok(())
-    }
-
     /// create a set of ports for multiplayer games
     pub fn create_game_ports(&mut self) -> GamePorts {
         let ports = GamePorts {
@@ -232,65 +148,6 @@ impl Launcher {
         self.current_port += 3;
 
         ports
-    }
-}
-
-/// soma in charge of launching game instances and assigning ports
-pub struct LauncherSoma {
-    launcher: Option<Launcher>,
-    dendrite: Option<LauncherDendrite>,
-}
-
-impl LauncherSoma {
-    /// create a launcher from settings
-    pub fn axon(launcher: Launcher) -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                launcher: Some(launcher),
-                dendrite: None,
-            },
-            vec![Constraint::One(Synapse::Launcher)],
-            vec![],
-        ))
-    }
-}
-
-impl Soma for LauncherSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
-        match msg {
-            Impulse::AddDendrite(
-                _,
-                Synapse::Launcher,
-                Dendrite::Launcher(dendrite),
-            ) => {
-                self.dendrite = Some(dendrite);
-
-                Ok(self)
-            },
-            Impulse::Start(_, tx, handle) => {
-                assert!(self.launcher.is_some());
-                assert!(self.dendrite.is_some());
-
-                handle.spawn(
-                    mem::replace(&mut self.launcher, None)
-                        .unwrap()
-                        .listen(mem::replace(&mut self.dendrite, None).unwrap())
-                        .or_else(move |e| {
-                            tx.send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(self)
-            },
-
-            _ => bail!("unexpected impulse"),
-        }
     }
 }
 

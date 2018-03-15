@@ -9,7 +9,6 @@ use action::{
 };
 use agent::{self, AgentDendrite, AgentTerminal};
 use client::{self, ClientDendrite, ClientTerminal};
-use launcher::{self, LauncherDendrite, LauncherTerminal};
 use melee::{self, MeleeDendrite, MeleeTerminal};
 use observer::{
     self,
@@ -24,8 +23,6 @@ use observer::{
 pub enum Synapse {
     /// probe
     Probe,
-    /// launch game instances
-    Launcher,
     /// coordinate versus games between agents
     Melee,
     /// client to the game instance
@@ -46,8 +43,6 @@ pub enum Synapse {
 #[derive(Debug)]
 pub enum Terminal {
     Probe(probe::Terminal),
-    /// launcher sender
-    Launcher(LauncherTerminal),
     /// melee sender
     Melee(MeleeTerminal),
     /// client sender
@@ -68,8 +63,6 @@ pub enum Terminal {
 #[derive(Debug)]
 pub enum Dendrite {
     Probe(probe::Dendrite),
-    /// launcher receiver
-    Launcher(LauncherDendrite),
     /// melee receiver
     Melee(MeleeDendrite),
     /// client receiver
@@ -96,11 +89,6 @@ impl organelle::Synapse for Synapse {
                 let (tx, rx) = probe::synapse();
 
                 (Terminal::Probe(tx), Dendrite::Probe(rx))
-            },
-            Synapse::Launcher => {
-                let (tx, rx) = launcher::synapse();
-
-                (Terminal::Launcher(tx), Dendrite::Launcher(rx))
             },
             Synapse::Melee => {
                 let (tx, rx) = melee::synapse();

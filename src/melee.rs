@@ -10,7 +10,7 @@ use url::Url;
 use super::{Error, Result};
 use ctrlc_breaker::CtrlcBreakerSoma;
 use data::{GameSetup, PlayerSetup};
-use launcher::{GamePorts, Launcher, LauncherSoma, LauncherTerminal};
+use launcher::{GamePorts, Launcher};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// update scheme for the agents to use
@@ -61,9 +61,9 @@ where
     }
 
     /// the settings for the launcher soma
-    pub fn launcher_settings(self, settings: Launcher) -> Self {
+    pub fn launcher(self, launcher: Launcher) -> Self {
         Self {
-            launcher: Some(settings),
+            launcher: Some(launcher),
             ..self
         }
     }
@@ -133,7 +133,7 @@ where
             + Into<Dendrite>,
     {
         if self.launcher.is_none() {
-            bail!("missing launcher settings")
+            bail!("missing launcher")
         } else if self.suite.is_none() {
             bail!("missing melee suite")
         } else if self.handle.is_none() {
@@ -143,12 +143,9 @@ where
         let handle = self.handle.unwrap();
 
         let mut organelle = Organelle::new(
-            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme)?,
+            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme, self.launcher.unwrap())?,
             handle.clone(),
         );
-
-        let launcher =
-            organelle.add_soma(LauncherSoma::axon(self.launcher.unwrap())?);
 
         let melee = organelle.nucleus();
 
@@ -158,8 +155,6 @@ where
         if self.break_on_ctrlc {
             organelle.add_soma(CtrlcBreakerSoma::axon());
         }
-
-        organelle.connect(melee, launcher, Synapse::Launcher)?;
 
         organelle.connect(melee, player1, Synapse::Melee)?;
         organelle.connect(melee, player2, Synapse::Melee)?;
@@ -206,9 +201,9 @@ pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
 /// controller that pits agents against each other
 pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
-    launcher: Option<LauncherTerminal>,
     agents: Vec<Option<MeleeTerminal>>,
     update_scheme: UpdateScheme,
+    launcher: Option<Launcher>,
 }
 
 impl MeleeSoma {
@@ -216,17 +211,17 @@ impl MeleeSoma {
     fn axon(
         suite: MeleeSuite,
         update_scheme: UpdateScheme,
+        launcher: Launcher,
     ) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 suite: Some(suite),
-                launcher: None,
                 agents: vec![],
                 update_scheme: update_scheme,
+                launcher: Some(launcher),
             },
             vec![],
             vec![
-                Constraint::One(Synapse::Launcher),
                 Constraint::Variadic(Synapse::Melee),
             ],
         ))
@@ -240,14 +235,6 @@ impl Soma for MeleeSoma {
     #[async(boxed)]
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
         match msg {
-            Impulse::AddTerminal(
-                _,
-                Synapse::Launcher,
-                Terminal::Launcher(tx),
-            ) => {
-                self.launcher = Some(tx);
-                Ok(self)
-            },
             Impulse::AddTerminal(_, Synapse::Melee, Terminal::Melee(tx)) => {
                 self.agents.push(Some(tx));
                 Ok(self)
@@ -294,7 +281,7 @@ impl Soma for MeleeSoma {
 fn run_melee(
     suite: MeleeSuite,
     update_scheme: UpdateScheme,
-    launcher: LauncherTerminal,
+    mut launcher: Launcher,
     agents: (MeleeTerminal, MeleeTerminal),
     main_tx: mpsc::Sender<Impulse<Synapse>>,
 ) -> Result<()> {
@@ -325,10 +312,10 @@ fn run_melee(
     if is_pvp {
         // launch both at the same time
         let instances = {
-            let launch1 = launcher.clone().launch();
-            let launch2 = launcher.clone().launch();
+            let instance1 = launcher.launch()?;
+            let instance2 = launcher.launch()?;
 
-            await!(launch1.join(launch2))?
+            (instance1, instance2)
         };
 
         // connect to both at the same time
@@ -346,7 +333,7 @@ fn run_melee(
                 .create_game(game.clone(), vec![player1, player2])
         )?;
 
-        let mut ports = await!(launcher.clone().get_game_ports())?;
+        let mut ports = launcher.create_game_ports();
 
         ports.client_ports.push(instances.0.ports);
         ports.client_ports.push(instances.1.ports);
@@ -384,7 +371,7 @@ fn run_melee(
 
         assert!(player.1.is_player() && computer.1.is_computer());
 
-        let instance = await!(launcher.clone().launch())?;
+        let instance = launcher.launch()?;
 
         await!(player.0.clone().connect(instance.get_url()?))?;
         await!(
