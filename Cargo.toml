@@ -28,7 +28,7 @@ tokio-timer = "0.1"
 tokio-tungstenite = "0.5"
 tungstenite = "0.5"
 url = "1.6"
-uuid = { version = "0.5", features = ["serde", "v4"] }
+uuid = { version = "0.6", features = ["serde", "v4"] }
 
 [[example]]
 name = "bot-micro"
