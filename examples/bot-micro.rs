@@ -26,8 +26,7 @@ use sc2::{
     AgentControl,
     Error,
     GameEvent,
-    Launcher,
-    LauncherBuilder,
+    LauncherSettings,
     MeleeBuilder,
     Observation,
     Player,
@@ -83,18 +82,18 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn create_launcher(args: &Args) -> Result<Launcher> {
-    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
+pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+    let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
-        builder = builder.install_dir(dir);
+        settings = settings.install_dir(dir);
     }
 
     if let Some(port) = args.flag_port {
-        builder = builder.base_port(port);
+        settings = settings.base_port(port);
     }
 
-    Ok(builder.create()?)
+    Ok(settings)
 }
 
 pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
@@ -287,7 +286,7 @@ quick_main!(|| -> sc2::Result<()> {
             .race(Race::Zerg)
             .difficulty(Difficulty::VeryEasy)
             .create()?,
-    ).launcher(create_launcher(&args)?)
+    ).launcher_settings(create_launcher_settings(&args)?)
         .one_and_done(get_game_setup(&args)?)
         .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
         .break_on_ctrlc(args.flag_wine)

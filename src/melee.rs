@@ -10,7 +10,7 @@ use url::Url;
 use super::{Error, Result};
 use ctrlc_breaker::CtrlcBreakerSoma;
 use data::{GameSetup, PlayerSetup};
-use launcher::{GamePorts, Launcher};
+use launcher::{GamePorts, LauncherSettings, Launcher};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// update scheme for the agents to use
@@ -35,7 +35,7 @@ pub struct MeleeBuilder<
     P2: MeleeCompetitor + 'static,
 > {
     players: (P1, P2),
-    launcher: Option<Launcher>,
+    launcher_settings: Option<LauncherSettings>,
     suite: Option<MeleeSuite>,
     update_scheme: UpdateScheme,
     break_on_ctrlc: bool,
@@ -52,7 +52,7 @@ where
         Self {
             players: (player1, player2),
 
-            launcher: None,
+            launcher_settings: None,
             suite: None,
             update_scheme: UpdateScheme::Realtime,
             break_on_ctrlc: false,
@@ -61,9 +61,9 @@ where
     }
 
     /// the settings for the launcher soma
-    pub fn launcher(self, launcher: Launcher) -> Self {
+    pub fn launcher_settings(self, settings: LauncherSettings) -> Self {
         Self {
-            launcher: Some(launcher),
+            launcher_settings: Some(settings),
             ..self
         }
     }
@@ -132,8 +132,8 @@ where
         <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
             + Into<Dendrite>,
     {
-        if self.launcher.is_none() {
-            bail!("missing launcher")
+        if self.launcher_settings.is_none() {
+            bail!("missing launcher settings")
         } else if self.suite.is_none() {
             bail!("missing melee suite")
         } else if self.handle.is_none() {
@@ -143,7 +143,7 @@ where
         let handle = self.handle.unwrap();
 
         let mut organelle = Organelle::new(
-            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme, self.launcher.unwrap())?,
+            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme, Launcher::create(self.launcher_settings.unwrap())?)?,
             handle.clone(),
         );
 

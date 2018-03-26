@@ -11,7 +11,6 @@ use regex::Regex;
 use super::{Error, ErrorKind, Result};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
-use synapses::{Dendrite, Synapse};
 
 /// endpoint port settings
 #[allow(missing_docs)]
@@ -39,13 +38,13 @@ pub struct Launcher {
 }
 
 /// builder used to create launcher
-pub struct LauncherBuilder {
+pub struct LauncherSettings {
     dir: Option<PathBuf>,
     use_wine: bool,
     base_port: u16,
 }
 
-impl LauncherBuilder {
+impl LauncherSettings {
     /// create a new builder
     pub fn new() -> Self {
         Self {
@@ -80,29 +79,29 @@ impl LauncherBuilder {
             ..self
         }
     }
-
-    /// build the settings object
-    pub fn create(self) -> Result<Launcher> {
-        let dir = {
-            if let Some(dir) = self.dir {
-                dir
-            } else {
-                auto_detect_starcraft(self.use_wine)?
-            }
-        };
-        let (exe, arch) = select_exe(&dir, self.use_wine)?;
-        let pwd = select_pwd(&dir, arch);
-
-        Ok(Launcher {
-            exe: exe,
-            pwd: pwd,
-            current_port: self.base_port,
-            use_wine: self.use_wine,
-        })
-    }
 }
 
 impl Launcher {
+    /// build the settings object
+    pub fn create(settings: LauncherSettings) -> Result<Self> {
+        let dir = {
+            if let Some(dir) = settings.dir {
+                dir
+            } else {
+                auto_detect_starcraft(settings.use_wine)?
+            }
+        };
+        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
+        let pwd = select_pwd(&dir, arch);
+
+        Ok(Self {
+            exe: exe,
+            pwd: pwd,
+            current_port: settings.base_port,
+            use_wine: settings.use_wine,
+        })
+    }
+
     pub fn launch(&mut self) -> Result<Instance> {
         let mut instance = Instance::from_settings(InstanceSettings {
             kind: {
