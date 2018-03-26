@@ -11,7 +11,7 @@ use url::Url;
 
 use super::{Error, IntoProto, Result};
 use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
-use client::{ClientSoma, ClientTerminal};
+use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
@@ -186,10 +186,10 @@ impl<T: Soma + 'static> AgentBuilder<T> {
     pub fn create(self) -> Result<Agent>
     where
         T::Synapse: From<Synapse> + Into<Synapse>,
-        <T::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <T::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
+        <T::Synapse as organelle::Synapse>::Terminal:
+            From<Terminal> + Into<Terminal>,
+        <T::Synapse as organelle::Synapse>::Dendrite:
+            From<Dendrite> + Into<Dendrite>,
     {
         if self.handle.is_none() {
             bail!("missing tokio core handle")
@@ -197,18 +197,19 @@ impl<T: Soma + 'static> AgentBuilder<T> {
 
         let handle = self.handle.unwrap();
 
-        let mut organelle = Organelle::new(AgentSoma::axon()?, handle);
+        let proto = ProtoClientBuilder::new();
+
+        let mut organelle = Organelle::new(
+            AgentSoma::axon(proto.add_client())?,
+            handle.clone(),
+        );
 
         let agent = organelle.nucleus();
         let player = organelle.add_soma(self.soma);
 
-        let client = organelle.add_soma(ClientSoma::axon()?);
-        let observer = organelle.add_soma(ObserverSoma::axon()?);
-        let action = organelle.add_soma(ActionSoma::axon()?);
-
-        organelle.connect(agent, client, Synapse::Client)?;
-        organelle.connect(observer, client, Synapse::Client)?;
-        organelle.connect(action, client, Synapse::Client)?;
+        let observer =
+            organelle.add_soma(ObserverSoma::axon(proto.add_client())?);
+        let action = organelle.add_soma(ActionSoma::axon(proto.add_client())?);
 
         organelle.connect(agent, observer, Synapse::ObserverControl)?;
         organelle.connect(agent, action, Synapse::ActionControl)?;
@@ -216,6 +217,8 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         organelle.connect(agent, player, Synapse::Agent)?;
         organelle.connect(player, observer, Synapse::Observer)?;
         organelle.connect(player, action, Synapse::Action)?;
+
+        proto.spawn(&handle)?;
 
         Ok(Agent { 0: organelle })
     }
@@ -251,25 +254,24 @@ impl MeleeCompetitor for Agent {
 /// manages a player soma
 pub struct AgentSoma {
     controller: Option<MeleeDendrite>,
-    client: Option<ClientTerminal>,
+    client: Option<ProtoClient>,
     observer: Option<ObserverControlTerminal>,
     agent: Option<AgentTerminal>,
     action: Option<ActionControlTerminal>,
 }
 
 impl AgentSoma {
-    fn axon() -> Result<Axon<Self>> {
+    fn axon(client: ProtoClient) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 controller: None,
-                client: None,
+                client: Some(client),
                 observer: None,
                 agent: None,
                 action: None,
             },
             vec![Constraint::One(Synapse::Melee)],
             vec![
-                Constraint::One(Synapse::Client),
                 Constraint::One(Synapse::ObserverControl),
                 Constraint::One(Synapse::ActionControl),
                 Constraint::One(Synapse::Agent),
@@ -288,12 +290,6 @@ impl Soma for AgentSoma {
             Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(rx)) => {
                 Ok(Self {
                     controller: Some(rx),
-                    ..self
-                })
-            },
-            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                Ok(Self {
-                    client: Some(tx),
                     ..self
                 })
             },
@@ -350,7 +346,7 @@ impl Soma for AgentSoma {
 }
 
 pub struct AgentMeleeDendrite {
-    client: ClientTerminal,
+    client: ProtoClient,
     observer: ObserverControlTerminal,
     action: ActionControlTerminal,
     agent: AgentTerminal,
@@ -382,15 +378,19 @@ impl MeleeContract for AgentMeleeDendrite {
 
         match settings.get_map() {
             &Map::LocalMap(ref path) => {
-                req.mut_create_game().mut_local_map().set_map_path(
-                    match path.clone().into_os_string().into_string() {
+                req.mut_create_game()
+                    .mut_local_map()
+                    .set_map_path(match path.clone()
+                        .into_os_string()
+                        .into_string()
+                    {
                         Ok(s) => s,
                         Err(_) => bail!("invalid path string"),
-                    },
-                );
+                    });
             },
             &Map::BlizzardMap(ref map) => {
-                req.mut_create_game().set_battlenet_map_name(map.clone());
+                req.mut_create_game()
+                    .set_battlenet_map_name(map.clone());
             },
         };
 
@@ -413,7 +413,9 @@ impl MeleeContract for AgentMeleeDendrite {
                 }*/
             }
 
-            req.mut_create_game().mut_player_setup().push(setup);
+            req.mut_create_game()
+                .mut_player_setup()
+                .push(setup);
         }
 
         req.mut_create_game().set_realtime(false);
@@ -474,7 +476,11 @@ impl MeleeContract for AgentMeleeDendrite {
 
         await!(self.client.clone().request(req))?;
 
-        await!(self.agent.clone().handle_event(GameEvent::GameLoaded))?;
+        await!(
+            self.agent
+                .clone()
+                .handle_event(GameEvent::GameLoaded)
+        )?;
 
         Ok(self)
     }
@@ -485,7 +491,11 @@ impl MeleeContract for AgentMeleeDendrite {
 
         let (initial_events, _) = await!(self.observer.clone().step())?;
 
-        await!(self.agent.clone().handle_event(GameEvent::GameStarted))?;
+        await!(
+            self.agent
+                .clone()
+                .handle_event(GameEvent::GameStarted)
+        )?;
         for e in initial_events {
             await!(self.agent.clone().handle_event(e))?;
         }
@@ -510,7 +520,11 @@ impl MeleeContract for AgentMeleeDendrite {
             await!(self.agent.clone().handle_event(GameEvent::Step))?;
 
             if game_ended {
-                await!(self.agent.clone().handle_event(GameEvent::GameEnded))?;
+                await!(
+                    self.agent
+                        .clone()
+                        .handle_event(GameEvent::GameEnded)
+                )?;
                 break;
             }
 
@@ -627,7 +641,10 @@ impl AgentDendrite {
 pub fn synapse() -> (AgentTerminal, AgentDendrite) {
     let (tx, rx) = mpsc::channel(10);
 
-    (AgentTerminal { tx: tx }, AgentDendrite { rx: rx })
+    (
+        AgentTerminal { tx: tx },
+        AgentDendrite { rx: rx },
+    )
 }
 
 // pub struct LeaveGame {

@@ -3,7 +3,6 @@ use std::{io, time};
 use bytes::{Buf, BufMut};
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
-use organelle::{Axon, Constraint, Impulse, Soma};
 use protobuf::{self, parse_from_reader, Message};
 use sc2_proto::sc2api::{Request, Response};
 use tokio_core::reactor;
@@ -13,7 +12,6 @@ use tungstenite;
 use url::Url;
 
 use super::{Error, Result};
-use synapses::{Dendrite, Synapse};
 
 fn stream_next<T: Stream>(
     stream: T,
@@ -33,11 +31,11 @@ enum ClientRequest {
 
 /// sender for the client soma
 #[derive(Debug, Clone)]
-pub struct ClientTerminal {
+pub struct ProtoClient {
     tx: mpsc::Sender<ClientRequest>,
 }
 
-impl ClientTerminal {
+impl ProtoClient {
     /// connect to the game instance
     #[async]
     pub fn connect(self, url: Url) -> Result<()> {
@@ -67,97 +65,56 @@ impl ClientTerminal {
     }
 }
 
-/// receiver for the client soma
-#[derive(Debug)]
-pub struct ClientDendrite {
+/// soma used to communicate with the game instance
+pub struct ProtoClientBuilder {
+    tx: mpsc::Sender<ClientRequest>,
     rx: mpsc::Receiver<ClientRequest>,
 }
 
-/// create a client synapse
-pub fn synapse() -> (ClientTerminal, ClientDendrite) {
-    let (tx, rx) = mpsc::channel(10);
-
-    (ClientTerminal { tx: tx }, ClientDendrite { rx: rx })
-}
-
-/// soma used to communicate with the game instance
-pub struct ClientSoma {
-    dendrites: Vec<ClientDendrite>,
-}
-
-impl ClientSoma {
+impl ProtoClientBuilder {
     /// create a new client
-    pub fn axon() -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self { dendrites: vec![] },
-            vec![Constraint::Variadic(Synapse::Client)],
-            vec![],
-        ))
+    pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel(10);
+
+        Self { tx: tx, rx: rx }
     }
-}
 
-impl Soma for ClientSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(_, Synapse::Client, Dendrite::Client(rx)) => {
-                self.dendrites.push(rx);
-
-                Ok(self)
-            },
-            Impulse::Start(_, main_tx, handle) => {
-                let listen_handle = handle.clone();
-
-                let (tx, rx) = mpsc::channel(10);
-
-                for d in self.dendrites {
-                    handle.spawn(
-                        tx.clone()
-                            .send_all(d.rx.map_err(|_| unreachable!()))
-                            .map(|_| ())
-                            .map_err(|_| ()),
-                    );
-                }
-
-                handle.spawn(listen(rx, listen_handle).or_else(move |e| {
-                    main_tx
-                        .send(Impulse::Error(e.into()))
-                        .map(|_| ())
-                        .map_err(|_| ())
-                }));
-
-                Ok(Self { dendrites: vec![] })
-            },
-
-            _ => bail!("unexpected impulse"),
-        }
-    }
-}
-
-#[async]
-fn listen(
-    mut rx: mpsc::Receiver<ClientRequest>,
-    handle: reactor::Handle,
-) -> Result<()> {
-    loop {
-        let (req, stream) = await!(
-            stream_next(rx)
-                .map_err(|_| Error::from("unable to receive next item"))
-        )?;
-
-        rx = match req {
-            Some(ClientRequest::Connect(url, tx)) => {
-                await!(connect(url, handle.clone(), tx, stream))?
-            },
-            None => break,
-            _ => bail!("unexpected req {:?}", req),
+    pub fn add_client(&self) -> ProtoClient {
+        ProtoClient {
+            tx: self.tx.clone(),
         }
     }
 
-    Ok(())
+    pub fn spawn(self, handle: &reactor::Handle) -> Result<()> {
+        let listen_handle = handle.clone();
+
+        handle.spawn(
+            self.run(listen_handle)
+                .map_err(|e| panic!("{:#?}", e)),
+        );
+
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, handle: reactor::Handle) -> Result<()> {
+        loop {
+            let (req, stream) = await!(
+                stream_next(self.rx)
+                    .map_err(|_| Error::from("unable to receive next item"))
+            )?;
+
+            self.rx = match req {
+                Some(ClientRequest::Connect(url, tx)) => {
+                    await!(connect(url, handle.clone(), tx, stream))?
+                },
+                None => break,
+                _ => bail!("unexpected req {:?}", req),
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[async]
@@ -210,59 +167,60 @@ fn connect(
 fn attempt_connect(
     url: Url,
     handle: reactor::Handle,
-) -> Result<
-    (
-        mpsc::Sender<tungstenite::Message>,
-        mpsc::Sender<oneshot::Sender<Result<Response>>>,
-    ),
-> {
+) -> Result<(
+    mpsc::Sender<tungstenite::Message>,
+    mpsc::Sender<oneshot::Sender<Result<Response>>>,
+)> {
     let (send_tx, send_rx) = mpsc::channel(10);
     let (recv_tx, recv_rx) =
         mpsc::channel::<oneshot::Sender<Result<Response>>>(10);
 
     let handle = handle.clone();
 
-    await!(connect_async(url, handle.remote().clone()).and_then(
-        move |(ws_stream, _)| {
-            let (sink, stream) = ws_stream.split();
+    await!(
+        connect_async(url, handle.remote().clone()).and_then(
+            move |(ws_stream, _)| {
+                let (sink, stream) = ws_stream.split();
 
-            handle.spawn(
-                sink.send_all(
-                    send_rx
-                        .map_err(|_| -> tungstenite::Error { unreachable!() }),
-                ).map(|_| ())
-                    .map_err(|_| ()),
-            );
-            handle.spawn(
-                stream
-                    .map_err(|e| panic!("client error {:?}", e))
-                    .zip(recv_rx)
-                    .for_each(|(msg, tx)| {
-                        if let tungstenite::Message::Binary(buf) = msg {
-                            let cursor = io::Cursor::new(buf);
+                handle.spawn(
+                    sink.send_all(
+                        send_rx.map_err(|_| -> tungstenite::Error {
+                            unreachable!()
+                        }),
+                    ).map(|_| ())
+                        .map_err(|_| ()),
+                );
+                handle.spawn(
+                    stream
+                        .map_err(|e| panic!("client error {:?}", e))
+                        .zip(recv_rx)
+                        .for_each(|(msg, tx)| {
+                            if let tungstenite::Message::Binary(buf) = msg {
+                                let cursor = io::Cursor::new(buf);
 
-                            match parse_from_reader::<Response>(&mut cursor.reader())
-                            {
-                                Err(e) => {
-                                    if let Err(_) = tx.send(Err(e.into())) {
-                                        // keep going
-                                    }
-                                },
-                                Ok(rsp) => {
-                                    if let Err(_) = tx.send(Ok(rsp)) {
-                                        // keep going
-                                    }
-                                },
+                                match parse_from_reader::<Response>(&mut cursor.reader())
+                                {
+                                    Err(e) => {
+                                        if let Err(_) = tx.send(Err(e.into())) {
+                                            // keep going
+                                        }
+                                    },
+                                    Ok(rsp) => {
+                                        if let Err(_) = tx.send(Ok(rsp)) {
+                                            // keep going
+                                        }
+                                    },
+                                }
                             }
-                        }
 
-                        Ok(())
-                    }),
-            );
+                            Ok(())
+                        }),
+                );
 
-            Ok(())
-        }
-    )).map_err(|e| Error::from(e))?;
+                Ok(())
+            }
+        )
+    ).map_err(|e| Error::from(e))?;
 
     Ok((send_tx, recv_tx))
 }
@@ -294,7 +252,9 @@ fn run_client(
                 }
                 await!(
                     send.clone()
-                        .send(tungstenite::Message::Binary(writer.into_inner()))
+                        .send(tungstenite::Message::Binary(
+                            writer.into_inner()
+                        ))
                         .map_err(|_| Error::from("unable to send request"))
                 )?;
                 await!(

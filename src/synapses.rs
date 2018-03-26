@@ -8,7 +8,6 @@ use action::{
     ActionTerminal,
 };
 use agent::{self, AgentDendrite, AgentTerminal};
-use client::{self, ClientDendrite, ClientTerminal};
 use melee::{self, MeleeDendrite, MeleeTerminal};
 use observer::{
     self,
@@ -25,8 +24,6 @@ pub enum Synapse {
     Probe,
     /// coordinate versus games between agents
     Melee,
-    /// client to the game instance
-    Client,
     /// observer controller
     ObserverControl,
     /// observer
@@ -45,8 +42,6 @@ pub enum Terminal {
     Probe(probe::Terminal),
     /// melee sender
     Melee(MeleeTerminal),
-    /// client sender
-    Client(ClientTerminal),
     /// observer control sender
     ObserverControl(ObserverControlTerminal),
     /// observer sender
@@ -65,8 +60,6 @@ pub enum Dendrite {
     Probe(probe::Dendrite),
     /// melee receiver
     Melee(MeleeDendrite),
-    /// client receiver
-    Client(ClientDendrite),
     /// observer control receiver
     ObserverControl(ObserverControlDendrite),
     /// observer receiver
@@ -95,15 +88,13 @@ impl organelle::Synapse for Synapse {
 
                 (Terminal::Melee(tx), Dendrite::Melee(rx))
             },
-            Synapse::Client => {
-                let (tx, rx) = client::synapse();
-
-                (Terminal::Client(tx), Dendrite::Client(rx))
-            },
             Synapse::ObserverControl => {
                 let (tx, rx) = observer::control_synapse();
 
-                (Terminal::ObserverControl(tx), Dendrite::ObserverControl(rx))
+                (
+                    Terminal::ObserverControl(tx),
+                    Dendrite::ObserverControl(rx),
+                )
             },
             Synapse::Observer => {
                 let (tx, rx) = observer::synapse();
@@ -123,7 +114,10 @@ impl organelle::Synapse for Synapse {
             Synapse::ActionControl => {
                 let (tx, rx) = action::control_synapse();
 
-                (Terminal::ActionControl(tx), Dendrite::ActionControl(rx))
+                (
+                    Terminal::ActionControl(tx),
+                    Dendrite::ActionControl(rx),
+                )
             },
         }
     }
@@ -218,17 +212,26 @@ impl organelle::Synapse for PlayerSynapse {
             PlayerSynapse::Agent => {
                 let (tx, rx) = agent::synapse();
 
-                (PlayerTerminal::Agent(tx), PlayerDendrite::Agent(rx))
+                (
+                    PlayerTerminal::Agent(tx),
+                    PlayerDendrite::Agent(rx),
+                )
             },
             PlayerSynapse::Observer => {
                 let (tx, rx) = observer::synapse();
 
-                (PlayerTerminal::Observer(tx), PlayerDendrite::Observer(rx))
+                (
+                    PlayerTerminal::Observer(tx),
+                    PlayerDendrite::Observer(rx),
+                )
             },
             PlayerSynapse::Action => {
                 let (tx, rx) = action::synapse();
 
-                (PlayerTerminal::Action(tx), PlayerDendrite::Action(rx))
+                (
+                    PlayerTerminal::Action(tx),
+                    PlayerDendrite::Action(rx),
+                )
             },
         }
     }

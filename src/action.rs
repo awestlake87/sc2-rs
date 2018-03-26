@@ -6,29 +6,29 @@ use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
 
 use super::{Error, IntoProto, Result};
-use client::ClientTerminal;
+use client::ProtoClient;
 use data::{Action, DebugCommand};
-use synapses::{Dendrite, Synapse, Terminal};
+use synapses::{Dendrite, Synapse};
 
 pub struct ActionSoma {
     control: Option<ActionControlDendrite>,
-    client: Option<ClientTerminal>,
+    client: Option<ProtoClient>,
     users: Vec<ActionDendrite>,
 }
 
 impl ActionSoma {
-    pub fn axon() -> Result<Axon<Self>> {
+    pub fn axon(client: ProtoClient) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 control: None,
-                client: None,
+                client: Some(client),
                 users: vec![],
             },
             vec![
                 Constraint::Variadic(Synapse::Action),
                 Constraint::One(Synapse::ActionControl),
             ],
-            vec![Constraint::One(Synapse::Client)],
+            vec![],
         ))
     }
 }
@@ -36,7 +36,10 @@ impl ActionSoma {
 pub fn synapse() -> (ActionTerminal, ActionDendrite) {
     let (tx, rx) = mpsc::channel(10);
 
-    (ActionTerminal { tx: tx }, ActionDendrite { rx: rx })
+    (
+        ActionTerminal { tx: tx },
+        ActionDendrite { rx: rx },
+    )
 }
 
 pub fn control_synapse() -> (ActionControlTerminal, ActionControlDendrite) {
@@ -55,12 +58,6 @@ impl Soma for ActionSoma {
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                Ok(Self {
-                    client: Some(tx),
-                    ..self
-                })
-            },
             Impulse::AddDendrite(_, Synapse::Action, Dendrite::Action(rx)) => {
                 self.users.push(rx);
 
@@ -114,7 +111,7 @@ impl Soma for ActionSoma {
 }
 
 struct ActionTask {
-    client: ClientTerminal,
+    client: ProtoClient,
     control: Option<ActionControlDendrite>,
     queue: Option<mpsc::Receiver<ActionRequest>>,
 
@@ -124,7 +121,7 @@ struct ActionTask {
 
 impl ActionTask {
     fn new(
-        client: ClientTerminal,
+        client: ProtoClient,
         control: ActionControlDendrite,
         rx: mpsc::Receiver<ActionRequest>,
     ) -> Self {
@@ -155,7 +152,8 @@ impl ActionTask {
                     self = await!(self.send_actions())?;
                     self = await!(self.send_debug())?;
 
-                    tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to ack step"))?;
                 },
                 Either::Request(ActionRequest::SendAction(action, tx)) => {
                     self.action_batch.push(action);
@@ -180,7 +178,9 @@ impl ActionTask {
         req.mut_action().mut_actions();
 
         for action in self.action_batch {
-            req.mut_action().mut_actions().push(action.into_proto()?);
+            req.mut_action()
+                .mut_actions()
+                .push(action.into_proto()?);
         }
 
         await!(self.client.clone().request(req))?;
@@ -197,7 +197,9 @@ impl ActionTask {
         req.mut_debug().mut_debug();
 
         for cmd in self.debug_batch {
-            req.mut_debug().mut_debug().push(cmd.into_proto()?);
+            req.mut_debug()
+                .mut_debug()
+                .push(cmd.into_proto()?);
         }
 
         await!(self.client.clone().request(req))?;

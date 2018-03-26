@@ -1,14 +1,10 @@
 use std::env::home_dir;
-use std::mem;
 use std::path::{PathBuf, MAIN_SEPARATOR};
 
-use futures::prelude::*;
-use futures::unsync;
 use glob::glob;
-use organelle::{Axon, Constraint, Impulse, Soma};
 use regex::Regex;
 
-use super::{Error, ErrorKind, Result};
+use super::{ErrorKind, Result};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
 

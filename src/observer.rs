@@ -9,7 +9,7 @@ use sc2_proto::sc2api;
 
 use super::{Error, FromProto, IntoSc2, Result};
 use agent::GameEvent;
-use client::ClientTerminal;
+use client::ProtoClient;
 use data::{
     Ability,
     AbilityData,
@@ -32,7 +32,7 @@ use data::{
     UpgradeData,
     Visibility,
 };
-use synapses::{Dendrite, Synapse, Terminal};
+use synapses::{Dendrite, Synapse};
 
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
@@ -199,16 +199,16 @@ impl Observation {
 }
 
 pub struct ObserverSoma {
-    client: Option<ClientTerminal>,
+    client: Option<ProtoClient>,
     controller: Option<ObserverControlDendrite>,
     users: Vec<ObserverDendrite>,
 }
 
 impl ObserverSoma {
-    pub fn axon() -> Result<Axon<Self>> {
+    pub fn axon(client: ProtoClient) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
-                client: None,
+                client: Some(client),
                 controller: None,
                 users: vec![],
             },
@@ -216,7 +216,7 @@ impl ObserverSoma {
                 Constraint::One(Synapse::ObserverControl),
                 Constraint::Variadic(Synapse::Observer),
             ],
-            vec![Constraint::One(Synapse::Client)],
+            vec![],
         ))
     }
 }
@@ -228,11 +228,6 @@ impl Soma for ObserverSoma {
     #[async(boxed)]
     fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
         match imp {
-            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                self.client = Some(tx);
-
-                Ok(self)
-            },
             Impulse::AddDendrite(
                 _,
                 Synapse::ObserverControl,
@@ -295,7 +290,7 @@ impl Soma for ObserverSoma {
 
 struct ObserverTask {
     controller: Option<ObserverControlDendrite>,
-    client: ClientTerminal,
+    client: ProtoClient,
     request_rx: Option<mpsc::Receiver<ObserverRequest>>,
 
     previous_step: u32,
@@ -313,7 +308,7 @@ struct ObserverTask {
 impl ObserverTask {
     fn new(
         controller: ObserverControlDendrite,
-        client: ClientTerminal,
+        client: ProtoClient,
         request_rx: mpsc::Receiver<ObserverRequest>,
     ) -> Self {
         Self {
@@ -505,7 +500,10 @@ impl ObserverTask {
                 Point2::new(camera.get_x(), camera.get_y())
             },
 
-            units: self.units.values().map(|u| Rc::clone(u)).collect(),
+            units: self.units
+                .values()
+                .map(|u| Rc::clone(u))
+                .collect(),
             power_sources: {
                 let mut power_sources = vec![];
 
@@ -680,15 +678,13 @@ impl ObserverTask {
     #[async]
     fn get_game_data(
         self,
-    ) -> Result<
-        (
-            Self,
-            Rc<HashMap<UnitType, UnitTypeData>>,
-            Rc<HashMap<Ability, AbilityData>>,
-            Rc<HashMap<Upgrade, UpgradeData>>,
-            Rc<HashMap<Buff, BuffData>>,
-        ),
-    > {
+    ) -> Result<(
+        Self,
+        Rc<HashMap<UnitType, UnitTypeData>>,
+        Rc<HashMap<Ability, AbilityData>>,
+        Rc<HashMap<Upgrade, UpgradeData>>,
+        Rc<HashMap<Buff, BuffData>>,
+    )> {
         let mut req = sc2api::Request::new();
         req.mut_data().set_unit_type_id(true);
 
@@ -913,7 +909,10 @@ pub struct ObserverControlSynapse;
 pub fn synapse() -> (ObserverTerminal, ObserverDendrite) {
     let (tx, rx) = mpsc::channel(10);
 
-    (ObserverTerminal { tx: tx }, ObserverDendrite { rx: rx })
+    (
+        ObserverTerminal { tx: tx },
+        ObserverDendrite { rx: rx },
+    )
 }
 
 pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
