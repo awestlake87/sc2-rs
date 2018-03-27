@@ -1,12 +1,5 @@
 use organelle::{self, probe};
 
-use action::{
-    self,
-    ActionControlDendrite,
-    ActionControlTerminal,
-    ActionDendrite,
-    ActionTerminal,
-};
 use agent::{self, AgentDendrite, AgentTerminal};
 use melee::{self, MeleeDendrite, MeleeTerminal};
 use observer::{
@@ -30,10 +23,6 @@ pub enum Synapse {
     Observer,
     /// agent
     Agent,
-    /// action
-    Action,
-    /// action control
-    ActionControl,
 }
 
 /// senders for synapses
@@ -48,10 +37,6 @@ pub enum Terminal {
     Observer(ObserverTerminal),
     /// agent sender
     Agent(AgentTerminal),
-    /// action sender
-    Action(ActionTerminal),
-    /// action control sender
-    ActionControl(ActionControlTerminal),
 }
 
 /// receivers for synapses
@@ -66,10 +51,6 @@ pub enum Dendrite {
     Observer(ObserverDendrite),
     /// agent receiver
     Agent(AgentDendrite),
-    /// action receiver
-    Action(ActionDendrite),
-    /// action control receiver
-    ActionControl(ActionControlDendrite),
 }
 
 impl organelle::Synapse for Synapse {
@@ -105,19 +86,6 @@ impl organelle::Synapse for Synapse {
                 let (tx, rx) = agent::synapse();
 
                 (Terminal::Agent(tx), Dendrite::Agent(rx))
-            },
-            Synapse::Action => {
-                let (tx, rx) = action::synapse();
-
-                (Terminal::Action(tx), Dendrite::Action(rx))
-            },
-            Synapse::ActionControl => {
-                let (tx, rx) = action::control_synapse();
-
-                (
-                    Terminal::ActionControl(tx),
-                    Dendrite::ActionControl(rx),
-                )
             },
         }
     }
@@ -177,8 +145,6 @@ pub enum PlayerSynapse {
     Agent,
     /// observe the game state and data
     Observer,
-    /// dispatch game actions
-    Action,
 }
 
 /// interfaces for internal somas
@@ -188,8 +154,6 @@ pub enum PlayerTerminal {
     Agent(AgentTerminal),
     /// interface for the observer soma
     Observer(ObserverTerminal),
-    /// interface for the action soma
-    Action(ActionTerminal),
 }
 
 /// receivers for the terminals/interfaces of somas
@@ -199,8 +163,6 @@ pub enum PlayerDendrite {
     Agent(AgentDendrite),
     /// internal receiver for observer interface
     Observer(ObserverDendrite),
-    /// internal receiver for action interface
-    Action(ActionDendrite),
 }
 
 impl organelle::Synapse for PlayerSynapse {
@@ -225,14 +187,6 @@ impl organelle::Synapse for PlayerSynapse {
                     PlayerDendrite::Observer(rx),
                 )
             },
-            PlayerSynapse::Action => {
-                let (tx, rx) = action::synapse();
-
-                (
-                    PlayerTerminal::Action(tx),
-                    PlayerDendrite::Action(rx),
-                )
-            },
         }
     }
 }
@@ -242,7 +196,6 @@ impl From<PlayerSynapse> for Synapse {
         match synapse {
             PlayerSynapse::Agent => Synapse::Agent,
             PlayerSynapse::Observer => Synapse::Observer,
-            PlayerSynapse::Action => Synapse::Action,
         }
     }
 }
@@ -251,7 +204,6 @@ impl From<Synapse> for PlayerSynapse {
         match synapse {
             Synapse::Agent => PlayerSynapse::Agent,
             Synapse::Observer => PlayerSynapse::Observer,
-            Synapse::Action => PlayerSynapse::Action,
             _ => panic!(
                 "invalid conversion from internal sc2 synapse {:?}",
                 synapse
@@ -265,7 +217,6 @@ impl From<PlayerTerminal> for Terminal {
         match terminal {
             PlayerTerminal::Agent(tx) => Terminal::Agent(tx),
             PlayerTerminal::Observer(tx) => Terminal::Observer(tx),
-            PlayerTerminal::Action(tx) => Terminal::Action(tx),
         }
     }
 }
@@ -274,7 +225,6 @@ impl From<Terminal> for PlayerTerminal {
         match terminal {
             Terminal::Agent(tx) => PlayerTerminal::Agent(tx),
             Terminal::Observer(tx) => PlayerTerminal::Observer(tx),
-            Terminal::Action(tx) => PlayerTerminal::Action(tx),
             _ => panic!("invalid conversion from internal sc2 terminal"),
         }
     }
@@ -285,7 +235,6 @@ impl From<PlayerDendrite> for Dendrite {
         match dendrite {
             PlayerDendrite::Agent(rx) => Dendrite::Agent(rx),
             PlayerDendrite::Observer(rx) => Dendrite::Observer(rx),
-            PlayerDendrite::Action(rx) => Dendrite::Action(rx),
         }
     }
 }
@@ -294,7 +243,6 @@ impl From<Dendrite> for PlayerDendrite {
         match dendrite {
             Dendrite::Agent(rx) => PlayerDendrite::Agent(rx),
             Dendrite::Observer(rx) => PlayerDendrite::Observer(rx),
-            Dendrite::Action(rx) => PlayerDendrite::Action(rx),
             _ => panic!("invalid conversion from internal sc2 dendrite"),
         }
     }

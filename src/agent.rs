@@ -10,7 +10,7 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
-use action::{ActionControlTerminal, ActionSoma, ActionTerminal};
+use action::{ActionBuilder, ActionClient, ActionControlClient};
 use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
@@ -54,7 +54,7 @@ pub enum GameEvent {
 /// controls given to an agent
 pub struct AgentControl {
     observer: ObserverTerminal,
-    action: ActionTerminal,
+    action: ActionClient,
 }
 
 impl AgentControl {
@@ -64,7 +64,7 @@ impl AgentControl {
     }
 
     /// dispatch commands and debug commands to the game instance
-    pub fn action(&self) -> ActionTerminal {
+    pub fn action(&self) -> ActionClient {
         self.action.clone()
     }
 }
@@ -76,7 +76,7 @@ where
 {
     agent: Option<AgentDendrite>,
     observer: Option<ObserverTerminal>,
-    action: Option<ActionTerminal>,
+    action: Option<ActionClient>,
 
     factory: Option<F>,
 }
@@ -106,12 +106,6 @@ where
                 observer: Some(tx),
                 ..self
             }),
-            Impulse::AddTerminal(_, Synapse::Action, Terminal::Action(tx)) => {
-                Ok(Self {
-                    action: Some(tx),
-                    ..self
-                })
-            },
 
             Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
@@ -147,11 +141,11 @@ where
     T: Player + 'static,
     F: FnOnce(AgentControl) -> T + 'static,
 {
-    fn new(factory: F) -> Self {
+    fn new(factory: F, action: ActionClient) -> Self {
         Self {
             agent: None,
             observer: None,
-            action: None,
+            action: Some(action),
 
             factory: Some(factory),
         }
@@ -162,15 +156,21 @@ where
 pub struct AgentBuilder<T: Soma + 'static> {
     soma: T,
     handle: Option<reactor::Handle>,
+    client: ProtoClientBuilder,
+    action: ActionBuilder,
 }
 
 impl<T: Soma + 'static> AgentBuilder<T> {
     /// wrap the given soma in an agent
     #[cfg(feature = "with-organelle")]
     pub fn soma(agent: T) -> Self {
+        let client = ProtoClientBuilder::new();
+
         Self {
             soma: agent,
             handle: None,
+            client: client,
+            action: ActionBuilder::new(client.add_client()),
         }
     }
 
@@ -197,10 +197,11 @@ impl<T: Soma + 'static> AgentBuilder<T> {
 
         let handle = self.handle.unwrap();
 
-        let proto = ProtoClientBuilder::new();
-
         let mut organelle = Organelle::new(
-            AgentSoma::axon(proto.add_client())?,
+            AgentSoma::axon(
+                self.client.add_client(),
+                self.action.add_control_client(),
+            )?,
             handle.clone(),
         );
 
@@ -208,17 +209,15 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         let player = organelle.add_soma(self.soma);
 
         let observer =
-            organelle.add_soma(ObserverSoma::axon(proto.add_client())?);
-        let action = organelle.add_soma(ActionSoma::axon(proto.add_client())?);
+            organelle.add_soma(ObserverSoma::axon(self.client.add_client())?);
 
         organelle.connect(agent, observer, Synapse::ObserverControl)?;
-        organelle.connect(agent, action, Synapse::ActionControl)?;
 
         organelle.connect(agent, player, Synapse::Agent)?;
         organelle.connect(player, observer, Synapse::Observer)?;
-        organelle.connect(player, action, Synapse::Action)?;
 
-        proto.spawn(&handle)?;
+        self.client.spawn(&handle)?;
+        self.action.spawn(&handle)?;
 
         Ok(Agent { 0: organelle })
     }
@@ -231,9 +230,15 @@ where
 {
     /// wrap a factory to be called with the agent controls when ready
     pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
+        let client = ProtoClientBuilder::new();
+        let action = ActionBuilder::new().proto_client(client.add_client());
+
         AgentBuilder::<AgentWrapper<T, F>> {
-            soma: AgentWrapper::new(factory),
+            soma: AgentWrapper::new(factory, action.add_client()),
             handle: None,
+
+            client: client,
+            action: action,
         }
     }
 }
@@ -257,23 +262,25 @@ pub struct AgentSoma {
     client: Option<ProtoClient>,
     observer: Option<ObserverControlTerminal>,
     agent: Option<AgentTerminal>,
-    action: Option<ActionControlTerminal>,
+    action: Option<ActionControlClient>,
 }
 
 impl AgentSoma {
-    fn axon(client: ProtoClient) -> Result<Axon<Self>> {
+    fn axon(
+        client: ProtoClient,
+        action: ActionControlClient,
+    ) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 controller: None,
                 client: Some(client),
                 observer: None,
                 agent: None,
-                action: None,
+                action: Some(action),
             },
             vec![Constraint::One(Synapse::Melee)],
             vec![
                 Constraint::One(Synapse::ObserverControl),
-                Constraint::One(Synapse::ActionControl),
                 Constraint::One(Synapse::Agent),
             ],
         ))
@@ -299,14 +306,6 @@ impl Soma for AgentSoma {
                 Terminal::ObserverControl(tx),
             ) => Ok(Self {
                 observer: Some(tx),
-                ..self
-            }),
-            Impulse::AddTerminal(
-                _,
-                Synapse::ActionControl,
-                Terminal::ActionControl(tx),
-            ) => Ok(Self {
-                action: Some(tx),
                 ..self
             }),
             Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
@@ -348,7 +347,7 @@ impl Soma for AgentSoma {
 pub struct AgentMeleeDendrite {
     client: ProtoClient,
     observer: ObserverControlTerminal,
-    action: ActionControlTerminal,
+    action: ActionControlClient,
     agent: AgentTerminal,
 }
 
