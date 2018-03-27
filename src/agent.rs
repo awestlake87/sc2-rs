@@ -15,7 +15,7 @@ use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
-use observer::{ObserverControlTerminal, ObserverSoma, ObserverTerminal};
+use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// an event from the game
@@ -53,13 +53,13 @@ pub enum GameEvent {
 
 /// controls given to an agent
 pub struct AgentControl {
-    observer: ObserverTerminal,
+    observer: ObserverClient,
     action: ActionClient,
 }
 
 impl AgentControl {
     /// observe the game data and current state
-    pub fn observer(&self) -> ObserverTerminal {
+    pub fn observer(&self) -> ObserverClient {
         self.observer.clone()
     }
 
@@ -75,7 +75,7 @@ where
     F: FnOnce(AgentControl) -> T,
 {
     agent: Option<AgentDendrite>,
-    observer: Option<ObserverTerminal>,
+    observer: Option<ObserverClient>,
     action: Option<ActionClient>,
 
     factory: Option<F>,
@@ -98,14 +98,6 @@ where
                     ..self
                 })
             },
-            Impulse::AddTerminal(
-                _,
-                Synapse::Observer,
-                Terminal::Observer(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
 
             Impulse::Start(_, main_tx, handle) => {
                 handle.spawn(
@@ -141,10 +133,10 @@ where
     T: Player + 'static,
     F: FnOnce(AgentControl) -> T + 'static,
 {
-    fn new(factory: F, action: ActionClient) -> Self {
+    fn new(factory: F, action: ActionClient, observer: ObserverClient) -> Self {
         Self {
             agent: None,
-            observer: None,
+            observer: Some(observer),
             action: Some(action),
 
             factory: Some(factory),
@@ -158,6 +150,7 @@ pub struct AgentBuilder<T: Soma + 'static> {
     handle: Option<reactor::Handle>,
     client: ProtoClientBuilder,
     action: ActionBuilder,
+    observer: ObserverBuilder,
 }
 
 impl<T: Soma + 'static> AgentBuilder<T> {
@@ -201,6 +194,7 @@ impl<T: Soma + 'static> AgentBuilder<T> {
             AgentSoma::axon(
                 self.client.add_client(),
                 self.action.add_control_client(),
+                self.observer.add_control_client(),
             )?,
             handle.clone(),
         );
@@ -208,16 +202,11 @@ impl<T: Soma + 'static> AgentBuilder<T> {
         let agent = organelle.nucleus();
         let player = organelle.add_soma(self.soma);
 
-        let observer =
-            organelle.add_soma(ObserverSoma::axon(self.client.add_client())?);
-
-        organelle.connect(agent, observer, Synapse::ObserverControl)?;
-
         organelle.connect(agent, player, Synapse::Agent)?;
-        organelle.connect(player, observer, Synapse::Observer)?;
 
         self.client.spawn(&handle)?;
         self.action.spawn(&handle)?;
+        self.observer.spawn(&handle)?;
 
         Ok(Agent { 0: organelle })
     }
@@ -232,13 +221,19 @@ where
     pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
         let client = ProtoClientBuilder::new();
         let action = ActionBuilder::new().proto_client(client.add_client());
+        let observer = ObserverBuilder::new().proto_client(client.add_client());
 
         AgentBuilder::<AgentWrapper<T, F>> {
-            soma: AgentWrapper::new(factory, action.add_client()),
+            soma: AgentWrapper::new(
+                factory,
+                action.add_client(),
+                observer.add_client(),
+            ),
             handle: None,
 
             client: client,
             action: action,
+            observer: observer,
         }
     }
 }
@@ -260,7 +255,7 @@ impl MeleeCompetitor for Agent {
 pub struct AgentSoma {
     controller: Option<MeleeDendrite>,
     client: Option<ProtoClient>,
-    observer: Option<ObserverControlTerminal>,
+    observer: Option<ObserverControlClient>,
     agent: Option<AgentTerminal>,
     action: Option<ActionControlClient>,
 }
@@ -269,20 +264,18 @@ impl AgentSoma {
     fn axon(
         client: ProtoClient,
         action: ActionControlClient,
+        observer: ObserverControlClient,
     ) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 controller: None,
                 client: Some(client),
-                observer: None,
+                observer: Some(observer),
                 agent: None,
                 action: Some(action),
             },
             vec![Constraint::One(Synapse::Melee)],
-            vec![
-                Constraint::One(Synapse::ObserverControl),
-                Constraint::One(Synapse::Agent),
-            ],
+            vec![Constraint::One(Synapse::Agent)],
         ))
     }
 }
@@ -300,14 +293,6 @@ impl Soma for AgentSoma {
                     ..self
                 })
             },
-            Impulse::AddTerminal(
-                _,
-                Synapse::ObserverControl,
-                Terminal::ObserverControl(tx),
-            ) => Ok(Self {
-                observer: Some(tx),
-                ..self
-            }),
             Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
                 self.agent = Some(tx);
 
@@ -346,7 +331,7 @@ impl Soma for AgentSoma {
 
 pub struct AgentMeleeDendrite {
     client: ProtoClient,
-    observer: ObserverControlTerminal,
+    observer: ObserverControlClient,
     action: ActionControlClient,
     agent: AgentTerminal,
 }

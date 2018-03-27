@@ -6,6 +6,7 @@ use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
+use tokio_core::reactor;
 
 use super::{Error, FromProto, IntoSc2, Result};
 use agent::GameEvent;
@@ -198,98 +199,66 @@ impl Observation {
     }
 }
 
-pub struct ObserverSoma {
+pub struct ObserverBuilder {
     client: Option<ProtoClient>,
-    controller: Option<ObserverControlDendrite>,
-    users: Vec<ObserverDendrite>,
+
+    control_tx: mpsc::Sender<ObserverControlRequest>,
+    control_rx: mpsc::Receiver<ObserverControlRequest>,
+
+    user_tx: mpsc::Sender<ObserverRequest>,
+    user_rx: mpsc::Receiver<ObserverRequest>,
 }
 
-impl ObserverSoma {
-    pub fn axon(client: ProtoClient) -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                client: Some(client),
-                controller: None,
-                users: vec![],
-            },
-            vec![
-                Constraint::One(Synapse::ObserverControl),
-                Constraint::Variadic(Synapse::Observer),
-            ],
-            vec![],
-        ))
-    }
-}
+impl ObserverBuilder {
+    pub fn new() -> Self {
+        let (control_tx, control_rx) = mpsc::channel(10);
+        let (user_tx, user_rx) = mpsc::channel(10);
 
-impl Soma for ObserverSoma {
-    type Synapse = Synapse;
-    type Error = Error;
+        Self {
+            client: None,
 
-    #[async(boxed)]
-    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(
-                _,
-                Synapse::ObserverControl,
-                Dendrite::ObserverControl(rx),
-            ) => {
-                self.controller = Some(rx);
+            control_tx: control_tx,
+            control_rx: control_rx,
 
-                Ok(self)
-            },
-            Impulse::AddDendrite(
-                _,
-                Synapse::Observer,
-                Dendrite::Observer(rx),
-            ) => {
-                self.users.push(rx);
-
-                Ok(self)
-            },
-
-            Impulse::Start(_, main_tx, handle) => {
-                assert!(self.controller.is_some());
-                assert!(self.client.is_some());
-
-                let (tx, rx) = mpsc::channel(10);
-
-                // merge all queues
-                for user in self.users {
-                    handle.spawn(
-                        tx.clone()
-                            .send_all(user.rx.map_err(|_| unreachable!()))
-                            .map(|_| ())
-                            .map_err(|_| ()),
-                    );
-                }
-
-                let task = ObserverTask::new(
-                    self.controller.unwrap(),
-                    self.client.unwrap(),
-                    rx,
-                );
-
-                handle.spawn(task.run().or_else(move |e| {
-                    main_tx
-                        .send(Impulse::Error(e.into()))
-                        .map(|_| ())
-                        .map_err(|_| ())
-                }));
-
-                Ok(Self {
-                    controller: None,
-                    client: None,
-                    users: vec![],
-                })
-            },
-
-            _ => bail!("unexpected impulse"),
+            user_tx: user_tx,
+            user_rx: user_rx,
         }
     }
+
+    pub fn proto_client(self, client: ProtoClient) -> Self {
+        Self {
+            client: Some(client),
+            ..self
+        }
+    }
+
+    pub fn add_control_client(&self) -> ObserverControlClient {
+        ObserverControlClient {
+            tx: self.control_tx.clone(),
+        }
+    }
+
+    pub fn add_client(&self) -> ObserverClient {
+        ObserverClient {
+            tx: self.user_tx.clone(),
+        }
+    }
+
+    pub fn spawn(self, handle: &reactor::Handle) -> Result<()> {
+        let task = ObserverService::new(
+            self.control_rx,
+            self.client.unwrap(),
+            self.user_rx,
+        );
+
+        handle.spawn(task.run().map_err(move |e| panic!("{:#?}", e)));
+
+        Ok(())
+    }
 }
 
-struct ObserverTask {
-    controller: Option<ObserverControlDendrite>,
+struct ObserverService {
+    controller: Option<mpsc::Receiver<ObserverControlRequest>>,
     client: ProtoClient,
     request_rx: Option<mpsc::Receiver<ObserverRequest>>,
 
@@ -305,9 +274,9 @@ struct ObserverTask {
     // spatial_actions: Vec<SpatialAction>,
 }
 
-impl ObserverTask {
+impl ObserverService {
     fn new(
-        controller: ObserverControlDendrite,
+        controller: mpsc::Receiver<ObserverControlRequest>,
         client: ProtoClient,
         request_rx: mpsc::Receiver<ObserverRequest>,
     ) -> Self {
@@ -333,7 +302,6 @@ impl ObserverTask {
     fn run(mut self) -> Result<()> {
         let queue = mem::replace(&mut self.controller, None)
             .unwrap()
-            .rx
             .map(|req| Either::Control(req))
             .select(
                 mem::replace(&mut self.request_rx, None)
@@ -757,10 +725,10 @@ enum Either {
 }
 
 #[derive(Debug, Clone)]
-pub struct ObserverControlTerminal {
+pub struct ObserverControlClient {
     tx: mpsc::Sender<ObserverControlRequest>,
 }
-impl ObserverControlTerminal {
+impl ObserverControlClient {
     #[async]
     pub fn reset(self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -791,18 +759,13 @@ impl ObserverControlTerminal {
     }
 }
 
-#[derive(Debug)]
-pub struct ObserverControlDendrite {
-    rx: mpsc::Receiver<ObserverControlRequest>,
-}
-
 /// an interface for the observer soma
 #[derive(Debug, Clone)]
-pub struct ObserverTerminal {
+pub struct ObserverClient {
     tx: mpsc::Sender<ObserverRequest>,
 }
 
-impl ObserverTerminal {
+impl ObserverClient {
     /// observe the current game state
     #[async]
     pub fn observe(self) -> Result<Rc<Observation>> {
@@ -896,30 +859,4 @@ impl ObserverTerminal {
 
         await!(rx.map_err(|_| Error::from("unable to recv buff data")))
     }
-}
-
-#[derive(Debug)]
-pub struct ObserverDendrite {
-    rx: mpsc::Receiver<ObserverRequest>,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct ObserverControlSynapse;
-
-pub fn synapse() -> (ObserverTerminal, ObserverDendrite) {
-    let (tx, rx) = mpsc::channel(10);
-
-    (
-        ObserverTerminal { tx: tx },
-        ObserverDendrite { rx: rx },
-    )
-}
-
-pub fn control_synapse() -> (ObserverControlTerminal, ObserverControlDendrite) {
-    let (tx, rx) = mpsc::channel(1);
-
-    (
-        ObserverControlTerminal { tx: tx },
-        ObserverControlDendrite { rx: rx },
-    )
 }
