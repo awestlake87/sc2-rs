@@ -22,14 +22,16 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::unsync::mpsc;
 use sc2::{
-    AgentControl,
+    ActionClient,
+    AgentRequest,
     Error,
     GameEvent,
     LauncherSettings,
     MeleeBuilder,
     Observation,
-    Player,
+    ObserverClient,
     Result,
     UpdateScheme,
 };
@@ -106,7 +108,8 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 }
 
 struct MarineMicroBot {
-    control: AgentControl,
+    observer: ObserverClient,
+    action: ActionClient,
 
     targeted_zergling: Option<Rc<Unit>>,
     move_back: bool,
@@ -114,15 +117,49 @@ struct MarineMicroBot {
     backup_start: Option<Point2>,
 }
 
-impl Player for MarineMicroBot {
-    type Error = Error;
+impl MarineMicroBot {
+    fn spawn(
+        self,
+        handle: &reactor::Handle,
+        rx: mpsc::Receiver<AgentRequest>,
+    ) -> Result<()> {
+        handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
 
-    #[async(boxed)]
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, rx: mpsc::Receiver<AgentRequest>) -> Result<()> {
+        #[async]
+        for req in rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                AgentRequest::PlayerSetup(game, tx) => {
+                    let result = await!(self.get_player_setup(game))?;
+
+                    self = result.0;
+
+                    tx.send(result.1).map_err(|_| {
+                        Error::from("unable to get player setup")
+                    })?;
+                },
+                AgentRequest::Event(e, tx) => {
+                    self = await!(self.on_event(e))?;
+
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to ack event"))?;
+                },
+            }
+        }
+
+        Ok(())
+    }
+
+    #[async]
     fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
         Ok((self, PlayerSetup::Player(Race::Terran)))
     }
 
-    #[async(boxed)]
+    #[async]
     fn on_event(mut self, e: GameEvent) -> Result<Self> {
         match e {
             GameEvent::GameStarted => {
@@ -138,12 +175,11 @@ impl Player for MarineMicroBot {
             _ => Ok(self),
         }
     }
-}
 
-impl MarineMicroBot {
-    fn new(control: AgentControl) -> Self {
+    fn new(observer: ObserverClient, action: ActionClient) -> Self {
         Self {
-            control: control,
+            observer: observer,
+            action: action,
 
             targeted_zergling: None,
             move_back: false,
@@ -154,7 +190,7 @@ impl MarineMicroBot {
 
     #[async]
     fn on_step(mut self) -> Result<Self> {
-        let observation = await!(self.control.observer().observe())?;
+        let observation = await!(self.observer.observe())?;
 
         let marines = observation
             .filter_units(|u| u.get_alliance() == Alliance::Domestic);
@@ -169,7 +205,7 @@ impl MarineMicroBot {
         if let Some(zergling) = self.targeted_zergling.clone() {
             if !self.move_back {
                 await!(
-                    self.control.action().send_action(
+                    self.action.send_action(
                         Action::new(Ability::Attack)
                             .units(marines.iter())
                             .target(ActionTarget::Unit(zergling.get_tag()))
@@ -178,7 +214,7 @@ impl MarineMicroBot {
             } else {
                 if let Some(backup_target) = self.backup_target {
                     await!(
-                        self.control.action().send_action(
+                        self.action.send_action(
                             Action::new(Ability::Smart)
                                 .units(marines.iter())
                                 .target(ActionTarget::Location(backup_target))
@@ -197,7 +233,7 @@ impl MarineMicroBot {
 
     #[async]
     fn on_unit_destroyed(mut self, unit: Rc<Unit>) -> Result<Self> {
-        let observation = await!(self.control.observer().observe())?;
+        let observation = await!(self.observer.observe())?;
 
         if let Some(targeted_zergling) =
             mem::replace(&mut self.targeted_zergling, None)
@@ -237,9 +273,13 @@ fn get_center_of_mass(units: &[Rc<Unit>]) -> Option<Point2> {
     } else {
         let sum = units
             .iter()
-            .fold(Vector2::new(0.0, 0.0), |acc, u| acc + u.get_pos_2d().coords);
+            .fold(Vector2::new(0.0, 0.0), |acc, u| {
+                acc + u.get_pos_2d().coords
+            });
 
-        Some(Point2::from_coordinates(sum / (units.len() as f32)))
+        Some(Point2::from_coordinates(
+            sum / (units.len() as f32),
+        ))
     }
 }
 
@@ -278,17 +318,26 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let melee = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|control| MarineMicroBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-        sc2::ComputerBuilder::new()
-            .race(Race::Zerg)
-            .difficulty(Difficulty::VeryEasy)
-            .create()?,
-    ).launcher_settings(create_launcher_settings(&args)?)
+    let mut bot_agent = sc2::AgentBuilder::new();
+    let bot = MarineMicroBot::new(
+        bot_agent.add_observer_client(),
+        bot_agent.add_action_client(),
+    );
+
+    bot.spawn(&handle, bot_agent.take_agent_stream()?)?;
+
+    let zerg = sc2::ComputerBuilder::new()
+        .race(Race::Zerg)
+        .difficulty(Difficulty::VeryEasy);
+
+    let melee = MeleeBuilder::new()
+        .add_player(bot_agent)
+        .add_player(zerg)
+        .launcher_settings(create_launcher_settings(&args)?)
         .one_and_done(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .update_scheme(UpdateScheme::Interval(
+            args.flag_step_size.unwrap_or(1),
+        ))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)
         .create()?;

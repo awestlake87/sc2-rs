@@ -1,10 +1,10 @@
 use std;
+use std::mem;
 use std::rc::Rc;
 
 use futures::future;
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
-use organelle::{self, Axon, Constraint, Impulse, Organelle, Soma};
 use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
@@ -16,7 +16,6 @@ use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
-use synapses::{Dendrite, Synapse, Terminal};
 
 /// an event from the game
 #[derive(Debug, Clone)]
@@ -51,208 +50,92 @@ pub enum GameEvent {
     Step,
 }
 
-/// controls given to an agent
-pub struct AgentControl {
-    observer: ObserverClient,
-    action: ActionClient,
-}
-
-impl AgentControl {
-    /// observe the game data and current state
-    pub fn observer(&self) -> ObserverClient {
-        self.observer.clone()
-    }
-
-    /// dispatch commands and debug commands to the game instance
-    pub fn action(&self) -> ActionClient {
-        self.action.clone()
-    }
-}
-
-pub struct AgentWrapper<T, F>
-where
-    T: Player + 'static,
-    F: FnOnce(AgentControl) -> T,
-{
-    agent: Option<AgentDendrite>,
-    observer: Option<ObserverClient>,
-    action: Option<ActionClient>,
-
-    factory: Option<F>,
-}
-
-impl<T, F> Soma for AgentWrapper<T, F>
-where
-    T: Player + 'static,
-    F: FnOnce(AgentControl) -> T + 'static,
-{
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(_, Synapse::Agent, Dendrite::Agent(rx)) => {
-                Ok(Self {
-                    agent: Some(rx),
-                    ..self
-                })
-            },
-
-            Impulse::Start(_, main_tx, handle) => {
-                handle.spawn(
-                    self.agent
-                        .unwrap()
-                        .wrap(self.factory.unwrap()(AgentControl {
-                            observer: self.observer.unwrap(),
-                            action: self.action.unwrap(),
-                        }))
-                        .or_else(move |e| {
-                            main_tx
-                                .send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(Self {
-                    agent: None,
-                    observer: None,
-                    action: None,
-
-                    factory: None,
-                })
-            },
-            _ => bail!("unexpected impulse"),
-        }
-    }
-}
-
-impl<T, F> AgentWrapper<T, F>
-where
-    T: Player + 'static,
-    F: FnOnce(AgentControl) -> T + 'static,
-{
-    fn new(factory: F, action: ActionClient, observer: ObserverClient) -> Self {
-        Self {
-            agent: None,
-            observer: Some(observer),
-            action: Some(action),
-
-            factory: Some(factory),
-        }
-    }
-}
-
 /// build an agent
-pub struct AgentBuilder<T: Soma + 'static> {
-    soma: T,
-    handle: Option<reactor::Handle>,
-    client: ProtoClientBuilder,
-    action: ActionBuilder,
-    observer: ObserverBuilder,
+pub struct AgentBuilder {
+    client: Option<ProtoClientBuilder>,
+    action: Option<ActionBuilder>,
+    observer: Option<ObserverBuilder>,
+
+    agent_tx: Option<mpsc::Sender<AgentRequest>>,
+    agent_rx: Option<mpsc::Receiver<AgentRequest>>,
 }
 
-impl<T: Soma + 'static> AgentBuilder<T> {
-    /// wrap the given soma in an agent
-    #[cfg(feature = "with-organelle")]
-    pub fn soma(agent: T) -> Self {
-        let client = ProtoClientBuilder::new();
-
-        Self {
-            soma: agent,
-            handle: None,
-            client: client,
-            action: ActionBuilder::new(client.add_client()),
-        }
-    }
-
-    /// the tokio core handle to use
-    pub fn handle(self, handle: reactor::Handle) -> Self {
-        Self {
-            handle: Some(handle),
-            ..self
-        }
-    }
-
-    /// create the agent
-    pub fn create(self) -> Result<Agent>
-    where
-        T::Synapse: From<Synapse> + Into<Synapse>,
-        <T::Synapse as organelle::Synapse>::Terminal:
-            From<Terminal> + Into<Terminal>,
-        <T::Synapse as organelle::Synapse>::Dendrite:
-            From<Dendrite> + Into<Dendrite>,
-    {
-        if self.handle.is_none() {
-            bail!("missing tokio core handle")
-        }
-
-        let handle = self.handle.unwrap();
-
-        let mut organelle = Organelle::new(
-            AgentSoma::axon(
-                self.client.add_client(),
-                self.action.add_control_client(),
-                self.observer.add_control_client(),
-            )?,
-            handle.clone(),
-        );
-
-        let agent = organelle.nucleus();
-        let player = organelle.add_soma(self.soma);
-
-        organelle.connect(agent, player, Synapse::Agent)?;
-
-        self.client.spawn(&handle)?;
-        self.action.spawn(&handle)?;
-        self.observer.spawn(&handle)?;
-
-        Ok(Agent { 0: organelle })
-    }
-}
-
-impl<T, F> AgentBuilder<AgentWrapper<T, F>>
-where
-    T: Player + 'static,
-    F: FnOnce(AgentControl) -> T,
-{
-    /// wrap a factory to be called with the agent controls when ready
-    pub fn factory(factory: F) -> AgentBuilder<AgentWrapper<T, F>> {
+impl AgentBuilder {
+    pub fn new() -> Self {
         let client = ProtoClientBuilder::new();
         let action = ActionBuilder::new().proto_client(client.add_client());
         let observer = ObserverBuilder::new().proto_client(client.add_client());
 
-        AgentBuilder::<AgentWrapper<T, F>> {
-            soma: AgentWrapper::new(
-                factory,
-                action.add_client(),
-                observer.add_client(),
-            ),
-            handle: None,
+        let (tx, rx) = mpsc::channel(10);
 
-            client: client,
-            action: action,
-            observer: observer,
+        Self {
+            client: Some(client),
+            action: Some(action),
+            observer: Some(observer),
+
+            agent_tx: Some(tx),
+            agent_rx: Some(rx),
+        }
+    }
+
+    pub fn add_observer_client(&self) -> ObserverClient {
+        self.observer.as_ref().unwrap().add_client()
+    }
+
+    pub fn add_action_client(&self) -> ActionClient {
+        self.action.as_ref().unwrap().add_client()
+    }
+
+    pub fn take_agent_stream(
+        &mut self,
+    ) -> Result<mpsc::Receiver<AgentRequest>> {
+        match mem::replace(&mut self.agent_rx, None) {
+            Some(rx) => Ok(rx),
+            None => bail!("agent stream has already been taken"),
         }
     }
 }
 
-/// a wrapper around a player to mediate interactions with game instance
-///
-/// exposes internal sc2 interfaces to players
-pub struct Agent(Organelle<Axon<AgentSoma>>);
+impl MeleeCompetitor for AgentBuilder {
+    fn spawn(
+        &mut self,
+        handle: &reactor::Handle,
+        controller: MeleeDendrite,
+    ) -> Result<()> {
+        let tx = mem::replace(&mut self.agent_tx, None).unwrap();
 
-impl MeleeCompetitor for Agent {
-    type Soma = Organelle<Axon<AgentSoma>>;
+        let agent = Agent::new(
+            self.client.as_ref().unwrap().add_client(),
+            self.action
+                .as_ref()
+                .unwrap()
+                .add_control_client(),
+            self.observer
+                .as_ref()
+                .unwrap()
+                .add_control_client(),
+            controller,
+            tx,
+        );
 
-    fn into_soma(self) -> Self::Soma {
-        self.0
+        mem::replace(&mut self.client, None)
+            .unwrap()
+            .spawn(handle)?;
+        mem::replace(&mut self.action, None)
+            .unwrap()
+            .spawn(handle)?;
+        mem::replace(&mut self.observer, None)
+            .unwrap()
+            .spawn(handle)?;
+
+        agent.spawn(handle)?;
+
+        Ok(())
     }
 }
 
 /// manages a player soma
-pub struct AgentSoma {
+struct Agent {
     controller: Option<MeleeDendrite>,
     client: Option<ProtoClient>,
     observer: Option<ObserverControlClient>,
@@ -260,72 +143,37 @@ pub struct AgentSoma {
     action: Option<ActionControlClient>,
 }
 
-impl AgentSoma {
-    fn axon(
+impl Agent {
+    fn new(
         client: ProtoClient,
         action: ActionControlClient,
         observer: ObserverControlClient,
-    ) -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                controller: None,
-                client: Some(client),
-                observer: Some(observer),
-                agent: None,
-                action: Some(action),
-            },
-            vec![Constraint::One(Synapse::Melee)],
-            vec![Constraint::One(Synapse::Agent)],
-        ))
-    }
-}
-
-impl Soma for AgentSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddDendrite(_, Synapse::Melee, Dendrite::Melee(rx)) => {
-                Ok(Self {
-                    controller: Some(rx),
-                    ..self
-                })
-            },
-            Impulse::AddTerminal(_, Synapse::Agent, Terminal::Agent(tx)) => {
-                self.agent = Some(tx);
-
-                Ok(self)
-            },
-            Impulse::Start(_, tx, handle) => {
-                handle.spawn(
-                    self.controller
-                        .unwrap()
-                        .wrap(AgentMeleeDendrite {
-                            client: self.client.unwrap(),
-                            observer: self.observer.unwrap(),
-                            action: self.action.unwrap(),
-                            agent: self.agent.unwrap(),
-                        })
-                        .or_else(move |e| {
-                            tx.send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(Self {
-                    controller: None,
-                    client: None,
-                    observer: None,
-                    agent: None,
-                    action: None,
-                })
-            },
-
-            _ => bail!("unexpected impulse"),
+        controller: MeleeDendrite,
+        agent: mpsc::Sender<AgentRequest>,
+    ) -> Agent {
+        Self {
+            controller: Some(controller),
+            client: Some(client),
+            observer: Some(observer),
+            agent: Some(AgentTerminal { tx: agent }),
+            action: Some(action),
         }
+    }
+
+    fn spawn(self, handle: &reactor::Handle) -> Result<()> {
+        handle.spawn(
+            self.controller
+                .unwrap()
+                .wrap(AgentMeleeDendrite {
+                    client: self.client.unwrap(),
+                    observer: self.observer.unwrap(),
+                    action: self.action.unwrap(),
+                    agent: self.agent.unwrap(),
+                })
+                .map_err(|e| panic!("{:#?}", e)),
+        );
+
+        Ok(())
     }
 }
 
@@ -520,7 +368,7 @@ impl MeleeContract for AgentMeleeDendrite {
 }
 
 #[derive(Debug)]
-enum AgentRequest {
+pub enum AgentRequest {
     PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
     Event(GameEvent, oneshot::Sender<()>),
 }
@@ -560,75 +408,6 @@ impl AgentTerminal {
 
         await!(rx.map_err(|_| Error::from("unable to recv event response")))
     }
-}
-
-/// contract for a player soma to obey
-pub trait Player: Sized {
-    /// the type of error that can occur upon failure
-    type Error: std::error::Error + Send + Into<Error>;
-
-    /// Use the game settings to decide on a player setup
-    fn get_player_setup(
-        self,
-        game: GameSetup,
-    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
-
-    /// Called whenever the agent needs to handle a game event
-    fn on_event(
-        self,
-        _e: GameEvent,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>
-    where
-        Self: 'static,
-    {
-        Box::new(future::ok(self))
-    }
-}
-
-/// receiver for agent requests
-#[derive(Debug)]
-pub struct AgentDendrite {
-    rx: mpsc::Receiver<AgentRequest>,
-}
-
-impl AgentDendrite {
-    /// wrap a struct that obeys the agent contract and forward requests to
-    /// it
-    #[async]
-    pub fn wrap<T: Player + 'static>(self, mut player: T) -> Result<()> {
-        #[async]
-        for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
-            match req {
-                AgentRequest::PlayerSetup(game, tx) => {
-                    let result = await!(player.get_player_setup(game))
-                        .map_err(|e| e.into())?;
-
-                    player = result.0;
-
-                    tx.send(result.1).map_err(|_| {
-                        Error::from("unable to get player setup")
-                    })?;
-                },
-                AgentRequest::Event(e, tx) => {
-                    player = await!(player.on_event(e).map_err(|e| e.into()))?;
-
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack event"))?;
-                },
-            }
-        }
-
-        Ok(())
-    }
-}
-
-pub fn synapse() -> (AgentTerminal, AgentDendrite) {
-    let (tx, rx) = mpsc::channel(10);
-
-    (
-        AgentTerminal { tx: tx },
-        AgentDendrite { rx: rx },
-    )
 }
 
 // pub struct LeaveGame {

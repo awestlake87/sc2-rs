@@ -10,7 +10,7 @@ use url::Url;
 use super::{Error, Result};
 use ctrlc_breaker::CtrlcBreakerSoma;
 use data::{GameSetup, PlayerSetup};
-use launcher::{GamePorts, LauncherSettings, Launcher};
+use launcher::{GamePorts, Launcher, LauncherSettings};
 use synapses::{Dendrite, Synapse, Terminal};
 
 /// update scheme for the agents to use
@@ -24,17 +24,17 @@ pub enum UpdateScheme {
 
 /// empty trait to prevent users from passing their own somas to MeleeBuilder
 pub trait MeleeCompetitor {
-    type Soma: Soma + 'static;
-
-    fn into_soma(self) -> Self::Soma;
+    fn spawn(
+        &mut self,
+        handle: &reactor::Handle,
+        controller: MeleeDendrite,
+    ) -> Result<()>;
 }
 
 /// build a Melee coordinator
-pub struct MeleeBuilder<
-    P1: MeleeCompetitor + 'static,
-    P2: MeleeCompetitor + 'static,
-> {
-    players: (P1, P2),
+pub struct MeleeBuilder {
+    players: Vec<Box<MeleeCompetitor>>,
+
     launcher_settings: Option<LauncherSettings>,
     suite: Option<MeleeSuite>,
     update_scheme: UpdateScheme,
@@ -42,15 +42,11 @@ pub struct MeleeBuilder<
     handle: Option<reactor::Handle>,
 }
 
-impl<P1, P2> MeleeBuilder<P1, P2>
-where
-    P1: MeleeCompetitor + 'static,
-    P2: MeleeCompetitor + 'static,
-{
+impl MeleeBuilder {
     /// start building a melee soma with the given agent or computer somas
-    pub fn new(player1: P1, player2: P2) -> Self {
+    pub fn new() -> Self {
         Self {
-            players: (player1, player2),
+            players: vec![],
 
             launcher_settings: None,
             suite: None,
@@ -111,27 +107,16 @@ where
         }
     }
 
-    /// build the melee coordinator
-    pub fn create(self) -> Result<Melee>
+    pub fn add_player<T>(mut self, player: T) -> Self
     where
-        P1::Soma: Soma,
-        P2::Soma: Soma,
-
-        <P1::Soma as Soma>::Synapse: organelle::Synapse,
-        <P2::Soma as Soma>::Synapse: organelle::Synapse,
-
-        <P1::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
-        <P2::Soma as Soma>::Synapse: From<Synapse> + Into<Synapse>,
-
-        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Terminal: From<Terminal>
-            + Into<Terminal>,
-        <<P1::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
-        <<P2::Soma as Soma>::Synapse as organelle::Synapse>::Dendrite: From<Dendrite>
-            + Into<Dendrite>,
+        T: MeleeCompetitor + Sized + 'static,
     {
+        self.players.push(Box::new(player));
+        self
+    }
+
+    /// build the melee coordinator
+    pub fn create(self) -> Result<Melee> {
         if self.launcher_settings.is_none() {
             bail!("missing launcher settings")
         } else if self.suite.is_none() {
@@ -142,22 +127,31 @@ where
 
         let handle = self.handle.unwrap();
 
+        let mut melee_clients = vec![];
+
+        for mut player in self.players {
+            let (tx, rx) = mpsc::channel(10);
+
+            melee_clients.push(MeleeClient { tx: tx });
+
+            player.spawn(&handle, MeleeDendrite { rx: rx })?;
+        }
+
         let mut organelle = Organelle::new(
-            MeleeSoma::axon(self.suite.unwrap(), self.update_scheme, Launcher::create(self.launcher_settings.unwrap())?)?,
+            MeleeSoma::axon(
+                self.suite.unwrap(),
+                self.update_scheme,
+                Launcher::create(self.launcher_settings.unwrap())?,
+                melee_clients,
+            )?,
             handle.clone(),
         );
 
         let melee = organelle.nucleus();
 
-        let player1 = organelle.add_soma(self.players.0.into_soma());
-        let player2 = organelle.add_soma(self.players.1.into_soma());
-
         if self.break_on_ctrlc {
             organelle.add_soma(CtrlcBreakerSoma::axon());
         }
-
-        organelle.connect(melee, player1, Synapse::Melee)?;
-        organelle.connect(melee, player2, Synapse::Melee)?;
 
         Ok(Melee {
             handle: handle,
@@ -191,17 +185,10 @@ enum MeleeSuite {
     EndlessRepeat(GameSetup),
 }
 
-/// create a melee synapse
-pub fn synapse() -> (MeleeTerminal, MeleeDendrite) {
-    let (tx, rx) = mpsc::channel(1);
-
-    (MeleeTerminal::new(tx), MeleeDendrite::new(rx))
-}
-
 /// controller that pits agents against each other
 pub struct MeleeSoma {
     suite: Option<MeleeSuite>,
-    agents: Vec<Option<MeleeTerminal>>,
+    agents: Vec<Option<MeleeClient>>,
     update_scheme: UpdateScheme,
     launcher: Option<Launcher>,
 }
@@ -212,18 +199,20 @@ impl MeleeSoma {
         suite: MeleeSuite,
         update_scheme: UpdateScheme,
         launcher: Launcher,
+        melee_clients: Vec<MeleeClient>,
     ) -> Result<Axon<Self>> {
         Ok(Axon::new(
             Self {
                 suite: Some(suite),
-                agents: vec![],
+                agents: melee_clients
+                    .into_iter()
+                    .map(|c| Some(c))
+                    .collect(),
                 update_scheme: update_scheme,
                 launcher: Some(launcher),
             },
             vec![],
-            vec![
-                Constraint::Variadic(Synapse::Melee),
-            ],
+            vec![],
         ))
     }
 }
@@ -235,10 +224,6 @@ impl Soma for MeleeSoma {
     #[async(boxed)]
     fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
         match msg {
-            Impulse::AddTerminal(_, Synapse::Melee, Terminal::Melee(tx)) => {
-                self.agents.push(Some(tx));
-                Ok(self)
-            },
             Impulse::Start(_, main_tx, handle) => {
                 assert!(self.launcher.is_some());
                 assert!(self.suite.is_some());
@@ -282,7 +267,7 @@ fn run_melee(
     suite: MeleeSuite,
     update_scheme: UpdateScheme,
     mut launcher: Launcher,
-    agents: (MeleeTerminal, MeleeTerminal),
+    agents: (MeleeClient, MeleeClient),
     main_tx: mpsc::Sender<Impulse<Synapse>>,
 ) -> Result<()> {
     let (game, _suite) = match suite {
@@ -339,8 +324,10 @@ fn run_melee(
         ports.client_ports.push(instances.1.ports);
 
         {
-            let join1 =
-                agents.0.clone().join_game(player1, Some(ports.clone()));
+            let join1 = agents
+                .0
+                .clone()
+                .join_game(player1, Some(ports.clone()));
             let join2 = agents.1.clone().join_game(player2, Some(ports));
 
             await!(join1.join(join2))?;
@@ -402,13 +389,17 @@ enum MeleeRequest {
     Connect(Url, oneshot::Sender<()>),
 
     CreateGame(GameSetup, Vec<PlayerSetup>, oneshot::Sender<()>),
-    JoinGame(PlayerSetup, Option<GamePorts>, oneshot::Sender<()>),
+    JoinGame(
+        PlayerSetup,
+        Option<GamePorts>,
+        oneshot::Sender<()>,
+    ),
     RunGame(UpdateScheme, oneshot::Sender<()>),
 }
 
 /// wrapper around a sender to provide a melee interface
 #[derive(Debug, Clone)]
-pub struct MeleeTerminal {
+pub struct MeleeClient {
     tx: mpsc::Sender<MeleeRequest>,
 }
 
@@ -493,14 +484,18 @@ impl MeleeDendrite {
                 },
                 MeleeRequest::JoinGame(setup, ports, tx) => {
                     dendrite = await!(
-                        dendrite.join_game(setup, ports).map_err(|e| e.into())
+                        dendrite
+                            .join_game(setup, ports)
+                            .map_err(|e| e.into())
                     )?;
 
                     tx.send(()).unwrap();
                 },
                 MeleeRequest::RunGame(update_scheme, tx) => {
                     dendrite = await!(
-                        dendrite.run_game(update_scheme).map_err(|e| e.into())
+                        dendrite
+                            .run_game(update_scheme)
+                            .map_err(|e| e.into())
                     )?;
 
                     tx.send(()).unwrap();
@@ -512,7 +507,7 @@ impl MeleeDendrite {
     }
 }
 
-impl MeleeTerminal {
+impl MeleeClient {
     fn new(tx: mpsc::Sender<MeleeRequest>) -> Self {
         Self { tx: tx }
     }

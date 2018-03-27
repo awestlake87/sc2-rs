@@ -2,14 +2,12 @@ use std::mem;
 
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
-use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
 use tokio_core::reactor;
 
 use super::{Error, IntoProto, Result};
 use client::ProtoClient;
 use data::{Action, DebugCommand};
-use synapses::{Dendrite, Synapse};
 
 pub struct ActionBuilder {
     client: Option<ProtoClient>,
@@ -215,33 +213,40 @@ pub struct ActionClient {
 
 impl ActionClient {
     /// send a command to the game instance
-    #[async]
-    pub fn send_action(self, action: Action) -> Result<()> {
+    pub fn send_action(
+        &self,
+        action: Action,
+    ) -> impl Future<Item = (), Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ActionRequest::SendAction(action, tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send command"))
-        )?;
-        await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
+        async_block! {
+            await!(
+                sender
+                    .send(ActionRequest::SendAction(action, tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send command"))
+            )?;
+            await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
+        }
     }
 
     /// send a debug command to the game instance
-    #[async]
-    pub fn send_debug<T>(self, cmd: T) -> Result<()>
+    pub fn send_debug<T>(&self, cmd: T) -> impl Future<Item = (), Error = Error>
     where
         T: Into<DebugCommand> + 'static,
     {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ActionRequest::SendDebug(cmd.into(), tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send debug command"))
-        )?;
-        await!(rx.map_err(|_| Error::from("unable to send debug ack")))
+        async_block! {
+            await!(
+                sender
+                    .send(ActionRequest::SendDebug(cmd.into(), tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send debug command"))
+            )?;
+            await!(rx.map_err(|_| Error::from("unable to send debug ack")))
+        }
     }
 }

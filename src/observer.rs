@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
-use organelle::{Axon, Constraint, Impulse, Soma};
 use sc2_proto::sc2api;
 use tokio_core::reactor;
 
@@ -33,7 +32,6 @@ use data::{
     UpgradeData,
     Visibility,
 };
-use synapses::{Dendrite, Synapse};
 
 /// state of the game (changes every frame)
 #[derive(Debug, Clone)]
@@ -767,18 +765,22 @@ pub struct ObserverClient {
 
 impl ObserverClient {
     /// observe the current game state
-    #[async]
-    pub fn observe(self) -> Result<Rc<Observation>> {
+    pub fn observe(
+        &self,
+    ) -> impl Future<Item = Rc<Observation>, Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::Observe(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send observation"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::Observe(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send observation"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv observation")))
+            await!(rx.map_err(|_| Error::from("unable to recv observation")))
+        }
     }
 
     /// get information about the current map

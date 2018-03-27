@@ -40,28 +40,12 @@ mod synapses;
 
 pub mod data;
 
-pub use self::agent::{Agent, AgentBuilder, AgentControl, GameEvent, Player};
-pub use self::computer::{Computer, ComputerBuilder};
-pub use self::launcher::{LauncherSettings};
+pub use self::action::ActionClient;
+pub use self::agent::{AgentBuilder, AgentRequest, GameEvent};
+pub use self::computer::ComputerBuilder;
+pub use self::launcher::LauncherSettings;
 pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
-pub use self::observer::Observation;
-
-#[cfg(feature = "with-organelle")]
-pub use self::action::{
-    synapse as action_synapse,
-    ActionDendrite,
-    ActionTerminal,
-};
-#[cfg(feature = "with-organelle")]
-pub use self::agent::{synapse as agent_synapse, AgentDendrite, AgentTerminal};
-#[cfg(feature = "with-organelle")]
-pub use self::observer::{
-    synapse as observer_synapse,
-    ObserverDendrite,
-    ObserverTerminal,
-};
-#[cfg(feature = "with-organelle")]
-pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
+pub use self::observer::{Observation, ObserverClient};
 
 use std::path::PathBuf;
 
