@@ -8,7 +8,7 @@ use sc2_proto::sc2api;
 use tokio_core::reactor;
 
 use super::{Error, FromProto, IntoSc2, Result};
-use agent::GameEvent;
+use agent::Event;
 use client::ProtoClient;
 use data::{
     Ability,
@@ -417,7 +417,7 @@ impl ObserverService {
     #[async]
     fn get_observation(
         mut self,
-    ) -> Result<(Self, Rc<Observation>, Vec<GameEvent>, bool)> {
+    ) -> Result<(Self, Rc<Observation>, Vec<Event>, bool)> {
         let mut req = sc2api::Request::new();
         req.mut_observation();
 
@@ -552,7 +552,7 @@ impl ObserverService {
             for tag in event.get_dead_units() {
                 match self.previous_units.get(tag) {
                     Some(ref mut unit) => {
-                        events.push(GameEvent::UnitDestroyed(Rc::clone(unit)));
+                        events.push(Event::UnitDestroyed(Rc::clone(unit)));
                     },
                     None => (),
                 }
@@ -565,25 +565,23 @@ impl ObserverService {
                     if unit.get_orders().is_empty()
                         && !prev_unit.get_orders().is_empty()
                     {
-                        events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                        events.push(Event::UnitIdle(Rc::clone(unit)));
                     } else if unit.get_build_progress() >= 1.0
                         && prev_unit.get_build_progress() < 1.0
                     {
-                        events.push(GameEvent::BuildingCompleted(Rc::clone(
-                            unit,
-                        )));
+                        events.push(Event::BuildingCompleted(Rc::clone(unit)));
                     }
                 },
                 None => {
                     if unit.get_alliance() == Alliance::Enemy
                         && unit.get_display_type() == DisplayType::Visible
                     {
-                        events.push(GameEvent::UnitDetected(Rc::clone(unit)));
+                        events.push(Event::UnitDetected(Rc::clone(unit)));
                     } else {
-                        events.push(GameEvent::UnitCreated(Rc::clone(unit)));
+                        events.push(Event::UnitCreated(Rc::clone(unit)));
                     }
 
-                    events.push(GameEvent::UnitIdle(Rc::clone(unit)));
+                    events.push(Event::UnitIdle(Rc::clone(unit)));
                 },
             }
         }
@@ -595,7 +593,7 @@ impl ObserverService {
             match prev_upgrades.get(upgrade) {
                 Some(_) => (),
                 None => {
-                    events.push(GameEvent::UpgradeCompleted(*upgrade));
+                    events.push(Event::UpgradeCompleted(*upgrade));
                 },
             }
         }
@@ -613,11 +611,11 @@ impl ObserverService {
         }
 
         if nukes > 0 {
-            events.push(GameEvent::NukesDetected(nukes));
+            events.push(Event::NukesDetected(nukes));
         }
 
         if nydus_worms > 0 {
-            events.push(GameEvent::NydusWormsDetected(nydus_worms));
+            events.push(Event::NydusWormsDetected(nydus_worms));
         }
 
         let game_ended = if rsp.get_status() != sc2api::Status::in_game {
@@ -702,7 +700,7 @@ impl ObserverService {
 #[derive(Debug)]
 enum ObserverControlRequest {
     Reset(oneshot::Sender<()>),
-    Step(oneshot::Sender<(Vec<GameEvent>, bool)>),
+    Step(oneshot::Sender<(Vec<Event>, bool)>),
 }
 
 #[derive(Debug)]
@@ -743,7 +741,7 @@ impl ObserverControlClient {
 
     /// returns a list of game events that have occurred since last step
     #[async]
-    pub fn step(self) -> Result<(Vec<GameEvent>, bool)> {
+    pub fn step(self) -> Result<(Vec<Event>, bool)> {
         let (tx, rx) = oneshot::channel();
 
         await!(

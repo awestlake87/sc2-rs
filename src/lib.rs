@@ -41,7 +41,7 @@ mod synapses;
 pub mod data;
 
 pub use self::action::ActionClient;
-pub use self::agent::{AgentBuilder, AgentRequest, GameEvent};
+pub use self::agent::{AgentBuilder, Event, EventAck};
 pub use self::computer::ComputerBuilder;
 pub use self::launcher::LauncherSettings;
 pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};

@@ -12,14 +12,14 @@ use url::Url;
 use super::{Error, IntoProto, Result};
 use action::{ActionBuilder, ActionClient, ActionControlClient};
 use client::{ProtoClient, ProtoClientBuilder};
-use data::{GameSetup, Map, PlayerSetup, Unit, Upgrade};
+use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
 
 /// an event from the game
 #[derive(Debug, Clone)]
-pub enum GameEvent {
+pub enum Event {
     /// game has loaded - not called for fast restarts
     GameLoaded,
     /// game has started
@@ -50,14 +50,31 @@ pub enum GameEvent {
     Step,
 }
 
+/// notify the coordinator that we are done with this event.
+#[derive(Debug)]
+pub struct EventAck {
+    tx: oneshot::Sender<()>,
+}
+
+impl EventAck {
+    #[async]
+    pub fn done(self) -> Result<()> {
+        self.tx
+            .send(())
+            .map_err(|_| Error::from("unable to ack event"))
+    }
+}
+
 /// build an agent
 pub struct AgentBuilder {
     client: Option<ProtoClientBuilder>,
     action: Option<ActionBuilder>,
     observer: Option<ObserverBuilder>,
 
-    agent_tx: Option<mpsc::Sender<AgentRequest>>,
-    agent_rx: Option<mpsc::Receiver<AgentRequest>>,
+    race: Option<Race>,
+
+    event_tx: Option<mpsc::Sender<(Event, EventAck)>>,
+    event_rx: Option<mpsc::Receiver<(Event, EventAck)>>,
 }
 
 impl AgentBuilder {
@@ -73,8 +90,17 @@ impl AgentBuilder {
             action: Some(action),
             observer: Some(observer),
 
-            agent_tx: Some(tx),
-            agent_rx: Some(rx),
+            race: None,
+
+            event_tx: Some(tx),
+            event_rx: Some(rx),
+        }
+    }
+
+    pub fn race(self, race: Race) -> Self {
+        Self {
+            race: Some(race),
+            ..self
         }
     }
 
@@ -86,10 +112,10 @@ impl AgentBuilder {
         self.action.as_ref().unwrap().add_client()
     }
 
-    pub fn take_agent_stream(
+    pub fn take_event_stream(
         &mut self,
-    ) -> Result<mpsc::Receiver<AgentRequest>> {
-        match mem::replace(&mut self.agent_rx, None) {
+    ) -> Result<mpsc::Receiver<(Event, EventAck)>> {
+        match mem::replace(&mut self.event_rx, None) {
             Some(rx) => Ok(rx),
             None => bail!("agent stream has already been taken"),
         }
@@ -102,7 +128,7 @@ impl MeleeCompetitor for AgentBuilder {
         handle: &reactor::Handle,
         controller: MeleeDendrite,
     ) -> Result<()> {
-        let tx = mem::replace(&mut self.agent_tx, None).unwrap();
+        let tx = mem::replace(&mut self.event_tx, None).unwrap();
 
         let agent = Agent::new(
             self.client.as_ref().unwrap().add_client(),
@@ -116,6 +142,7 @@ impl MeleeCompetitor for AgentBuilder {
                 .add_control_client(),
             controller,
             tx,
+            mem::replace(&mut self.race, None).unwrap_or(Race::Random),
         );
 
         mem::replace(&mut self.client, None)
@@ -149,13 +176,17 @@ impl Agent {
         action: ActionControlClient,
         observer: ObserverControlClient,
         controller: MeleeDendrite,
-        agent: mpsc::Sender<AgentRequest>,
+        events: mpsc::Sender<(Event, EventAck)>,
+        race: Race,
     ) -> Agent {
         Self {
             controller: Some(controller),
             client: Some(client),
             observer: Some(observer),
-            agent: Some(AgentTerminal { tx: agent }),
+            agent: Some(AgentTerminal {
+                tx: events,
+                race: race,
+            }),
             action: Some(action),
         }
     }
@@ -311,7 +342,7 @@ impl MeleeContract for AgentMeleeDendrite {
         await!(
             self.agent
                 .clone()
-                .handle_event(GameEvent::GameLoaded)
+                .handle_event(Event::GameLoaded)
         )?;
 
         Ok(self)
@@ -326,7 +357,7 @@ impl MeleeContract for AgentMeleeDendrite {
         await!(
             self.agent
                 .clone()
-                .handle_event(GameEvent::GameStarted)
+                .handle_event(Event::GameStarted)
         )?;
         for e in initial_events {
             await!(self.agent.clone().handle_event(e))?;
@@ -349,13 +380,13 @@ impl MeleeContract for AgentMeleeDendrite {
                 await!(self.agent.clone().handle_event(e))?;
             }
 
-            await!(self.agent.clone().handle_event(GameEvent::Step))?;
+            await!(self.agent.clone().handle_event(Event::Step))?;
 
             if game_ended {
                 await!(
                     self.agent
                         .clone()
-                        .handle_event(GameEvent::GameEnded)
+                        .handle_event(Event::GameEnded)
                 )?;
                 break;
             }
@@ -367,46 +398,35 @@ impl MeleeContract for AgentMeleeDendrite {
     }
 }
 
-#[derive(Debug)]
-pub enum AgentRequest {
-    PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
-    Event(GameEvent, oneshot::Sender<()>),
-}
-
 #[derive(Debug, Clone)]
 pub struct AgentTerminal {
-    tx: mpsc::Sender<AgentRequest>,
+    tx: mpsc::Sender<(Event, EventAck)>,
+    race: Race,
 }
 
 impl AgentTerminal {
     #[async]
     fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
-        let (tx, rx) = oneshot::channel();
-
-        await!(
-            self.tx
-                .send(AgentRequest::PlayerSetup(game, tx))
-                .map(|_| ())
-                .map_err(|_| Error::from(
-                    "unable to send player setup request"
-                ))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to recv player setup")))
+        Ok(PlayerSetup::Player(self.race))
     }
 
     #[async]
-    fn handle_event(self, event: GameEvent) -> Result<()> {
+    fn handle_event(self, event: Event) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(AgentRequest::Event(event, tx))
+                .send((event, EventAck { tx: tx }))
                 .map(|_| ())
                 .map_err(|_| Error::from("unable to send event"))
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv event response")))
+        if let Err(e) = await!(rx) {
+            // ACK went out of scope, we can assume this means they are done
+            // using the event
+        }
+
+        Ok(())
     }
 }
 

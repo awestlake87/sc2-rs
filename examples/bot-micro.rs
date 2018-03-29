@@ -25,9 +25,9 @@ use futures::prelude::*;
 use futures::unsync::mpsc;
 use sc2::{
     ActionClient,
-    AgentRequest,
     Error,
-    GameEvent,
+    Event,
+    EventAck,
     LauncherSettings,
     MeleeBuilder,
     Observation,
@@ -43,7 +43,6 @@ use sc2::data::{
     Difficulty,
     GameSetup,
     Map,
-    PlayerSetup,
     Point2,
     Race,
     Unit,
@@ -121,7 +120,7 @@ impl MarineMicroBot {
     fn spawn(
         self,
         handle: &reactor::Handle,
-        rx: mpsc::Receiver<AgentRequest>,
+        rx: mpsc::Receiver<(Event, EventAck)>,
     ) -> Result<()> {
         handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
 
@@ -129,49 +128,30 @@ impl MarineMicroBot {
     }
 
     #[async]
-    fn run(mut self, rx: mpsc::Receiver<AgentRequest>) -> Result<()> {
+    fn run(mut self, rx: mpsc::Receiver<(Event, EventAck)>) -> Result<()> {
         #[async]
-        for req in rx.map_err(|_| -> Error { unreachable!() }) {
-            match req {
-                AgentRequest::PlayerSetup(game, tx) => {
-                    let result = await!(self.get_player_setup(game))?;
+        for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
+            self = await!(self.on_event(e))?;
 
-                    self = result.0;
-
-                    tx.send(result.1).map_err(|_| {
-                        Error::from("unable to get player setup")
-                    })?;
-                },
-                AgentRequest::Event(e, tx) => {
-                    self = await!(self.on_event(e))?;
-
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack event"))?;
-                },
-            }
+            await!(ack.done())?;
         }
 
         Ok(())
     }
 
     #[async]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player(Race::Terran)))
-    }
-
-    #[async]
-    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+    fn on_event(mut self, e: Event) -> Result<Self> {
         match e {
-            GameEvent::GameStarted => {
+            Event::GameStarted => {
                 self.move_back = false;
                 self.targeted_zergling = None;
 
                 Ok(self)
             },
-            GameEvent::UnitDestroyed(unit) => {
+            Event::UnitDestroyed(unit) => {
                 await!(self.on_unit_destroyed(unit))
             },
-            GameEvent::Step => await!(self.on_step()),
+            Event::Step => await!(self.on_step()),
             _ => Ok(self),
         }
     }
@@ -318,13 +298,13 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut bot_agent = sc2::AgentBuilder::new();
+    let mut bot_agent = sc2::AgentBuilder::new().race(Race::Terran);
     let bot = MarineMicroBot::new(
         bot_agent.add_observer_client(),
         bot_agent.add_action_client(),
     );
 
-    bot.spawn(&handle, bot_agent.take_agent_stream()?)?;
+    bot.spawn(&handle, bot_agent.take_event_stream()?)?;
 
     let zerg = sc2::ComputerBuilder::new()
         .race(Race::Zerg)
