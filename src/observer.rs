@@ -782,81 +782,104 @@ impl ObserverClient {
     }
 
     /// get information about the current map
-    #[async]
-    pub fn get_map_info(self) -> Result<Rc<MapInfo>> {
+    pub fn get_map_info(
+        &self,
+    ) -> impl Future<Item = Rc<MapInfo>, Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::GetMapInfo(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send map info request"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::GetMapInfo(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send map info request"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv map info")))
+            await!(rx.map_err(|_| Error::from("unable to recv map info")))
+        }
     }
 
     /// get data about each unit type
-    #[async]
-    pub fn get_unit_data(self) -> Result<Rc<HashMap<UnitType, UnitTypeData>>> {
+    pub fn get_unit_data(
+        &self,
+    ) -> impl Future<Item = Rc<HashMap<UnitType, UnitTypeData>>, Error = Error>
+    {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::GetUnitData(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send unit data request"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::GetUnitData(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send unit data request"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv unit data")))
+            await!(rx.map_err(|_| Error::from("unable to recv unit data")))
+        }
     }
 
     /// get data about each ability
-    #[async]
-    pub fn get_ability_data(self) -> Result<Rc<HashMap<Ability, AbilityData>>> {
+    pub fn get_ability_data(
+        &self,
+    ) -> impl Future<Item = Rc<HashMap<Ability, AbilityData>>, Error = Error>
+    {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::GetAbilityData(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from(
-                    "unable to send ability data request"
-                ))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::GetAbilityData(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from(
+                        "unable to send ability data request"
+                    ))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv ability data")))
+            await!(rx.map_err(|_| Error::from("unable to recv ability data")))
+        }
     }
 
     /// get data about each upgrade
-    #[async]
-    pub fn get_upgrade_data(self) -> Result<Rc<HashMap<Upgrade, UpgradeData>>> {
+    pub fn get_upgrade_data(
+        &self,
+    ) -> impl Future<Item = Rc<HashMap<Upgrade, UpgradeData>>, Error = Error>
+    {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::GetUpgradeData(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from(
-                    "unable to send upgrade data request"
-                ))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::GetUpgradeData(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from(
+                        "unable to send upgrade data request"
+                    ))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
+            await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
+        }
     }
 
     /// get data about each buff
-    #[async]
-    pub fn get_buff_data(self) -> Result<Rc<HashMap<Buff, BuffData>>> {
+    pub fn get_buff_data(
+        &self,
+    ) -> impl Future<Item = Rc<HashMap<Buff, BuffData>>, Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ObserverRequest::GetBuffData(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send buff data request"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ObserverRequest::GetBuffData(tx))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send buff data request"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv buff data")))
+            await!(rx.map_err(|_| Error::from("unable to recv buff data")))
+        }
     }
 }

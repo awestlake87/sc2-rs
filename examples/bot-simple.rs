@@ -21,14 +21,17 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::unsync::mpsc;
 use rand::random;
 use sc2::{
-    AgentControl,
+    ActionClient,
+    AgentBuilder,
     Error,
-    GameEvent,
+    Event,
+    EventAck,
     LauncherSettings,
     MeleeBuilder,
-    Player,
+    ObserverClient,
     Result,
     UpdateScheme,
 };
@@ -40,7 +43,6 @@ use sc2::data::{
     GameSetup,
     Map,
     MapInfo,
-    PlayerSetup,
     Point2,
     Race,
 };
@@ -102,45 +104,63 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 }
 
 struct SimpleBot {
-    control: AgentControl,
+    observer: ObserverClient,
+    action: ActionClient,
 
     restarts: u32,
 }
 
-impl Player for SimpleBot {
-    type Error = Error;
-
-    #[async(boxed)]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player(Race::Terran)))
-    }
-
-    #[async(boxed)]
-    fn on_event(self, e: GameEvent) -> Result<Self> {
-        match e {
-            GameEvent::GameStarted => {
-                println!("starting a new game ({} restarts)", self.restarts);
-                Ok(self)
-            },
-            GameEvent::Step => await!(self.on_step()),
-            _ => Ok(self),
-        }
-    }
-}
-
 impl SimpleBot {
-    fn new(control: AgentControl) -> Self {
+    fn new(observer: ObserverClient, action: ActionClient) -> Self {
         Self {
-            control: control,
+            observer: observer,
+            action: action,
 
             restarts: 0,
         }
     }
 
+    fn spawn(
+        self,
+        handle: &reactor::Handle,
+        rx: mpsc::Receiver<(Event, EventAck)>,
+    ) -> Result<()> {
+        handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
+
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, rx: mpsc::Receiver<(Event, EventAck)>) -> Result<()> {
+        #[async]
+        for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
+            self = await!(self.on_event(e))?;
+
+            await!(ack.done())?;
+        }
+
+        Ok(())
+    }
+
+    #[async]
+    fn on_event(self, e: Event) -> Result<Self> {
+        match e {
+            Event::GameStarted => {
+                println!(
+                    "starting a new game ({} restarts)",
+                    self.restarts
+                );
+                Ok(self)
+            },
+            Event::Step => await!(self.on_step()),
+            _ => Ok(self),
+        }
+    }
+
     #[async]
     fn on_step(self) -> Result<Self> {
-        let observation = await!(self.control.observer().observe())?;
-        let map_info = await!(self.control.observer().get_map_info())?;
+        let observation = await!(self.observer.observe())?;
+        let map_info = await!(self.observer.get_map_info())?;
 
         let step = observation.get_current_step();
 
@@ -151,7 +171,7 @@ impl SimpleBot {
             for u in units {
                 let target = find_random_location(&map_info);
                 await!(
-                    self.control.action().send_action(
+                    self.action.send_action(
                         Action::new(Ability::Smart)
                             .units([u].iter())
                             .target(ActionTarget::Location(target))
@@ -187,16 +207,29 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let melee = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-    ).launcher_settings(create_launcher_settings(&args)?)
+    let mut agent1 = AgentBuilder::new().race(Race::Terran);
+    let mut agent2 = AgentBuilder::new().race(Race::Terran);
+
+    let bot1 = SimpleBot::new(
+        agent1.add_observer_client(),
+        agent1.add_action_client(),
+    );
+    let bot2 = SimpleBot::new(
+        agent2.add_observer_client(),
+        agent2.add_action_client(),
+    );
+
+    bot1.spawn(&handle, agent1.take_event_stream()?)?;
+    bot2.spawn(&handle, agent2.take_event_stream()?)?;
+
+    let melee = MeleeBuilder::new()
+        .add_player(agent1)
+        .add_player(agent2)
+        .launcher_settings(create_launcher_settings(&args)?)
         .repeat_forever(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .update_scheme(UpdateScheme::Interval(
+            args.flag_step_size.unwrap_or(1),
+        ))
         .break_on_ctrlc(args.flag_wine)
         .handle(handle)
         .create()?;
