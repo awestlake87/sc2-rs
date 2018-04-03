@@ -12,64 +12,12 @@ use super::{Error, Result};
 use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
 
-// use ctrlc;
-// use futures::prelude::*;
-// use futures::sync;
-// use organelle::{Axon, Impulse, Soma};
-
-// use super::{Error, Result};
-// use synapses::Synapse;
-
-// /// soma that stops the organelle upon Ctrl-C
-// pub struct CtrlcBreakerSoma;
-
-// impl CtrlcBreakerSoma {
-//     /// create a new Ctrl-C breaker soma
-//     pub fn axon() -> Axon<Self> {
-//         Axon::new(Self {}, vec![], vec![])
-//     }
-// }
-
-// impl Soma for CtrlcBreakerSoma {
-//     type Synapse = Synapse;
-//     type Error = Error;
-
-//     #[async(boxed)]
-//     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-//         match imp {
-//             Impulse::Start(_, tx, handle) => {
-//                 let (sync_tx, sync_rx) = sync::mpsc::channel(1);
-
-//                 ctrlc::set_handler(move || {
-//                     if let Err(e) = sync_tx.clone().send(()).wait() {
-//                         eprintln!("unable to send Ctrl-C signal {:?}", e);
-//                     }
-//                 })?;
-
-//                 handle.spawn(
-//                     sync_rx
-//                         .and_then(move |_| {
-//                             tx.clone().send(Impulse::Stop).map_err(|_| ())
-//                         })
-//                         .into_future()
-//                         .map(|_| ())
-//                         .map_err(|_| ()),
-//                 );
-
-//                 Ok(self)
-//             },
-
-//             _ => Ok(self),
-//         }
-//     }
-// }
-
-/// update scheme for the agents to use
+/// Update scheme for the agents to use.
 #[derive(Debug, Copy, Clone)]
 pub enum UpdateScheme {
-    /// update as fast as possible
+    /// Update as fast as possible.
     Realtime,
-    /// step the game with a fixed interval
+    /// Step the game with a fixed interval.
     Interval(u32),
 }
 
@@ -130,10 +78,18 @@ impl MeleeBuilder {
         }
     }
 
-    /// The method of updating the game instance.
-    pub fn update_scheme(self, scheme: UpdateScheme) -> Self {
+    /// Step the game instance with a discrete interval
+    pub fn step_interval(self, steps: u32) -> Self {
         Self {
-            update_scheme: scheme,
+            update_scheme: UpdateScheme::Interval(steps),
+            ..self
+        }
+    }
+
+    /// Step the bot as fast as possible
+    pub fn step_realtime(self) -> Self {
+        Self {
+            update_scheme: UpdateScheme::Realtime,
             ..self
         }
     }
@@ -388,56 +344,56 @@ enum MeleeRequest {
     RunGame(UpdateScheme, oneshot::Sender<()>),
 }
 
-/// wrapper around a sender to provide a melee interface
+/// Wrapper around a sender to provide a melee interface.
 #[derive(Debug, Clone)]
 pub struct MeleeClient {
     tx: mpsc::Sender<MeleeRequest>,
 }
 
-/// interface to be enforced by melee dendrites
+/// Interface to be enforced by melee dendrites.
 pub trait MeleeContract: Sized {
-    /// errors from the dendrite
+    /// Errors from the dendrite.
     type Error: std::error::Error + Send + Into<Error>;
 
-    /// fetch the player setup from the agent
+    /// Fetch the player setup from the agent.
     fn get_player_setup(
         self,
         game: GameSetup,
     ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
 
-    /// connect to an instance
+    /// Connect to an instance.
     fn connect(self, url: Url)
         -> Box<Future<Item = Self, Error = Self::Error>>;
 
-    /// create a game
+    /// Create a game.
     fn create_game(
         self,
         game: GameSetup,
         players: Vec<PlayerSetup>,
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
 
-    /// join a game
+    /// Join a game.
     fn join_game(
         self,
         setup: PlayerSetup,
         ports: Option<GamePorts>,
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
 
-    /// run the game
+    /// Run the game.
     fn run_game(
         self,
         update_scheme: UpdateScheme,
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
 }
 
-/// wrapper around a receiver to provide a controlled interface
+/// Wrapper around a receiver to provide a controlled interface.
 #[derive(Debug)]
 pub struct MeleeDendrite {
     rx: mpsc::Receiver<MeleeRequest>,
 }
 
 impl MeleeDendrite {
-    /// wrap a dendrite and use the contract to respond to any requests
+    /// Wrap a dendrite and use the contract to respond to any requests.
     #[async]
     pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
     where
@@ -495,7 +451,7 @@ impl MeleeDendrite {
 }
 
 impl MeleeClient {
-    /// get a player setup from the agent
+    /// Get a player setup from the agent.
     #[async]
     pub fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
@@ -509,7 +465,7 @@ impl MeleeClient {
         await!(rx.map_err(|_| Error::from("unable to receive player setup")))
     }
 
-    /// tell agent to connect to instance
+    /// Tell agent to connect to instance.
     #[async]
     pub fn connect(self, url: Url) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -523,7 +479,7 @@ impl MeleeClient {
         await!(rx.map_err(|_| Error::from("unable to receive player setup")))
     }
 
-    /// tell agent to create a game
+    /// Tell agent to create a game.
     #[async]
     pub fn create_game(
         self,
@@ -541,7 +497,7 @@ impl MeleeClient {
         await!(rx.map_err(|_| Error::from("unable to create game")))
     }
 
-    /// tell agent to join a game
+    /// Tell agent to join a game.
     #[async]
     pub fn join_game(
         self,
@@ -559,7 +515,7 @@ impl MeleeClient {
         await!(rx.map_err(|_| Error::from("unable to join game")))
     }
 
-    /// run the game to completion
+    /// Run the game to completion.
     #[async]
     pub fn run_game(self, update_scheme: UpdateScheme) -> Result<()> {
         let (tx, rx) = oneshot::channel();

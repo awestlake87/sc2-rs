@@ -41,7 +41,7 @@ pub use self::action::ActionClient;
 pub use self::agent::{AgentBuilder, Event, EventAck};
 pub use self::computer::ComputerBuilder;
 pub use self::launcher::LauncherSettings;
-pub use self::melee::{MeleeBuilder, UpdateScheme};
+pub use self::melee::MeleeBuilder;
 pub use self::observer::{Observation, ObserverClient};
 
 use std::path::PathBuf;

@@ -33,7 +33,6 @@ use sc2::{
     Observation,
     ObserverClient,
     Result,
-    UpdateScheme,
 };
 use sc2::data::{
     Ability,
@@ -313,9 +312,7 @@ quick_main!(|| -> sc2::Result<()> {
         .add_player(zerg)
         .launcher_settings(create_launcher_settings(&args)?)
         .one_and_done(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(
-            args.flag_step_size.unwrap_or(1),
-        ))
+        .step_interval(args.flag_step_size.unwrap_or(1))
         .break_on_ctrlc(args.flag_wine)
         .handle(&handle)
         .create()?;
