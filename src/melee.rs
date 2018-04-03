@@ -1,17 +1,68 @@
-use std::{self, mem};
+use std;
 
+use ctrlc;
+use futures::future::Either;
 use futures::prelude::*;
+use futures::sync;
 use futures::unsync::{mpsc, oneshot};
-use organelle;
-use organelle::{Axon, Constraint, Impulse, Organelle, Soma};
 use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, Result};
-use ctrlc_breaker::CtrlcBreakerSoma;
 use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
-use synapses::{Dendrite, Synapse, Terminal};
+
+// use ctrlc;
+// use futures::prelude::*;
+// use futures::sync;
+// use organelle::{Axon, Impulse, Soma};
+
+// use super::{Error, Result};
+// use synapses::Synapse;
+
+// /// soma that stops the organelle upon Ctrl-C
+// pub struct CtrlcBreakerSoma;
+
+// impl CtrlcBreakerSoma {
+//     /// create a new Ctrl-C breaker soma
+//     pub fn axon() -> Axon<Self> {
+//         Axon::new(Self {}, vec![], vec![])
+//     }
+// }
+
+// impl Soma for CtrlcBreakerSoma {
+//     type Synapse = Synapse;
+//     type Error = Error;
+
+//     #[async(boxed)]
+//     fn update(self, imp: Impulse<Self::Synapse>) -> Result<Self> {
+//         match imp {
+//             Impulse::Start(_, tx, handle) => {
+//                 let (sync_tx, sync_rx) = sync::mpsc::channel(1);
+
+//                 ctrlc::set_handler(move || {
+//                     if let Err(e) = sync_tx.clone().send(()).wait() {
+//                         eprintln!("unable to send Ctrl-C signal {:?}", e);
+//                     }
+//                 })?;
+
+//                 handle.spawn(
+//                     sync_rx
+//                         .and_then(move |_| {
+//                             tx.clone().send(Impulse::Stop).map_err(|_| ())
+//                         })
+//                         .into_future()
+//                         .map(|_| ())
+//                         .map_err(|_| ()),
+//                 );
+
+//                 Ok(self)
+//             },
+
+//             _ => Ok(self),
+//         }
+//     }
+// }
 
 /// update scheme for the agents to use
 #[derive(Debug, Copy, Clone)]
@@ -22,7 +73,6 @@ pub enum UpdateScheme {
     Interval(u32),
 }
 
-/// empty trait to prevent users from passing their own somas to MeleeBuilder
 pub trait MeleeCompetitor {
     fn spawn(
         &mut self,
@@ -31,7 +81,7 @@ pub trait MeleeCompetitor {
     ) -> Result<()>;
 }
 
-/// build a Melee coordinator
+/// Build a Melee coordinator.
 pub struct MeleeBuilder {
     players: Vec<Box<MeleeCompetitor>>,
 
@@ -43,7 +93,7 @@ pub struct MeleeBuilder {
 }
 
 impl MeleeBuilder {
-    /// start building a melee soma with the given agent or computer somas
+    /// Start building a Melee coordinator.
     pub fn new() -> Self {
         Self {
             players: vec![],
@@ -56,7 +106,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// the settings for the launcher soma
+    /// The settings for the launcher.
     pub fn launcher_settings(self, settings: LauncherSettings) -> Self {
         Self {
             launcher_settings: Some(settings),
@@ -64,7 +114,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// play one game with the given settings
+    /// Play one game with the given settings.
     pub fn one_and_done(self, game: GameSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::OneAndDone(game)),
@@ -72,7 +122,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// keep restarting game with the given settings
+    /// Keep restarting game with the given settings.
     pub fn repeat_forever(self, game: GameSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::EndlessRepeat(game)),
@@ -80,7 +130,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// the method of updating the game instance
+    /// The method of updating the game instance.
     pub fn update_scheme(self, scheme: UpdateScheme) -> Self {
         Self {
             update_scheme: scheme,
@@ -88,7 +138,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// stop running upon CTRL-C
+    /// Stop running upon CTRL-C.
     ///
     /// this is only necessary with Wine. CTRL-C doesn't seem to kill it for
     /// some reason by default.
@@ -99,14 +149,7 @@ impl MeleeBuilder {
         }
     }
 
-    /// the tokio core handle to use
-    pub fn handle(self, handle: reactor::Handle) -> Self {
-        Self {
-            handle: Some(handle),
-            ..self
-        }
-    }
-
+    /// Add a player to the Melee coordinator.
     pub fn add_player<T>(mut self, player: T) -> Self
     where
         T: MeleeCompetitor + Sized + 'static,
@@ -115,7 +158,15 @@ impl MeleeBuilder {
         self
     }
 
-    /// build the melee coordinator
+    /// Provide a handle to spawn background tasks.
+    pub fn handle(self, handle: &reactor::Handle) -> Self {
+        Self {
+            handle: Some(handle.clone()),
+            ..self
+        }
+    }
+
+    /// Build the Melee coordinator.
     pub fn create(self) -> Result<Melee> {
         if self.launcher_settings.is_none() {
             bail!("missing launcher settings")
@@ -137,33 +188,31 @@ impl MeleeBuilder {
             player.spawn(&handle, MeleeDendrite { rx: rx })?;
         }
 
-        let mut organelle = Organelle::new(
-            MeleeSoma::axon(
-                self.suite.unwrap(),
-                self.update_scheme,
-                Launcher::create(self.launcher_settings.unwrap())?,
-                melee_clients,
-            )?,
-            handle.clone(),
-        );
-
-        let melee = organelle.nucleus();
-
-        if self.break_on_ctrlc {
-            organelle.add_soma(CtrlcBreakerSoma::axon());
-        }
+        assert!(melee_clients.len() == 2);
 
         Ok(Melee {
-            handle: handle,
-            organelle: organelle,
+            suite: self.suite.unwrap(),
+            update_scheme: self.update_scheme,
+            launcher: Launcher::create(self.launcher_settings.unwrap())?,
+            agents: melee_clients,
+
+            break_on_ctrlc: self.break_on_ctrlc,
         })
     }
 }
 
-/// coordinates matches between the given players
+enum MeleeSuite {
+    OneAndDone(GameSetup),
+    EndlessRepeat(GameSetup),
+}
+
 pub struct Melee {
-    handle: reactor::Handle,
-    organelle: Organelle<Axon<MeleeSoma>>,
+    suite: MeleeSuite,
+    agents: Vec<MeleeClient>,
+    update_scheme: UpdateScheme,
+    launcher: Launcher,
+
+    break_on_ctrlc: bool,
 }
 
 impl IntoFuture for Melee {
@@ -173,214 +222,156 @@ impl IntoFuture for Melee {
 
     #[async(boxed)]
     fn into_future(self) -> Result<()> {
-        await!(self.organelle.run(self.handle))?;
+        if self.break_on_ctrlc {
+            let (tx, rx) = sync::mpsc::channel(1);
+
+            ctrlc::set_handler(move || {
+                if let Err(e) = tx.clone().send(()).wait() {
+                    eprintln!("unable to send Ctrl-C signal {:?}", e);
+                }
+            })?;
+
+            await!(
+                self.run().select2(rx.into_future(),).then(
+                    |result| match result {
+                        Ok(_) => Ok(()),
+                        Err(Either::A((e, _))) => Err(e),
+                        Err(Either::B((_, _))) => {
+                            Err(Error::from("CTRL-C handler failed"))
+                        },
+                    },
+                )
+            )?;
+        }
         Ok(())
     }
 }
 
-/// suite of games to choose from when pitting bots against each other
-enum MeleeSuite {
-    OneAndDone(GameSetup),
-    /// repeat this game indefinitely
-    EndlessRepeat(GameSetup),
-}
+impl Melee {
+    #[async]
+    fn run(mut self) -> Result<()> {
+        let (game, _suite) = match self.suite {
+            MeleeSuite::OneAndDone(game) => (game, None),
+            MeleeSuite::EndlessRepeat(game) => {
+                let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
 
-/// controller that pits agents against each other
-pub struct MeleeSoma {
-    suite: Option<MeleeSuite>,
-    agents: Vec<Option<MeleeClient>>,
-    update_scheme: UpdateScheme,
-    launcher: Option<Launcher>,
-}
-
-impl MeleeSoma {
-    /// melee soma only works as a controller in a melee organelle
-    fn axon(
-        suite: MeleeSuite,
-        update_scheme: UpdateScheme,
-        launcher: Launcher,
-        melee_clients: Vec<MeleeClient>,
-    ) -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                suite: Some(suite),
-                agents: melee_clients
-                    .into_iter()
-                    .map(|c| Some(c))
-                    .collect(),
-                update_scheme: update_scheme,
-                launcher: Some(launcher),
+                (game, suite)
             },
-            vec![],
-            vec![],
-        ))
-    }
-}
-
-impl Soma for MeleeSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
-        match msg {
-            Impulse::Start(_, main_tx, handle) => {
-                assert!(self.launcher.is_some());
-                assert!(self.suite.is_some());
-
-                if self.agents.len() != 2 {
-                    bail!("expected 2 agents, got {}", self.agents.len())
-                }
-
-                assert!(self.agents[0].is_some() && self.agents[1].is_some());
-
-                let main_tx2 = main_tx.clone();
-
-                handle.spawn(
-                    run_melee(
-                        mem::replace(&mut self.suite, None).unwrap(),
-                        self.update_scheme,
-                        mem::replace(&mut self.launcher, None).unwrap(),
-                        (
-                            mem::replace(&mut self.agents[0], None).unwrap(),
-                            mem::replace(&mut self.agents[1], None).unwrap(),
-                        ),
-                        main_tx2,
-                    ).or_else(move |e| {
-                        main_tx
-                            .send(Impulse::Error(e.into()))
-                            .map(|_| ())
-                            .map_err(|_| ())
-                    }),
-                );
-
-                Ok(self)
-            },
-
-            _ => bail!("unexpected impulse"),
-        }
-    }
-}
-
-#[async]
-fn run_melee(
-    suite: MeleeSuite,
-    update_scheme: UpdateScheme,
-    mut launcher: Launcher,
-    agents: (MeleeClient, MeleeClient),
-    main_tx: mpsc::Sender<Impulse<Synapse>>,
-) -> Result<()> {
-    let (game, _suite) = match suite {
-        MeleeSuite::OneAndDone(game) => (game, None),
-        MeleeSuite::EndlessRepeat(game) => {
-            let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
-
-            (game, suite)
-        },
-    };
-
-    let player1 = await!(agents.0.clone().get_player_setup(game.clone()))?;
-    let player2 = await!(agents.1.clone().get_player_setup(game.clone()))?;
-
-    let is_pvp = {
-        if player1.is_player() && player2.is_computer() {
-            false
-        } else if player1.is_computer() && player2.is_player() {
-            false
-        } else if player1.is_player() && player2.is_player() {
-            true
-        } else {
-            bail!("invalid player setups")
-        }
-    };
-
-    if is_pvp {
-        // launch both at the same time
-        let instances = {
-            let instance1 = launcher.launch()?;
-            let instance2 = launcher.launch()?;
-
-            (instance1, instance2)
         };
 
-        // connect to both at the same time
-        {
-            let connect1 = agents.0.clone().connect(instances.0.get_url()?);
-            let connect2 = agents.1.clone().connect(instances.1.get_url()?);
-
-            await!(connect1.join(connect2))?;
-        }
-
-        await!(
-            agents
-                .0
+        let player1 = await!(
+            self.agents[0]
                 .clone()
-                .create_game(game.clone(), vec![player1, player2])
+                .get_player_setup(game.clone())
+        )?;
+        let player2 = await!(
+            self.agents[1]
+                .clone()
+                .get_player_setup(game.clone())
         )?;
 
-        let mut ports = launcher.create_game_ports();
-
-        ports.client_ports.push(instances.0.ports);
-        ports.client_ports.push(instances.1.ports);
-
-        {
-            let join1 = agents
-                .0
-                .clone()
-                .join_game(player1, Some(ports.clone()));
-            let join2 = agents.1.clone().join_game(player2, Some(ports));
-
-            await!(join1.join(join2))?;
-        }
-
-        {
-            let run1 = agents.0.clone().run_game(update_scheme);
-            let run2 = agents.1.clone().run_game(update_scheme);
-
-            await!(run1.join(run2))?;
-        }
-
-        // just quit for now
-        await!(
-            main_tx
-                .send(Impulse::Stop)
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to stop"))
-        )?;
-    } else {
-        let (player, computer) = if player1.is_computer() {
-            ((agents.1, player2), (agents.0, player1))
-        } else if player2.is_computer() {
-            ((agents.0, player1), (agents.1, player2))
-        } else {
-            unreachable!()
+        let is_pvp = {
+            if player1.is_player() && player2.is_computer() {
+                false
+            } else if player1.is_computer() && player2.is_player() {
+                false
+            } else if player1.is_player() && player2.is_player() {
+                true
+            } else {
+                bail!("invalid player setups")
+            }
         };
 
-        assert!(player.1.is_player() && computer.1.is_computer());
+        if is_pvp {
+            // launch both at the same time
+            let instances = {
+                let instance1 = self.launcher.launch()?;
+                let instance2 = self.launcher.launch()?;
 
-        let instance = launcher.launch()?;
+                (instance1, instance2)
+            };
 
-        await!(player.0.clone().connect(instance.get_url()?))?;
-        await!(
-            player
-                .0
-                .clone()
-                .create_game(game.clone(), vec![player.1, computer.1])
-        )?;
-        await!(player.0.clone().join_game(player.1, None))?;
+            // connect to both at the same time
+            {
+                let connect1 = self.agents[0]
+                    .clone()
+                    .connect(instances.0.get_url()?);
+                let connect2 = self.agents[1]
+                    .clone()
+                    .connect(instances.1.get_url()?);
 
-        await!(player.0.clone().run_game(update_scheme))?;
+                await!(connect1.join(connect2))?;
+            }
 
-        // just quit for now
-        await!(
-            main_tx
-                .send(Impulse::Stop)
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to stop"))
-        )?;
+            await!(
+                self.agents[0]
+                    .clone()
+                    .create_game(game.clone(), vec![player1, player2])
+            )?;
+
+            let mut ports = self.launcher.create_game_ports();
+
+            ports.client_ports.push(instances.0.ports);
+            ports.client_ports.push(instances.1.ports);
+
+            {
+                let join1 = self.agents[0]
+                    .clone()
+                    .join_game(player1, Some(ports.clone()));
+                let join2 = self.agents[1]
+                    .clone()
+                    .join_game(player2, Some(ports));
+
+                await!(join1.join(join2))?;
+            }
+
+            {
+                let run1 = self.agents[0]
+                    .clone()
+                    .run_game(self.update_scheme);
+                let run2 = self.agents[1]
+                    .clone()
+                    .run_game(self.update_scheme);
+
+                await!(run1.join(run2))?;
+            }
+
+            // just quit for now
+            return Ok(());
+        } else {
+            let (player, computer) = if player1.is_computer() {
+                (
+                    (self.agents[1].clone(), player2),
+                    (self.agents[0].clone(), player1),
+                )
+            } else if player2.is_computer() {
+                (
+                    (self.agents[0].clone(), player1),
+                    (self.agents[1].clone(), player2),
+                )
+            } else {
+                unreachable!()
+            };
+
+            assert!(player.1.is_player() && computer.1.is_computer());
+
+            let instance = self.launcher.launch()?;
+
+            await!(player.0.clone().connect(instance.get_url()?))?;
+            await!(
+                player
+                    .0
+                    .clone()
+                    .create_game(game.clone(), vec![player.1, computer.1])
+            )?;
+            await!(player.0.clone().join_game(player.1, None))?;
+
+            await!(player.0.clone().run_game(self.update_scheme))?;
+
+            // just quit for now
+            return Ok(());
+        }
     }
-
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -446,10 +437,6 @@ pub struct MeleeDendrite {
 }
 
 impl MeleeDendrite {
-    fn new(rx: mpsc::Receiver<MeleeRequest>) -> Self {
-        Self { rx: rx }
-    }
-
     /// wrap a dendrite and use the contract to respond to any requests
     #[async]
     pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
@@ -508,10 +495,6 @@ impl MeleeDendrite {
 }
 
 impl MeleeClient {
-    fn new(tx: mpsc::Sender<MeleeRequest>) -> Self {
-        Self { tx: tx }
-    }
-
     /// get a player setup from the agent
     #[async]
     pub fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {

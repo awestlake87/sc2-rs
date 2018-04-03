@@ -15,7 +15,6 @@ extern crate ctrlc;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
-extern crate organelle;
 extern crate protobuf;
 extern crate rand;
 extern crate regex;
@@ -31,12 +30,10 @@ mod agent;
 mod client;
 mod action;
 mod computer;
-mod ctrlc_breaker;
 mod instance;
 mod launcher;
 mod melee;
 mod observer;
-mod synapses;
 
 pub mod data;
 
@@ -44,15 +41,12 @@ pub use self::action::ActionClient;
 pub use self::agent::{AgentBuilder, Event, EventAck};
 pub use self::computer::ComputerBuilder;
 pub use self::launcher::LauncherSettings;
-pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
+pub use self::melee::{MeleeBuilder, UpdateScheme};
 pub use self::observer::{Observation, ObserverClient};
 
 use std::path::PathBuf;
 
 error_chain! {
-    links {
-        Organelle(organelle::Error, organelle::ErrorKind) #[doc="organelle glue"];
-    }
     foreign_links {
         Io(std::io::Error) #[doc="link io errors"];
 
@@ -112,12 +106,6 @@ error_chain! {
             description("unable to convert protobuf data to game data")
             display("unable to convert protobuf data: {}", msg)
         }
-    }
-}
-
-impl From<Error> for organelle::Error {
-    fn from(e: Error) -> organelle::Error {
-        organelle::Error::with_chain(e, organelle::ErrorKind::SomaError)
     }
 }
 

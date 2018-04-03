@@ -8,9 +8,6 @@ documentation = "https://docs.rs/sc2-rs"
 homepage = "https://github.com/awestlake87/sc2-rs"
 repository = "https://github.com/awestlake87/sc2-rs"
 
-[features]
-with-organelle = []
-
 [dependencies]
 bytes = "0"
 ctrlc = "3"
@@ -18,7 +15,6 @@ error-chain = "0.11"
 futures-await = "0.1"
 glob = "0.2"
 nalgebra = "0.13"
-organelle = { version = "0.7", features = ["visualizer"] }
 protobuf = "1.4"
 rand = "0.4"
 regex = "0.2"

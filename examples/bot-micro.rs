@@ -148,9 +148,7 @@ impl MarineMicroBot {
 
                 Ok(self)
             },
-            Event::UnitDestroyed(unit) => {
-                await!(self.on_unit_destroyed(unit))
-            },
+            Event::UnitDestroyed(unit) => await!(self.on_unit_destroyed(unit)),
             Event::Step => await!(self.on_step()),
             _ => Ok(self),
         }
@@ -319,7 +317,7 @@ quick_main!(|| -> sc2::Result<()> {
             args.flag_step_size.unwrap_or(1),
         ))
         .break_on_ctrlc(args.flag_wine)
-        .handle(handle)
+        .handle(&handle)
         .create()?;
 
     core.run(melee.into_future())?;

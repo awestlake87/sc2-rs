@@ -1,8 +1,6 @@
-use std;
 use std::mem;
 use std::rc::Rc;
 
-use futures::future;
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
 use sc2_proto::sc2api;
@@ -57,6 +55,7 @@ pub struct EventAck {
 }
 
 impl EventAck {
+    /// Send a signal indicating that the user is done handling this event.
     #[async]
     pub fn done(self) -> Result<()> {
         self.tx
@@ -78,6 +77,7 @@ pub struct AgentBuilder {
 }
 
 impl AgentBuilder {
+    /// Create a new AgentBuilder with the default settings.
     pub fn new() -> Self {
         let client = ProtoClientBuilder::new();
         let action = ActionBuilder::new().proto_client(client.add_client());
@@ -97,6 +97,7 @@ impl AgentBuilder {
         }
     }
 
+    /// Set the race of the player.
     pub fn race(self, race: Race) -> Self {
         Self {
             race: Some(race),
@@ -104,14 +105,21 @@ impl AgentBuilder {
         }
     }
 
+    /// Add an Observer client to observe the game state.
     pub fn add_observer_client(&self) -> ObserverClient {
         self.observer.as_ref().unwrap().add_client()
     }
 
+    /// Add an Action client to dispatch commands.
     pub fn add_action_client(&self) -> ActionClient {
         self.action.as_ref().unwrap().add_client()
     }
 
+    /// Take the stream of game events to listen for.
+    ///
+    /// This can be called only once per builder. Subsequent calls will fail.
+    /// The stream item is a tuple containing the event, and a promise to be
+    /// fulfilled once the user is done with the event.
     pub fn take_event_stream(
         &mut self,
     ) -> Result<mpsc::Receiver<(Event, EventAck)>> {
@@ -406,7 +414,7 @@ pub struct AgentTerminal {
 
 impl AgentTerminal {
     #[async]
-    fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
+    fn get_player_setup(self, _game: GameSetup) -> Result<PlayerSetup> {
         Ok(PlayerSetup::Player(self.race))
     }
 
@@ -421,7 +429,7 @@ impl AgentTerminal {
                 .map_err(|_| Error::from("unable to send event"))
         )?;
 
-        if let Err(e) = await!(rx) {
+        if let Err(_) = await!(rx) {
             // ACK went out of scope, we can assume this means they are done
             // using the event
         }

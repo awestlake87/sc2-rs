@@ -9,7 +9,6 @@ extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
-extern crate organelle;
 extern crate rand;
 extern crate serde;
 extern crate tokio_core;
@@ -215,7 +214,7 @@ quick_main!(|| -> sc2::Result<()> {
             args.flag_step_size.unwrap_or(1),
         ))
         .break_on_ctrlc(args.flag_wine)
-        .handle(handle.clone())
+        .handle(&handle)
         .create()?;
 
     core.run(melee.into_future())?;

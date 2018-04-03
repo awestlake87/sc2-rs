@@ -58,11 +58,6 @@ impl MeleeCompetitor for ComputerBuilder {
     }
 }
 
-pub struct ComputerSoma {
-    setup: PlayerSetup,
-    melee: Option<MeleeDendrite>,
-}
-
 struct ComputerDendrite {
     setup: PlayerSetup,
 }
