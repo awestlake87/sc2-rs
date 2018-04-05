@@ -1,0 +1,11 @@
+image: "rust:latest"
+
+before_script:
+  - rustup update nightly
+  - rustup default nightly
+
+test:cargo:
+  script:
+    - rustc --version && cargo --version
+    - cargo build --all --verbose
+    - cargo test --all --verbose

@@ -1,4 +1,4 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -20,6 +20,16 @@ use std::path::PathBuf;
 use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
+use sc2::data::{
+    DebugCommand,
+    DebugText,
+    DebugTextTarget,
+    Difficulty,
+    GameSetup,
+    Map,
+    Point2,
+    Race,
+};
 use sc2::{
     AgentBuilder,
     ComputerBuilder,
@@ -31,16 +41,6 @@ use sc2::{
     MeleeBuilder,
     ObserverClient,
     Result,
-};
-use sc2::data::{
-    DebugCommand,
-    DebugText,
-    DebugTextTarget,
-    Difficulty,
-    GameSetup,
-    Map,
-    Point2,
-    Race,
 };
 use tokio_core::reactor;
 
