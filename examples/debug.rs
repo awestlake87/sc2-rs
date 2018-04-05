@@ -21,9 +21,9 @@ use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
 use sc2::{
-    ActionClient,
     AgentBuilder,
     ComputerBuilder,
+    DebugClient,
     Error,
     Event,
     EventAck,
@@ -102,14 +102,14 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 
 struct DebugBot {
     observer: ObserverClient,
-    action: ActionClient,
+    debug: DebugClient,
 }
 
 impl DebugBot {
-    fn new(observer: ObserverClient, action: ActionClient) -> Self {
+    fn new(observer: ObserverClient, debug: DebugClient) -> Self {
         Self {
             observer: observer,
-            action: action,
+            debug: debug,
         }
     }
     fn spawn(
@@ -147,11 +147,11 @@ impl DebugBot {
         let observation = await!(self.observer.observe())?;
         let unit_type_data = await!(self.observer.get_unit_data())?;
 
-        await!(self.action.send_debug(
+        await!(self.debug.send_debug(
             DebugText::new("in the corner".to_string()).color((0xFF, 0, 0)),
         ))?;
         await!(
-            self.action.send_debug(
+            self.debug.send_debug(
                 DebugText::new("screen pos".to_string())
                     .target(DebugTextTarget::Screen(Point2::new(1.0, 1.0)))
                     .color((0, 0xFF, 0))
@@ -173,7 +173,7 @@ impl DebugBot {
             .collect();
 
         for cmd in commands {
-            await!(self.action.send_debug(cmd))?;
+            await!(self.debug.send_debug(cmd))?;
         }
 
         Ok(self)
@@ -196,7 +196,7 @@ quick_main!(|| -> sc2::Result<()> {
     let mut agent = AgentBuilder::new().race(Race::Terran);
     let bot = DebugBot::new(
         agent.add_observer_client(),
-        agent.add_action_client(),
+        agent.add_debug_client(),
     );
     bot.spawn(&handle, agent.take_event_stream()?)?;
 

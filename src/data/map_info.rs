@@ -3,7 +3,7 @@ use sc2_proto::sc2api;
 use super::super::{FromProto, IntoSc2, Result};
 use data::{ImageData, Point2, Rect2};
 
-/// terrain info
+/// Info about the terrain.
 #[derive(Debug, Clone)]
 pub struct MapInfo {
     dimensions: (u32, u32),
@@ -17,29 +17,29 @@ pub struct MapInfo {
 }
 
 impl MapInfo {
-    /// dimensions of the map
+    /// Dimensions of the map.
     pub fn get_dimensions(&self) -> (u32, u32) {
         self.dimensions
     }
 
-    /// image that reveals pathable tiles
+    /// Image that reveals pathable tiles.
     pub fn get_pathing_grid(&self) -> &ImageData {
         &self.pathing_grid
     }
-    /// image that reveals placable tiles
+    /// Image that reveals placable tiles.
     pub fn get_placement_grid(&self) -> &ImageData {
         &self.placement_grid
     }
-    /// image that reveals terrain height
+    /// Image that reveals terrain height.
     pub fn get_terrain_height(&self) -> &ImageData {
         &self.terrain_height
     }
 
-    /// rectangle of the playable area
+    /// Rectangle of the playable area.
     pub fn get_playable_area(&self) -> Rect2 {
         self.playable_area
     }
-    /// starting locations of the enemy bases
+    /// Starting locations of the enemy bases.
     pub fn get_enemy_start_locations(&self) -> &[Point2] {
         &self.enemy_start_locations
     }

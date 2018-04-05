@@ -8,47 +8,47 @@ use tokio_core::reactor;
 use url::Url;
 
 use super::{Error, IntoProto, Result};
-use action::{ActionBuilder, ActionClient, ActionControlClient};
+use action::{ActionBuilder, ActionClient, ActionControlClient, DebugClient};
 use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
 
-/// an event from the game
+/// An event from the game.
 #[derive(Debug, Clone)]
 pub enum Event {
-    /// game has loaded - not called for fast restarts
+    /// Game has loaded - not called for fast restarts.
     GameLoaded,
-    /// game has started
+    /// Game has started.
     GameStarted,
-    /// game has ended
+    /// Game has ended.
     GameEnded,
 
-    /// a unit was destroyed
+    /// A unit was destroyed.
     UnitDestroyed(Rc<Unit>),
-    /// a unit was created
+    /// A unit was created.
     UnitCreated(Rc<Unit>),
-    /// a unit does not have any orders
+    /// A unit does not have any orders.
     UnitIdle(Rc<Unit>),
-    /// a unit was detected
+    /// A unit was detected.
     UnitDetected(Rc<Unit>),
 
-    /// an upgrade completed
+    /// An upgrade completed.
     UpgradeCompleted(Upgrade),
-    /// a unit finished constructing a building
+    /// A unit finished constructing a building.
     BuildingCompleted(Rc<Unit>),
 
-    /// number of nydus worms detected
+    /// Number of nydus worms detected.
     NydusWormsDetected(u32),
-    /// number of nukes launched
+    /// Number of nukes launched.
     NukesDetected(u32),
 
-    /// step the agent or observer
+    /// Step the agent or observer.
     Step,
 }
 
-/// notify the coordinator that we are done with this event.
+/// Notify the coordinator that we are done with this event.
 #[derive(Debug)]
 pub struct EventAck {
     tx: oneshot::Sender<()>,
@@ -64,7 +64,7 @@ impl EventAck {
     }
 }
 
-/// build an agent
+/// Build an agent.
 pub struct AgentBuilder {
     client: Option<ProtoClientBuilder>,
     action: Option<ActionBuilder>,
@@ -112,7 +112,15 @@ impl AgentBuilder {
 
     /// Add an Action client to dispatch commands.
     pub fn add_action_client(&self) -> ActionClient {
-        self.action.as_ref().unwrap().add_client()
+        self.action
+            .as_ref()
+            .unwrap()
+            .add_action_client()
+    }
+
+    /// Add a Debug client to use debugging tools.
+    pub fn add_debug_client(&self) -> DebugClient {
+        self.action.as_ref().unwrap().add_debug_client()
     }
 
     /// Take the stream of game events to listen for.
@@ -169,7 +177,6 @@ impl MeleeCompetitor for AgentBuilder {
     }
 }
 
-/// manages a player soma
 struct Agent {
     controller: Option<MeleeDendrite>,
     client: Option<ProtoClient>,

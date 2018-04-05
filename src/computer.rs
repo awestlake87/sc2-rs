@@ -7,14 +7,14 @@ use data::{Difficulty, GameSetup, PlayerSetup, Race};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
 
-/// build a built-in AI opponent
+/// Build a built-in AI opponent.
 pub struct ComputerBuilder {
     race: Race,
     difficulty: Difficulty,
 }
 
 impl ComputerBuilder {
-    /// create the builder
+    /// Create the builder.
     pub fn new() -> Self {
         Self {
             race: Race::Random,
@@ -22,7 +22,7 @@ impl ComputerBuilder {
         }
     }
 
-    /// set the race of the AI (default is Random)
+    /// Set the race of the AI (default is Random).
     pub fn race(self, race: Race) -> Self {
         Self {
             race: race,
@@ -30,7 +30,7 @@ impl ComputerBuilder {
         }
     }
 
-    /// set the difficulty of the AI (default is Medium)
+    /// Set the difficulty of the AI (default is Medium).
     pub fn difficulty(self, difficulty: Difficulty) -> Self {
         Self {
             difficulty: difficulty,
@@ -70,25 +70,18 @@ impl MeleeContract for ComputerDendrite {
         let setup = self.setup;
         Ok((self, setup))
     }
-    /// connect to an instance
     #[async(boxed)]
     fn connect(self, _: Url) -> Result<Self> {
         Ok(self)
     }
-
-    /// create a game
     #[async(boxed)]
     fn create_game(self, _: GameSetup, _: Vec<PlayerSetup>) -> Result<Self> {
         Ok(self)
     }
-
-    /// join a game
     #[async(boxed)]
     fn join_game(self, _: PlayerSetup, _: Option<GamePorts>) -> Result<Self> {
         Ok(self)
     }
-
-    /// run the game
     #[async(boxed)]
     fn run_game(self, _: UpdateScheme) -> Result<Self> {
         Ok(self)

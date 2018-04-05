@@ -42,8 +42,14 @@ impl ActionBuilder {
         }
     }
 
-    pub fn add_client(&self) -> ActionClient {
+    pub fn add_action_client(&self) -> ActionClient {
         ActionClient {
+            tx: self.user_tx.clone(),
+        }
+    }
+
+    pub fn add_debug_client(&self) -> DebugClient {
+        DebugClient {
             tx: self.user_tx.clone(),
         }
     }
@@ -190,7 +196,7 @@ pub struct ActionControlClient {
 }
 
 impl ActionControlClient {
-    /// step the action soma and send all commands to the game instance
+    /// Step the action service and send all commands to the game instance.
     #[async]
     pub fn step(self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -205,14 +211,14 @@ impl ActionControlClient {
     }
 }
 
-/// action interface for a game instance
+/// Action interface for a game instance.
 #[derive(Debug, Clone)]
 pub struct ActionClient {
     tx: mpsc::Sender<ActionRequest>,
 }
 
 impl ActionClient {
-    /// send a command to the game instance
+    /// Send a command to the game instance.
     pub fn send_action(
         &self,
         action: Action,
@@ -230,8 +236,16 @@ impl ActionClient {
             await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
         }
     }
+}
 
-    /// send a debug command to the game instance
+/// Debug interface for a game instance.
+#[derive(Debug, Clone)]
+pub struct DebugClient {
+    tx: mpsc::Sender<ActionRequest>,
+}
+
+impl DebugClient {
+    /// Send a debug command to the game instance.
     pub fn send_debug<T>(&self, cmd: T) -> impl Future<Item = (), Error = Error>
     where
         T: Into<DebugCommand> + 'static,

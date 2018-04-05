@@ -4,8 +4,8 @@
 
 //! StarCraft II API for Rust
 //!
-//! this API is intended to provide functionality similar to that of Blizzard
-//! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
+//! This API is intended to provide functionality similar to that of Blizzard
+//! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api).
 
 #[macro_use]
 extern crate error_chain;
@@ -37,7 +37,7 @@ mod observer;
 
 pub mod data;
 
-pub use self::action::ActionClient;
+pub use self::action::{ActionClient, DebugClient};
 pub use self::agent::{AgentBuilder, Event, EventAck};
 pub use self::computer::ComputerBuilder;
 pub use self::launcher::LauncherSettings;
@@ -58,50 +58,50 @@ error_chain! {
         Tungstenite(tungstenite::Error) #[doc="link to tungstenite errors"];
     }
     errors {
-        /// exe was not supplied to the coordinator
+        /// Executable was not supplied to the coordinator.
         ExeNotSpecified {
             description("exe not specified")
             display("StarCraft II exe was not specified")
         }
-        /// exe supplied to the coordinator does not exist
+        /// Executable supplied to the coordinator does not exist.
         ExeDoesNotExist(exe: PathBuf) {
             description("exe file does not exist")
             display("StarCraft II exe does not exist at {:?}", exe)
         }
 
-        /// client failed to open connection to the game instance
+        /// Client failed to open connection to the game instance.
         ClientOpenFailed {
             description("unable to open connection to the game instance")
             display("client open failed")
         }
-        /// client failed to send a message to the game instance
+        /// Client failed to send a message to the game instance.
         ClientSendFailed {
             description("unable to send message to the game instance")
             display("client send failed")
         }
-        /// client failed to receive a message from the game instance
+        /// Client failed to receive a message from the game instance.
         ClientRecvFailed {
             description("unable to receive message from game instance")
             display("client recv failed")
         }
-        /// client failed to initiate close handshake
+        /// Client failed to initiate close handshake.
         ClientCloseFailed {
             description("unable to initiate close handshake")
             display("client close failed")
         }
 
-        /// errors received from game instance
+        /// Errors received from game instance.
         GameErrors(errors: Vec<String>) {
             description("errors in game response")
             display("received errors: {:?}", errors)
         }
-        /// an error occurred in agent callback
+        /// An error occurred in agent callback.
         AgentError {
             description("error occurred in agent callback")
             display("error occurred in agent callback")
         }
 
-        /// invalid protobuf data from game instance
+        /// Invalid protobuf data from game instance.
         InvalidProtobuf(msg: String) {
             description("unable to convert protobuf data to game data")
             display("unable to convert protobuf data: {}", msg)
@@ -113,7 +113,7 @@ trait FromProto<T>
 where
     Self: Sized,
 {
-    /// convert from protobuf data
+    /// Convert from protobuf data.
     fn from_proto(p: T) -> Result<Self>;
 }
 
@@ -131,6 +131,6 @@ where
 }
 
 trait IntoProto<T> {
-    /// convert into protobuf data
+    /// Convert into protobuf data
     fn into_proto(self) -> Result<T>;
 }

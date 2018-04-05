@@ -1,4 +1,4 @@
-//! contains useful data exposed through interfaces to the game instance
+//! Contains useful data exposed through interfaces to the game instance.
 
 mod ability;
 mod action;
@@ -38,60 +38,60 @@ pub use self::score::Score;
 pub use self::unit::{Alliance, DisplayType, Tag, Unit, UnitType, UnitTypeData};
 pub use self::upgrade::{Upgrade, UpgradeData};
 
-/// color type for debug commands
+/// Color type for debug commands.
 pub type Color = (u8, u8, u8);
 
-/// generic structure to represent a 2D rectangle
+/// Generic structure to represent a 2D rectangle.
 #[derive(Debug, Copy, Clone)]
 pub struct Rect<T> {
-    /// x position of lefthand corner
+    /// X position of lefthand corner.
     pub x: T,
-    /// y position of lefthand corner
+    /// Y position of lefthand corner.
     pub y: T,
-    /// width of the rectangle
+    /// Width of the rectangle.
     pub w: T,
-    /// height of the rectangle
+    /// Height of the rectangle.
     pub h: T,
 }
 
-/// 2D vector used to specify direction
+/// 2D vector used to specify direction.
 pub type Vector2 = na::Vector2<f32>;
-/// 3D vector used to specify direction
+/// 3D vector used to specify direction.
 pub type Vector3 = na::Vector3<f32>;
-/// 2D point used to specify location
+/// 2D point used to specify location.
 pub type Point2 = geometry::Point2<f32>;
-/// 3D point used to specify location
+/// 3D point used to specify location.
 pub type Point3 = geometry::Point3<f32>;
 
-/// 2D rectangle represented by two points
+/// 2D rectangle represented by two points.
 #[derive(Debug, Copy, Clone)]
 pub struct Rect2 {
-    /// upper left-hand corner
+    /// Upper left-hand corner.
     pub from: Point2,
-    /// lower right-hand corner
+    /// Lower right-hand corner.
     pub to: Point2,
 }
 
 impl Rect2 {
-    /// returns the width and height of the rectangle
+    /// Returns the width and height of the rectangle.
     pub fn get_dimensions(&self) -> (f32, f32) {
         (self.to.x - self.from.x, self.to.y - self.from.y)
     }
 }
 
-/// 2D integer point used to specify a location
+/// 2D integer point used to specify a location.
 pub type Point2I = na::Vector2<i32>;
 
-/// 2D integer rectangle represented by two points
+/// 2D integer rectangle represented by two points.
 #[derive(Debug, Copy, Clone)]
 pub struct Rect2I {
-    /// upper left-hand corner
+    /// Upper left-hand corner.
     pub from: Point2I,
-    /// lower right-hand corner
+    /// Lower right-hand corner.
     pub to: Point2I,
 }
 
-/// visibility of a point on the terrain
+/// Visibility of a point on the terrain.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Visibility {
@@ -101,36 +101,36 @@ pub enum Visibility {
     FullHidden,
 }
 
-/// effect data
+/// Effect data.
 #[derive(Debug, Clone)]
 pub struct EffectData {
-    /// stable effect ID
+    /// Stable effect ID.
     effect: Ability,
-    /// effect name (corresponds to game's catalog)
+    /// Effect name (corresponds to game's catalog).
     name: String,
-    /// a more recognizable name of the effect
+    /// A more recognizable name of the effect.
     friendly_name: String,
-    /// size of the circle the effect impacts
+    /// Size of the circle the effect impacts.
     radius: f32,
 }
 
-/// visuals of a persistent ability on the map (eg. PsiStorm)
+/// Visuals of a persistent ability on the map (eg. PsiStorm).
 #[derive(Debug, Clone)]
 pub struct Effect {
-    /// stable effect ID
+    /// Stable effect ID.
     effect: Ability,
-    /// all the positions that this effect is impacting on the map
+    /// All the positions that this effect is impacting on the map.
     positions: Vec<Point2>,
 }
 
-/// power source information for Protoss
+/// Power source information for Protoss.
 #[derive(Debug, Copy, Clone)]
 pub struct PowerSource {
-    /// unit tag of the power source
+    /// Unit tag of the power source.
     tag: Tag,
-    /// position of the power source
+    /// Position of the power source.
     pos: Point2,
-    /// radius of the power source
+    /// Radius of the power source.
     radius: f32,
 }
 
@@ -147,21 +147,21 @@ impl From<raw::PowerSource> for PowerSource {
     }
 }
 
-/// information about a player in a replay
+/// Information about a player in a replay.
 #[derive(Debug, Copy, Clone)]
 pub struct ReplayPlayerInfo {
-    /// id of the player
+    /// Id of the player.
     player_id: u32,
-    /// player ranking
+    /// Player ranking.
     mmr: i32,
-    /// player actions per minute
+    /// Player actions per minute.
     apm: i32,
 
-    /// actual player race
+    /// Actual player race.
     race: Race,
-    /// selected player race (if Random or None, race will be different)
+    /// Selected player race (if Random or None, race will be different).
     race_selected: Option<Race>,
-    /// if the player won or lost
+    /// If the player won or lost.
     game_result: Option<GameResult>,
 }
 
@@ -170,7 +170,9 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
         Ok(Self {
             player_id: info.get_player_info().get_player_id(),
 
-            race: info.get_player_info().get_race_actual().into_sc2()?,
+            race: info.get_player_info()
+                .get_race_actual()
+                .into_sc2()?,
             race_selected: {
                 if info.get_player_info().has_race_requested() {
                     let proto_race =
@@ -191,7 +193,9 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
 
             game_result: {
                 if info.has_player_result() {
-                    Some(info.get_player_result().get_result().into_sc2()?)
+                    Some(info.get_player_result()
+                        .get_result()
+                        .into_sc2()?)
                 } else {
                     None
                 }
@@ -200,29 +204,29 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
     }
 }
 
-/// information about a replay file
+/// Information about a replay file.
 #[derive(Debug, Clone)]
 pub struct ReplayInfo {
-    /// name of the map
+    /// Name of the map.
     map_name: String,
-    /// path to the map
+    /// Path to the map.
     map_path: String,
-    /// version of the game
+    /// Version of the game.
     game_version: String,
-    /// data version of the game
+    /// Data version of the game.
     data_version: String,
 
-    /// duration in seconds
+    /// Duration in seconds.
     duration: f32,
-    /// duration in game steps
+    /// Duration in game steps.
     duration_steps: u32,
 
-    /// data build of the game
+    /// Data build of the game.
     data_build: u32,
-    /// required base build of the game
+    /// Required base build of the game.
     base_build: u32,
 
-    /// information about specific players
+    /// Information about specific players.
     players: Vec<ReplayPlayerInfo>,
 }
 

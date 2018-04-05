@@ -3,265 +3,227 @@ use sc2_proto::{common, data, raw};
 use super::super::{FromProto, IntoSc2, Result};
 use data::{Ability, Buff, Point2, Point3, Race};
 
-/// unique tag for a unit instance
+/// Unique tag for a unit instance.
 pub type Tag = u64;
 
-/// a unit (could be structure, a worker, or military)
+/// A unit (could be structure, a worker, or military).
 #[derive(Debug, Clone)]
 pub struct Unit {
-    /// whether the unit is shown on screen or not
     display_type: DisplayType,
-    /// relationship of the unit to this player
     alliance: Alliance,
 
-    /// a unique id for the instance of a unit
     tag: Tag,
-    /// the type of unit
     unit_type: UnitType,
-    /// which player owns this unit
     owner: i32,
 
     pos: Point3,
-    /// direction the unit faces in radians
     facing: f32,
-    /// radius of the unit
     radius: f32,
-    /// gives progress under construction (range [0.0, 1.0] where 1.0 is
-    /// done)
     build_progress: f32,
 
-    /// whether the unit is cloaked
     cloak: CloakState,
 
-    /// range of detector for detector units
     detect_range: f32,
-    /// range of radar for radar units
     radar_range: f32,
 
-    /// whether this unit is currently selected
     is_selected: bool,
-    /// whether this unit is visible and within the camera frustum
     is_on_screen: bool,
-    /// whether this unit is detected by a sensor tower
     is_blip: bool,
 
-    /// health of the unit (not set for snapshots)
     health: f32,
-    /// max health of the unit (not set for snapshots)
     health_max: f32,
-    /// shield of the unit (not set for snapshots)
     shield: f32,
-    /// energy of the unit (not set for snapshots)
     energy: f32,
-    /// amount of minerals if unit is a mineral field (not set for
-    /// snapshot)
     mineral_contents: u32,
-    /// amount of vespene if unit is a geyser (not set for snapshots)
     vespene_contents: u32,
-    /// whether the unit is flying (not set for snapshots)
     is_flying: bool,
-    /// whether the unit is burrowed (not set for snapshots)
     is_burrowed: bool,
-    /// time remaining for a weapon on cooldown (not set for snapshots)
     weapon_cooldown: f32,
 
-    /// orders on this unit (only valid for this player's units)
     orders: Vec<UnitOrder>,
-    /// addon like a tech lab or reactor (only valid for this player's
-    /// units)
     add_on_tag: Tag,
-    /// passengers in this transport (only valid for this player's units)
     passengers: Vec<PassengerUnit>,
-    /// number of cargo slots used (only valid for this player's units)
     cargo_space_taken: u32,
-    /// max number of cargo slots (only valid for this player's units)
     cargo_space_max: u32,
-    /// number of harvesters associated with town hall
     assigned_harvesters: u32,
-    /// number of harvesters that can be assigned to a town hall
     ideal_harvesters: u32,
-    /// target unit of a unit (only valid for this player's units)
     engaged_target_tag: Tag,
-    /// buffs on this unit (only valid for this player's units)
     buffs: Vec<Buff>,
-    /// whether this unit is powered by a pylon
     is_powered: bool,
 
-    /// whether this unit is alive or not
     is_alive: bool,
-    /// the last time the unit was seen
     last_seen_game_loop: u32,
 }
 
 impl Unit {
-    /// mark this unit as dead
+    /// Mark this unit as dead.
     pub fn mark_dead(&mut self) {
         self.is_alive = false;
     }
 
-    /// set the step where the unit was last seen
+    /// Set the step where the unit was last seen.
     pub fn set_last_seen_step(&mut self, step: u32) {
         self.last_seen_game_loop = step;
     }
 
-    /// whether the unit is shown on screen or not
+    /// Whether the unit is shown on screen or not.
     pub fn get_display_type(&self) -> DisplayType {
         self.display_type
     }
-    /// relationship of the unit to this player
+    /// Relationship of the unit to this player.
     pub fn get_alliance(&self) -> Alliance {
         self.alliance
     }
 
-    /// a unique id for the instance of a unit
+    /// A unique id for the instance of a unit.
     pub fn get_tag(&self) -> Tag {
         self.tag
     }
-    /// the type of unit
+    /// The type of unit.
     pub fn get_unit_type(&self) -> UnitType {
         self.unit_type
     }
-    /// which player owns this unit
+    /// Which player owns this unit.
     pub fn get_owner(&self) -> i32 {
         self.owner
     }
 
-    /// position of the unit in the world
+    /// Position of the unit in the world.
     pub fn get_pos(&self) -> Point3 {
         self.pos
     }
 
-    /// just the x and y coordinates of the unit position
+    /// Just the x and y coordinates of the unit position.
     pub fn get_pos_2d(&self) -> Point2 {
         Point2::new(self.pos.x, self.pos.y)
     }
 
-    /// direction the unit faces in radians
+    /// Direction the unit faces in radians.
     pub fn get_facing(&self) -> f32 {
         self.facing
     }
-    /// radius of the unit
+    /// Radius of the unit.
     pub fn get_radius(&self) -> f32 {
         self.radius
     }
-    /// gives progress under construction (range [0.0, 1.0] where 1.0 is
-    /// done)
+    /// Gives progress under construction (range [0.0, 1.0] where 1.0 is
+    /// done).
     pub fn get_build_progress(&self) -> f32 {
         self.build_progress
     }
 
-    /// whether the unit is cloaked
+    /// Whether the unit is cloaked.
     pub fn get_cloak_state(&self) -> CloakState {
         self.cloak
     }
 
-    /// range of detector for detector units
+    /// Range of detector for detector units.
     pub fn get_detect_range(&self) -> f32 {
         self.detect_range
     }
-    /// range of radar for radar units
+    /// Range of radar for radar units.
     pub fn get_radar_range(&self) -> f32 {
         self.radar_range
     }
 
-    /// whether this unit is currently selected
+    /// Whether this unit is currently selected.
     pub fn is_selected(&self) -> bool {
         self.is_selected
     }
-    /// whether this unit is visible and within the camera frustum
+    /// Whether this unit is visible and within the camera frustum.
     pub fn is_on_screen(&self) -> bool {
         self.is_on_screen
     }
-    /// whether this unit is detected by a sensor tower
+    /// Whether this unit is detected by a sensor tower.
     pub fn is_blip(&self) -> bool {
         self.is_blip
     }
 
-    /// health of the unit (not set for snapshots)
+    /// Health of the unit (not set for snapshots).
     pub fn get_health(&self) -> f32 {
         self.health
     }
-    /// max health of the unit (not set for snapshots)
+    /// Max health of the unit (not set for snapshots).
     pub fn get_health_cap(&self) -> f32 {
         self.health_max
     }
-    /// shield of the unit (not set for snapshots)
+    /// Shield of the unit (not set for snapshots).
     pub fn get_shield(&self) -> f32 {
         self.shield
     }
-    /// energy of the unit (not set for snapshots)
+    /// Energy of the unit (not set for snapshots).
     pub fn get_energy(&self) -> f32 {
         self.energy
     }
-    /// amount of minerals if unit is a mineral field (not set for
-    /// snapshot)
+    /// Amount of minerals if unit is a mineral field (not set for
+    /// snapshot).
     pub fn get_mineral_contents(&self) -> u32 {
         self.mineral_contents
     }
-    /// amount of vespene if unit is a geyser (not set for snapshots)
+    /// Amount of vespene if unit is a geyser (not set for snapshots).
     pub fn get_vespene_contents(&self) -> u32 {
         self.vespene_contents
     }
-    /// whether the unit is flying (not set for snapshots)
+    /// Whether the unit is flying (not set for snapshots).
     pub fn is_flying(&self) -> bool {
         self.is_flying
     }
-    /// whether the unit is burrowed (not set for snapshots)
+    /// Whether the unit is burrowed (not set for snapshots).
     pub fn is_burrowed(&self) -> bool {
         self.is_burrowed
     }
-    /// time remaining for a weapon on cooldown (not set for snapshots)
+    /// Time remaining for a weapon on cooldown (not set for snapshots).
     pub fn get_weapon_cooldown(&self) -> f32 {
         self.weapon_cooldown
     }
 
-    /// orders on this unit (only valid for this player's units)
+    /// Orders on this unit (only valid for this player's units).
     pub fn get_orders(&self) -> &[UnitOrder] {
         &self.orders
     }
-    /// addon like a tech lab or reactor (only valid for this player's
-    /// units)
+    /// Addon like a tech lab or reactor (only valid for this player's
+    /// units).
     pub fn get_add_on_tag(&self) -> Tag {
         self.add_on_tag
     }
-    /// passengers in this transport (only valid for this player's units)
+    /// Passengers in this transport (only valid for this player's units).
     pub fn get_passengers(&self) -> &[PassengerUnit] {
         &self.passengers
     }
-    /// number of cargo slots used (only valid for this player's units)
+    /// Number of cargo slots used (only valid for this player's units).
     pub fn get_cargo_space_taken(&self) -> u32 {
         self.cargo_space_taken
     }
-    /// max number of cargo slots (only valid for this player's units)
+    /// Max number of cargo slots (only valid for this player's units).
     pub fn get_cargo_space_cap(&self) -> u32 {
         self.cargo_space_max
     }
-    /// number of harvesters associated with town hall
+    /// Number of harvesters associated with town hall.
     pub fn get_assigned_harvesters(&self) -> u32 {
         self.assigned_harvesters
     }
-    /// number of harvesters that can be assigned to a town hall
+    /// Number of harvesters that can be assigned to a town hall.
     pub fn get_ideal_harvesters(&self) -> u32 {
         self.ideal_harvesters
     }
-    /// target unit of a unit (only valid for this player's units)
+    /// Target unit of a unit (only valid for this player's units).
     pub fn get_engaged_target_tag(&self) -> Tag {
         self.engaged_target_tag
     }
-    /// buffs on this unit (only valid for this player's units)
+    /// Buffs on this unit (only valid for this player's units).
     pub fn get_buffs(&self) -> &[Buff] {
         &self.buffs
     }
-    /// whether this unit is powered by a pylon
+    /// Whether this unit is powered by a pylon.
     pub fn is_powered(&self) -> bool {
         self.is_powered
     }
 
-    /// whether this unit is alive or not
+    /// Whether this unit is alive or not.
     pub fn is_alive(&self) -> bool {
         self.is_alive
     }
-    /// the last time the unit was seen
+    /// The last time the unit was seen.
     pub fn get_last_seen_step(&self) -> u32 {
         self.last_seen_game_loop
     }
@@ -996,16 +958,16 @@ impl FromProto<u32> for UnitType {
     }
 }
 
-/// whether the unit is shown on screen or not
+/// Whether the unit is shown on screen or not.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DisplayType {
-    /// unit will be visible
+    /// Unit will be visible.
     Visible,
-    /// unit is represented by a snapshot in fog-of-war
+    /// Unit is represented by a snapshot in fog-of-war.
     ///
-    /// the actual unit may be in a different location or state
+    /// The actual unit may be in a different location or state.
     Snapshot,
-    /// unit will be hidden to enemies
+    /// Unit will be hidden to enemies.
     Hidden,
 }
 
@@ -1019,16 +981,16 @@ impl From<raw::DisplayType> for DisplayType {
     }
 }
 
-/// relationship to this player
+/// Relationship to this player.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Alliance {
-    /// unit is owned by this player
+    /// Unit is owned by this player.
     Domestic,
-    /// unit is an ally of this player
+    /// Unit is an ally of this player.
     Ally,
-    /// unit is neutral to this player (usually a non-player unit)
+    /// Unit is neutral to this player (usually a non-player unit).
     Neutral,
-    /// unit is an enemy of the player
+    /// Unit is an enemy of the player.
     Enemy,
 }
 
@@ -1043,16 +1005,16 @@ impl From<raw::Alliance> for Alliance {
     }
 }
 
-/// unit cloak state
+/// Unit cloak state.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CloakState {
-    /// unit is invisible to enemies until detected
+    /// Unit is invisible to enemies until detected.
     Cloaked,
-    /// cloaked, but detected
+    /// Cloaked, but detected.
     CloakedDetected,
-    /// no cloaking
+    /// No cloaking.
     NotCloaked,
-    /// unable to determine cloak state
+    /// Unable to determine cloak state.
     Unknown,
 }
 
@@ -1066,16 +1028,16 @@ impl From<raw::CloakState> for CloakState {
     }
 }
 
-/// target of a unit order
+/// Target of a unit order.
 #[derive(Debug, Copy, Clone)]
 pub enum UnitOrderTarget {
-    /// targets another unit
+    /// Targets another unit.
     UnitTag(Tag),
-    /// targets a location
+    /// Targets a location.
     Location(Point2),
 }
 
-/// an order that is active on a unit
+/// An order that is active on a unit.
 #[derive(Debug, Copy, Clone)]
 pub struct UnitOrder {
     ability: Ability,
@@ -1084,30 +1046,32 @@ pub struct UnitOrder {
 }
 
 impl UnitOrder {
-    /// ability that triggered the order
+    /// Ability that triggered the order.
     pub fn get_ability(&self) -> Ability {
         self.ability
     }
 
-    /// target unit of the order
+    /// Target unit of the order.
     pub fn get_target(&self) -> Option<UnitOrderTarget> {
         self.target
     }
 
-    /// progress of the order
+    /// Progress of the order.
     pub fn get_progress(&self) -> f32 {
         self.progress
     }
 }
 
 impl FromProto<raw::UnitOrder> for UnitOrder {
-    /// convert from protobuf data
+    /// Convert from protobuf data.
     fn from_proto(order: raw::UnitOrder) -> Result<Self> {
         Ok(Self {
             ability: Ability::from_proto(order.get_ability_id())?,
             target: {
                 if order.has_target_unit_tag() {
-                    Some(UnitOrderTarget::UnitTag(order.get_target_unit_tag()))
+                    Some(UnitOrderTarget::UnitTag(
+                        order.get_target_unit_tag(),
+                    ))
                 } else if order.has_target_world_space_pos() {
                     let target_pos = order.get_target_world_space_pos();
 
@@ -1124,7 +1088,7 @@ impl FromProto<raw::UnitOrder> for UnitOrder {
     }
 }
 
-/// a passenger on a transport
+/// A passenger on a transport.
 #[derive(Debug, Copy, Clone)]
 pub struct PassengerUnit {
     tag: Tag,
@@ -1136,27 +1100,27 @@ pub struct PassengerUnit {
 }
 
 impl PassengerUnit {
-    /// tag of the unit in transport
+    /// Tag of the unit in transport.
     pub fn get_tag(&self) -> Tag {
         self.tag
     }
-    /// health of the unit in transport
+    /// Health of the unit in transport.
     pub fn get_health(&self) -> f32 {
         self.health
     }
-    /// max health of the unit in transport
+    /// Max health of the unit in transport.
     pub fn get_health_cap(&self) -> f32 {
         self.health_max
     }
-    /// shield of the unit in transport
+    /// Shield of the unit in transport.
     pub fn get_shield(&self) -> f32 {
         self.shield
     }
-    /// energy of the unit in transport
+    /// Energy of the unit in transport.
     pub fn get_energy(&self) -> f32 {
         self.energy
     }
-    /// type of unit in transport
+    /// Type of unit in transport.
     pub fn get_unit_type(&self) -> UnitType {
         self.unit_type
     }
@@ -1175,7 +1139,7 @@ impl FromProto<raw::PassengerUnit> for PassengerUnit {
     }
 }
 
-/// category of unit
+/// Category of unit.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Attribute {
@@ -1210,7 +1174,7 @@ impl FromProto<data::Attribute> for Attribute {
     }
 }
 
-/// damage bonus of a unit
+/// Damage bonus of a unit.
 #[derive(Debug, Copy, Clone)]
 pub struct DamageBonus {
     attribute: Attribute,
@@ -1218,12 +1182,12 @@ pub struct DamageBonus {
 }
 
 impl DamageBonus {
-    /// affected attribute
+    /// Affected attribute.
     pub fn get_attribute(&self) -> Attribute {
         self.attribute
     }
 
-    /// damage bonus
+    /// Damage bonus.
     pub fn get_bonus(&self) -> f32 {
         self.bonus
     }
@@ -1238,7 +1202,7 @@ impl FromProto<data::DamageBonus> for DamageBonus {
     }
 }
 
-/// target type of a weapon
+/// Target type of a weapon.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum WeaponTargetType {
@@ -1257,7 +1221,7 @@ impl FromProto<data::Weapon_TargetType> for WeaponTargetType {
     }
 }
 
-/// unit weapon
+/// Unit weapon.
 #[derive(Debug, Clone)]
 pub struct Weapon {
     target_type: WeaponTargetType,
@@ -1269,27 +1233,27 @@ pub struct Weapon {
 }
 
 impl Weapon {
-    /// weapon's target type
+    /// Weapon's target type.
     pub fn get_target_type(&self) -> WeaponTargetType {
         self.target_type
     }
-    /// weapon damage
+    /// Weapon damage.
     pub fn get_damage(&self) -> f32 {
         self.damage
     }
-    /// any damage bonuses that apply to the weapon
+    /// Any damage bonuses that apply to the weapon.
     pub fn get_damage_bonus(&self) -> &[DamageBonus] {
         &self.damage_bonus
     }
-    /// number of hits per attack (eg. Colossus has 2 beams)
+    /// Number of hits per attack (eg. Colossus has 2 beams).
     pub fn get_attacks(&self) -> u32 {
         self.attacks
     }
-    /// attack range
+    /// Attack range.
     pub fn get_range(&self) -> f32 {
         self.range
     }
-    /// time between attacks
+    /// Time between attacks.
     pub fn get_speed(&self) -> f32 {
         self.speed
     }
@@ -1316,9 +1280,9 @@ impl FromProto<data::Weapon> for Weapon {
     }
 }
 
-/// data about a unit type
+/// Data about a unit type.
 ///
-/// this data is derived from the catalog (xml) data of the game and upgrades
+/// This data is derived from the catalog (xml) data of the game and upgrades.
 #[derive(Debug, Clone)]
 pub struct UnitTypeData {
     unit_type: UnitType,
@@ -1347,90 +1311,90 @@ pub struct UnitTypeData {
 }
 
 impl UnitTypeData {
-    /// stable unit ID
+    /// Stable unit ID.
     pub fn get_id(&self) -> UnitType {
         self.unit_type
     }
-    /// unit type name (corresponds to the game's catalog)
+    /// Unit type name (corresponds to the game's catalog).
     pub fn get_name(&self) -> &str {
         &self.name
     }
-    /// whether this unit is available to the current mods/map
+    /// Whether this unit is available to the current mods/map.
     pub fn is_available(&self) -> bool {
         self.available
     }
-    /// number of cargo slots this unit occupies in a transport
+    /// Number of cargo slots this unit occupies in a transport.
     pub fn get_cargo_size(&self) -> u32 {
         self.cargo_size
     }
-    /// cost in minerals to build this unit
+    /// Cost in minerals to build this unit.
     pub fn get_mineral_cost(&self) -> u32 {
         self.mineral_cost
     }
-    /// cost in vespene to build this unit
+    /// Cost in vespene to build this unit.
     pub fn get_vespene_cost(&self) -> u32 {
         self.vespene_cost
     }
 
-    /// unit attributes (may change based on upgrades)
+    /// Unit attributes (may change based on upgrades).
     pub fn get_attributes(&self) -> &[Attribute] {
         &self.attributes
     }
-    /// movement speed of this unit
+    /// Movement speed of this unit.
     pub fn get_movement_speed(&self) -> f32 {
         self.movement_speed
     }
-    /// armor of this unit
+    /// Armor of this unit.
     pub fn get_armor(&self) -> f32 {
         self.armor
     }
-    /// weapons on this unit
+    /// Weapons on this unit.
     pub fn get_weapons(&self) -> &[Weapon] {
         &self.weapons
     }
-    /// how much food this unit requires
+    /// How much food this unit requires.
     pub fn get_food_required(&self) -> f32 {
         self.food_required
     }
-    /// how much food this unit provides
+    /// How much food this unit provides.
     pub fn get_food_provided(&self) -> f32 {
         self.food_provided
     }
-    /// which ability id creates this unit
+    /// Which ability id creates this unit.
     pub fn get_ability(&self) -> Ability {
         self.ability
     }
-    /// the race this unit belongs to
+    /// The race this unit belongs to.
     pub fn get_race(&self) -> Option<Race> {
         self.race
     }
-    /// how long a unit takes to build
+    /// How long a unit takes to build.
     pub fn get_build_time(&self) -> f32 {
         self.build_time
     }
-    /// whether this unit can have minerals (mineral patches)
+    /// Whether this unit can have minerals (mineral patches).
     pub fn has_minerals(&self) -> bool {
         self.has_minerals
     }
-    /// whether this unit can have vespene (vespene geysers)
+    /// Whether this unit can have vespene (vespene geysers).
     pub fn has_vespene(&self) -> bool {
         self.has_vespene
     }
 
-    /// units this is equivalent to in terms of satisfying tech
-    /// requirements
+    /// Units this is equivalent to in terms of satisfying tech
+    /// requirements.
     pub fn get_tech_alias(&self) -> &[UnitType] {
         &self.tech_alias
     }
-    /// units that are morphed variants of the same unit
+    /// Units that are morphed variants of the same unit.
     pub fn get_unit_alias(&self) -> UnitType {
         self.unit_alias
     }
-    /// structure required to build this unit (or any with same tech alias)
+    /// Structure required to build this unit (or any with same tech alias).
     pub fn get_tech_requirement(&self) -> UnitType {
         self.tech_requirement
     }
-    /// whether tech requirement is an addon
+    /// Whether tech requirement is an addon.
     pub fn get_require_attached(&self) -> bool {
         self.require_attached
     }
@@ -1492,9 +1456,7 @@ impl FromProto<data::UnitTypeData> for UnitTypeData {
                 aliases
             },
             unit_alias: UnitType::from_proto(data.get_unit_alias())?,
-            tech_requirement: UnitType::from_proto(
-                data.get_tech_requirement(),
-            )?,
+            tech_requirement: UnitType::from_proto(data.get_tech_requirement())?,
             require_attached: data.get_require_attached(),
         })
     }

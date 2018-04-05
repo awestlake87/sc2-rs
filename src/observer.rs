@@ -33,150 +33,129 @@ use data::{
     Visibility,
 };
 
-/// state of the game (changes every frame)
+/// State of the game (changes every frame).
 #[derive(Debug, Clone)]
 pub struct Observation {
-    /// the player id associated with the participant
     player_id: u32,
-    /// the previous game step
     previous_step: u32,
-    /// the current game step
     current_step: u32,
-    /// position of the center of the camera
     camera_pos: Point2,
 
-    /// a list of all known units at the moment
     units: Vec<Rc<Unit>>,
 
-    /// all power sources associated with the current player
     power_sources: Vec<PowerSource>,
-    /// all active effects in vision of the current player
     effects: Vec<Effect>,
-    /// all upgrades
     upgrades: Vec<Upgrade>,
 
-    /// current mineral count
     minerals: u32,
-    /// current vespene count
     vespene: u32,
-    /// the total supply cap given the players max supply
     food_cap: u32,
-    /// the total supply used by the player
     food_used: u32,
-    /// the total supply consumed by army units alone
     food_army: u32,
-    /// the total supply consumed by workers alone
     food_workers: u32,
-    /// the number of workers that currently have no orders
     idle_worker_count: u32,
-    /// the number of army units
     army_count: u32,
-    /// the number of warp gates owned by the player
     warp_gate_count: u32,
-    /// the number of larva owned by the player
     larva_count: u32,
 
-    /// creep image (sample pixels to find tiles with creep)
     creep: ImageData,
-    /// visibility image (sample pixels to find visible tiles)
     visibility: ImageData,
 
-    /// detailed current set of scores
     score: Score,
 }
 
 impl Observation {
-    /// the player id associated with the participant
+    /// The player id associated with the participant.
     pub fn get_player_id(&self) -> u32 {
         self.player_id
     }
-    /// the previous game step
+    /// The previous game step.
     pub fn get_previous_step(&self) -> u32 {
         self.previous_step
     }
-    /// the current game step
+    /// The current game step.
     pub fn get_current_step(&self) -> u32 {
         self.current_step
     }
-    /// position of the center of the camera
+    /// Position of the center of the camera.
     pub fn get_camera_pos(&self) -> Point2 {
         self.camera_pos
     }
 
-    /// a list of all known units at the moment
+    /// A list of all known units at the moment.
     pub fn get_units(&self) -> &[Rc<Unit>] {
         &self.units
     }
 
-    /// all power sources associated with the current player
+    /// All power sources associated with the current player.
     pub fn get_power_sources(&self) -> &[PowerSource] {
         &self.power_sources
     }
-    /// all active effects in vision of the current player
+    /// All active effects in vision of the current player.
     pub fn get_effects(&self) -> &[Effect] {
         &self.effects
     }
-    /// all upgrades
+    /// All upgrades.
     pub fn get_upgrades(&self) -> &[Upgrade] {
         &self.upgrades
     }
 
-    /// current mineral count
+    /// Current mineral count.
     pub fn get_minerals(&self) -> u32 {
         self.minerals
     }
-    /// current vespene count
+    /// Current vespene count.
     pub fn get_vespene(&self) -> u32 {
         self.vespene
     }
-    /// the total supply cap given the players max supply
+    /// The total supply cap given the players max supply.
     pub fn get_food_cap(&self) -> u32 {
         self.food_cap
     }
-    /// the total supply used by the player
+    /// The total supply used by the player.
     pub fn get_food_used(&self) -> u32 {
         self.food_used
     }
-    /// the total supply consumed by army units alone
+    /// The total supply consumed by army units alone.
     pub fn get_food_army(&self) -> u32 {
         self.food_army
     }
-    /// the total supply consumed by workers alone
+    /// The total supply consumed by workers alone.
     pub fn get_food_workers(&self) -> u32 {
         self.food_workers
     }
-    /// the number of workers that currently have no orders
+    /// The number of workers that currently have no orders.
     pub fn get_idle_worker_count(&self) -> u32 {
         self.idle_worker_count
     }
-    /// the number of army units
+    /// The number of army units.
     pub fn get_army_count(&self) -> u32 {
         self.army_count
     }
-    /// the number of warp gates owned by the player
+    /// The number of warp gates owned by the player.
     pub fn get_warp_gate_count(&self) -> u32 {
         self.warp_gate_count
     }
-    /// the number of larva owned by the player
+    /// The number of larva owned by the player.
     pub fn get_larva_count(&self) -> u32 {
         self.larva_count
     }
 
-    /// creep image (sample pixels to find tiles with creep)
+    /// Creep image (sample pixels to find tiles with creep).
     pub fn get_creep(&self) -> &ImageData {
         &self.creep
     }
-    /// visibility image (sample pixels to find visible tiles)
+    /// Visibility image (sample pixels to find visible tiles).
     pub fn get_visibility(&self) -> &ImageData {
         &self.visibility
     }
 
-    /// detailed current set of scores
+    /// Detailed current set of scores.
     pub fn get_score(&self) -> &Score {
         &self.score
     }
 
-    /// filter all units based on a custom condition
+    /// Filter all units based on a custom condition.
     pub fn filter_units<F>(&self, filter: F) -> Vec<Rc<Unit>>
     where
         F: Fn(&Unit) -> bool,
@@ -187,11 +166,11 @@ impl Observation {
             .map(|u| Rc::clone(u))
             .collect()
     }
-    /// check if the given point contains creep
+    /// Check if the given point contains creep.
     pub fn sample_creep(&self, _: Point2) -> bool {
         unimplemented!("has creep")
     }
-    /// get the visibility of the given point for the current player
+    /// Get the visibility of the given point for the current player.
     pub fn sample_visibility(&self, _: Point2) -> Visibility {
         unimplemented!("get visibility")
     }
@@ -755,14 +734,14 @@ impl ObserverControlClient {
     }
 }
 
-/// an interface for the observer soma
+/// An interface used to observer the game state.
 #[derive(Debug, Clone)]
 pub struct ObserverClient {
     tx: mpsc::Sender<ObserverRequest>,
 }
 
 impl ObserverClient {
-    /// observe the current game state
+    /// Observe the current game state.
     pub fn observe(
         &self,
     ) -> impl Future<Item = Rc<Observation>, Error = Error> {
@@ -781,7 +760,7 @@ impl ObserverClient {
         }
     }
 
-    /// get information about the current map
+    /// Get information about the current map.
     pub fn get_map_info(
         &self,
     ) -> impl Future<Item = Rc<MapInfo>, Error = Error> {
@@ -800,7 +779,7 @@ impl ObserverClient {
         }
     }
 
-    /// get data about each unit type
+    /// Get data about each unit type.
     pub fn get_unit_data(
         &self,
     ) -> impl Future<Item = Rc<HashMap<UnitType, UnitTypeData>>, Error = Error>
@@ -820,7 +799,7 @@ impl ObserverClient {
         }
     }
 
-    /// get data about each ability
+    /// Get data about each ability.
     pub fn get_ability_data(
         &self,
     ) -> impl Future<Item = Rc<HashMap<Ability, AbilityData>>, Error = Error>
@@ -842,7 +821,7 @@ impl ObserverClient {
         }
     }
 
-    /// get data about each upgrade
+    /// Get data about each upgrade.
     pub fn get_upgrade_data(
         &self,
     ) -> impl Future<Item = Rc<HashMap<Upgrade, UpgradeData>>, Error = Error>
@@ -864,7 +843,7 @@ impl ObserverClient {
         }
     }
 
-    /// get data about each buff
+    /// Get data about each buff.
     pub fn get_buff_data(
         &self,
     ) -> impl Future<Item = Rc<HashMap<Buff, BuffData>>, Error = Error> {

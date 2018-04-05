@@ -8,7 +8,7 @@ use super::{ErrorKind, Result};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
 
-/// endpoint port settings
+/// Endpoint port settings.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub struct PortSet {
@@ -16,7 +16,7 @@ pub struct PortSet {
     pub base_port: u16,
 }
 
-/// all port settings for a game
+/// All port settings for a game.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GamePorts {
@@ -25,7 +25,7 @@ pub struct GamePorts {
     pub client_ports: Vec<PortSet>,
 }
 
-/// launches game instances upon request
+/// Launches game instances upon request.
 pub struct Launcher {
     exe: PathBuf,
     pwd: Option<PathBuf>,
@@ -33,7 +33,7 @@ pub struct Launcher {
     use_wine: bool,
 }
 
-/// builder used to create launcher
+/// Builder used to create launcher.
 pub struct LauncherSettings {
     dir: Option<PathBuf>,
     use_wine: bool,
@@ -41,7 +41,7 @@ pub struct LauncherSettings {
 }
 
 impl LauncherSettings {
-    /// create a new builder
+    /// Create a new builder.
     pub fn new() -> Self {
         Self {
             dir: None,
@@ -50,9 +50,9 @@ impl LauncherSettings {
         }
     }
 
-    /// installation directory
+    /// Set the StarCraft II installation directory.
     ///
-    /// auto-detect if not specified
+    /// auto-detect if not specified.
     pub fn install_dir(self, dir: PathBuf) -> Self {
         Self {
             dir: Some(dir),
@@ -60,7 +60,7 @@ impl LauncherSettings {
         }
     }
 
-    /// use Wine to run the game - for unix users
+    /// Use Wine to run the game - for unix users.
     pub fn use_wine(self, flag: bool) -> Self {
         Self {
             use_wine: flag,
@@ -68,7 +68,7 @@ impl LauncherSettings {
         }
     }
 
-    /// starting point for game ports
+    /// Set the starting point for game ports.
     pub fn base_port(self, port: u16) -> Self {
         Self {
             base_port: port,
@@ -78,7 +78,7 @@ impl LauncherSettings {
 }
 
 impl Launcher {
-    /// build the settings object
+    /// Build the settings object.
     pub fn create(settings: LauncherSettings) -> Result<Self> {
         let dir = {
             if let Some(dir) = settings.dir {
@@ -129,7 +129,7 @@ impl Launcher {
         Ok(instance)
     }
 
-    /// create a set of ports for multiplayer games
+    /// Create a set of ports for multiplayer games.
     pub fn create_game_ports(&mut self) -> GamePorts {
         let ports = GamePorts {
             shared_port: self.current_port,

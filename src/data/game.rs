@@ -4,7 +4,7 @@ use sc2_proto::sc2api;
 
 use super::super::{FromProto, Result};
 
-/// result of the game
+/// Result of the game.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum GameResult {
@@ -14,7 +14,7 @@ pub enum GameResult {
     Undecided,
 }
 
-/// game result tied to a specific player id
+/// Game result tied to a specific player id.
 #[derive(Debug, Copy, Clone)]
 pub struct PlayerResult {
     player_id: u32,
@@ -22,12 +22,12 @@ pub struct PlayerResult {
 }
 
 impl PlayerResult {
-    /// player that the result is associated with
+    /// Player that the result is associated with.
     pub fn get_player_id(&self) -> u32 {
         self.player_id
     }
 
-    /// result of the game from the perspective of the player
+    /// Result of the game from the perspective of the player.
     pub fn get_result(&self) -> GameResult {
         self.result
     }
@@ -44,28 +44,28 @@ impl FromProto<sc2api::Result> for GameResult {
     }
 }
 
-/// different ways of specifying a map
+/// Different ways of specifying a map.
 #[derive(Debug, Clone)]
 pub enum Map {
-    /// specify a map on the local filesystem
+    /// Specify a map on the local filesystem.
     LocalMap(PathBuf),
-    /// specify a known blizzard map
+    /// Specify a known blizzard map.
     BlizzardMap(String),
 }
 
-/// settings for a game
+/// Settings for a game.
 #[derive(Debug, Clone)]
 pub struct GameSetup {
     map: Map,
 }
 
 impl GameSetup {
-    /// create a game setup for the given map
+    /// Create a game setup for the given map.
     pub fn new(map: Map) -> Self {
         Self { map: map }
     }
 
-    /// get the map
+    /// Get the map.
     pub fn get_map(&self) -> &Map {
         &self.map
     }

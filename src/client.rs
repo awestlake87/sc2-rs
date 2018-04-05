@@ -29,14 +29,14 @@ enum ClientRequest {
     Request(Request, oneshot::Sender<Result<Response>>),
 }
 
-/// sender for the client soma
+/// Sender for the client.
 #[derive(Debug, Clone)]
 pub struct ProtoClient {
     tx: mpsc::Sender<ClientRequest>,
 }
 
 impl ProtoClient {
-    /// connect to the game instance
+    /// Connect to the game instance.
     #[async]
     pub fn connect(self, url: Url) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -50,7 +50,7 @@ impl ProtoClient {
         await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
     }
 
-    /// send a request to the game instance
+    /// Send a request to the game instance.
     #[async]
     pub fn request(self, req: Request) -> Result<Response> {
         let (tx, rx) = oneshot::channel();
@@ -65,14 +65,14 @@ impl ProtoClient {
     }
 }
 
-/// soma used to communicate with the game instance
+/// Websocket client used to communicate with the game instance.
 pub struct ProtoClientBuilder {
     tx: mpsc::Sender<ClientRequest>,
     rx: mpsc::Receiver<ClientRequest>,
 }
 
 impl ProtoClientBuilder {
-    /// create a new client
+    /// Create a new client.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel(10);
 

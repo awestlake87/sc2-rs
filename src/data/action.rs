@@ -1,37 +1,30 @@
 use std::rc::Rc;
 
 use sc2_proto::{debug, raw, sc2api};
-// use sc2_proto::spatial::{
-//     ActionSpatialCameraMove,
-//     ActionSpatialUnitCommand,
-//     ActionSpatialUnitSelectionPoint,
-//     ActionSpatialUnitSelectionPoint_Type as ProtoPointSelectionType,
-//     ActionSpatialUnitSelectionRect,
-// };
 
 use super::super::{FromProto, IntoProto, Result};
 use data::{Ability, Color, Point2, Point3, Tag, Unit};
 
-/// action target
+/// Action target.
 #[derive(Debug, Copy, Clone)]
 pub enum ActionTarget {
-    /// target a unit with this action
+    /// Target a unit with this action.
     Unit(Tag),
-    /// target a location with this action
+    /// Target a location with this action.
     Location(Point2),
 }
 
-/// an action (command or ability) applied to a unit or set of units
+/// An action (command or ability) applied to a unit or set of units.
 #[derive(Debug, Clone)]
 pub struct Action {
-    /// the ability to invoke
+    /// The ability to invoke.
     ability: Ability,
     units: Vec<Tag>,
     target: Option<ActionTarget>,
 }
 
 impl Action {
-    /// perform the given ability
+    /// Perform the given ability.
     pub fn new(ability: Ability) -> Self {
         Self {
             ability: ability,
@@ -40,9 +33,9 @@ impl Action {
         }
     }
 
-    /// units that this action applies to
+    /// Units that this action applies to.
     ///
-    /// take the tags from an arbitrary iterator of units
+    /// Take the tags from an arbitrary iterator of units.
     pub fn units<'a, T>(self, units: T) -> Self
     where
         T: Iterator<Item = &'a Rc<Unit>>,
@@ -53,9 +46,9 @@ impl Action {
         }
     }
 
-    /// units that this action applies to
+    /// Tnits that this action applies to.
     ///
-    /// directly assign the unit tags
+    /// Directly assign the unit tags.
     pub fn unit_tags(self, units: Vec<Tag>) -> Self {
         Self {
             units: units,
@@ -63,7 +56,7 @@ impl Action {
         }
     }
 
-    /// set the target of the action
+    /// Set the target of the action.
     pub fn target(self, target: ActionTarget) -> Self {
         Self {
             target: Some(target),
@@ -73,7 +66,6 @@ impl Action {
 }
 
 impl FromProto<raw::ActionRawUnitCommand> for Action {
-    /// convert from protobuf data
     fn from_proto(action: raw::ActionRawUnitCommand) -> Result<Self> {
         Ok(Self {
             ability: Ability::from_proto(action.get_ability_id() as u32)?,
@@ -132,16 +124,16 @@ impl IntoProto<sc2api::Action> for Action {
     }
 }
 
-/// target for debugging text
+/// Target for debugging text.
 #[derive(Debug, Copy, Clone)]
 pub enum DebugTextTarget {
-    /// screen coordinates for debug text
+    /// Screen coordinates for debug text.
     Screen(Point2),
-    /// world coordinates for debug text
+    /// World coordinates for debug text.
     World(Point3),
 }
 
-/// debug text
+/// Debug text.
 #[derive(Debug, Clone)]
 pub struct DebugText {
     text: String,
@@ -150,7 +142,7 @@ pub struct DebugText {
 }
 
 impl DebugText {
-    /// text to display
+    /// Text to display.
     pub fn new(text: String) -> Self {
         Self {
             text: text,
@@ -159,9 +151,9 @@ impl DebugText {
         }
     }
 
-    /// target in screen or world space (default is None)
+    /// Target in screen or world space (default is None).
     ///
-    /// if the target is None, then text appears at top-left of screen.
+    /// If the target is None, then text appears at top-left of screen.
     pub fn target(self, target: DebugTextTarget) -> Self {
         Self {
             target: Some(target),
@@ -169,7 +161,7 @@ impl DebugText {
         }
     }
 
-    /// set the color of the text (default is white)
+    /// Set the color of the text (default is white).
     pub fn color(self, color: Color) -> Self {
         Self {
             color: color,
@@ -178,19 +170,19 @@ impl DebugText {
     }
 }
 
-/// a debug line defined by a start and end point
+/// A debug line defined by a start and end point.
 #[derive(Debug, Copy, Clone)]
 pub struct DebugLine {
-    /// point 1 of the line
+    /// Point 1 of the line.
     p1: Point3,
-    /// point 2 of the line
+    /// Point 2 of the line.
     p2: Point3,
-    /// color of the line
+    /// Color of the line.
     color: Color,
 }
 
 impl DebugLine {
-    /// create a line from p1 to p2
+    /// Create a line from p1 to p2.
     pub fn new(p1: Point3, p2: Point3) -> Self {
         Self {
             p1: p1,
@@ -199,7 +191,7 @@ impl DebugLine {
         }
     }
 
-    /// set the color of the line (default is white)
+    /// Set the color of the line (default is white).
     pub fn color(self, color: Color) -> Self {
         Self {
             color: color,
@@ -208,19 +200,19 @@ impl DebugLine {
     }
 }
 
-/// a debug axis-aligned bounding box defined by two corners
+/// A debug axis-aligned bounding box defined by two corners.
 #[derive(Debug, Copy, Clone)]
 pub struct DebugAabb {
-    /// minimum corner of the box
+    /// Minimum corner of the box.
     min: Point3,
-    /// maximum corner of the box
+    /// Maximum corner of the box.
     max: Point3,
-    /// color of the box
+    /// Color of the box.
     color: Color,
 }
 
 impl DebugAabb {
-    /// create an AABB
+    /// Create an AABB.
     pub fn new(min: Point3, max: Point3) -> Self {
         Self {
             min: min,
@@ -229,7 +221,7 @@ impl DebugAabb {
         }
     }
 
-    /// set the color of the box (default is white)
+    /// Set the color of the box (default is white).
     pub fn color(self, color: Color) -> Self {
         Self {
             color: color,
@@ -238,19 +230,19 @@ impl DebugAabb {
     }
 }
 
-/// a debug sphere defined by a point in world space and a radius
+/// A debug sphere defined by a point in world space and a radius.
 #[derive(Debug, Copy, Clone)]
 pub struct DebugSphere {
-    /// center of the sphere
+    /// Center of the sphere.
     center: Point3,
-    /// radius of the sphere
+    /// Radius of the sphere.
     radius: f32,
-    /// color of the sphere
+    /// Color of the sphere.
     color: Color,
 }
 
 impl DebugSphere {
-    /// create a debug sphere
+    /// Create a debug sphere.
     pub fn new(center: Point3, radius: f32) -> Self {
         Self {
             center: center,
@@ -259,7 +251,7 @@ impl DebugSphere {
         }
     }
 
-    /// set the color of the sphere (default is white)
+    /// Set the color of the sphere (default is white).
     pub fn color(self, color: Color) -> Self {
         Self {
             color: color,
@@ -268,16 +260,16 @@ impl DebugSphere {
     }
 }
 
-/// a debug command for the game
+/// A debug command for the game.
 #[derive(Debug, Clone)]
 pub enum DebugCommand {
-    /// shows debug text in the game instance
+    /// Shows debug text in the game instance.
     Text(DebugText),
-    /// shows a debug line in the game from p1 to p2
+    /// Shows a debug line in the game from p1 to p2.
     Line(DebugLine),
-    /// shows a debug axis-aligned bounding box in the game
+    /// Shows a debug axis-aligned bounding box in the game.
     Aabb(DebugAabb),
-    /// shows a debug sphere in the game
+    /// Shows a debug sphere in the game.
     Sphere(DebugSphere),
 }
 
@@ -359,7 +351,11 @@ impl IntoProto<debug::DebugCommand> for DebugCommand {
 
                 Ok(cmd)
             },
-            DebugCommand::Aabb(DebugAabb { min, max, color }) => {
+            DebugCommand::Aabb(DebugAabb {
+                min,
+                max,
+                color,
+            }) => {
                 let mut cmd = debug::DebugCommand::new();
                 let mut debug_box = debug::DebugBox::new();
 
