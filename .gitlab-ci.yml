@@ -6,19 +6,13 @@ before_script:
   - rustc --version && cargo --version
 
 stages:
-  - build
   - test
   
 build_sc2:
-  stage: build
+  stage: test
   script:
     - rustc --version && cargo --version
     - cargo build --all --verbose
     - cargo build --examples --verbose
-
-
-test_sc2:
-  stage: test
-  script:
     - rustc --version && cargo --version
     - cargo test --all --verbose
