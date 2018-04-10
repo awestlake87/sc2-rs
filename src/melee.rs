@@ -1,5 +1,3 @@
-use std;
-
 use ctrlc;
 use futures::future::Either;
 use futures::prelude::*;
@@ -25,7 +23,7 @@ pub trait MeleeCompetitor {
     fn spawn(
         &mut self,
         handle: &reactor::Handle,
-        controller: MeleeDendrite,
+        controller: mpsc::Receiver<MeleeRequest>,
     ) -> Result<()>;
 }
 
@@ -141,7 +139,7 @@ impl MeleeBuilder {
 
             melee_clients.push(MeleeClient { tx: tx });
 
-            player.spawn(&handle, MeleeDendrite { rx: rx })?;
+            player.spawn(&handle, rx)?;
         }
 
         assert!(melee_clients.len() == 2);
@@ -366,7 +364,7 @@ impl Melee {
 }
 
 #[derive(Debug)]
-enum MeleeRequest {
+pub enum MeleeRequest {
     PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
     Connect(Url, oneshot::Sender<()>),
 
@@ -386,122 +384,6 @@ enum MeleeRequest {
 #[derive(Debug, Clone)]
 pub struct MeleeClient {
     tx: mpsc::Sender<MeleeRequest>,
-}
-
-/// Interface to be enforced by melee dendrites.
-pub trait MeleeContract: Sized {
-    /// Errors from the dendrite.
-    type Error: std::error::Error + Send + Into<Error>;
-
-    /// Fetch the player setup from the agent.
-    fn get_player_setup(
-        self,
-        game: GameSetup,
-    ) -> Box<Future<Item = (Self, PlayerSetup), Error = Self::Error>>;
-
-    /// Connect to an instance.
-    fn connect(self, url: Url)
-        -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    /// Create a game.
-    fn create_game(
-        self,
-        game: GameSetup,
-        players: Vec<PlayerSetup>,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    /// Join a game.
-    fn join_game(
-        self,
-        setup: PlayerSetup,
-        ports: Option<GamePorts>,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    /// Run the game.
-    fn run_game(
-        self,
-        update_scheme: UpdateScheme,
-    ) -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    fn leave_game(self) -> Box<Future<Item = Self, Error = Self::Error>>;
-
-    fn disconnect(self) -> Box<Future<Item = Self, Error = Self::Error>>;
-}
-
-/// Wrapper around a receiver to provide a controlled interface.
-#[derive(Debug)]
-pub struct MeleeDendrite {
-    rx: mpsc::Receiver<MeleeRequest>,
-}
-
-impl MeleeDendrite {
-    /// Wrap a dendrite and use the contract to respond to any requests.
-    #[async]
-    pub fn wrap<T>(self, mut dendrite: T) -> Result<()>
-    where
-        T: MeleeContract + 'static,
-    {
-        #[async]
-        for req in self.rx.map_err(|_| -> Error { unreachable!() }) {
-            match req {
-                MeleeRequest::PlayerSetup(game, tx) => {
-                    let result = await!(dendrite.get_player_setup(game))
-                        .map_err(|e| e.into())?;
-
-                    tx.send(result.1).unwrap();
-
-                    dendrite = result.0;
-                },
-                MeleeRequest::Connect(url, tx) => {
-                    dendrite =
-                        await!(dendrite.connect(url)).map_err(|e| e.into())?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::CreateGame(game, players, tx) => {
-                    dendrite = await!(
-                        dendrite
-                            .create_game(game, players)
-                            .map_err(|e| e.into())
-                    )?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::JoinGame(setup, ports, tx) => {
-                    dendrite = await!(
-                        dendrite
-                            .join_game(setup, ports)
-                            .map_err(|e| e.into())
-                    )?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::RunGame(update_scheme, tx) => {
-                    dendrite = await!(
-                        dendrite
-                            .run_game(update_scheme)
-                            .map_err(|e| e.into())
-                    )?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::LeaveGame(tx) => {
-                    dendrite =
-                        await!(dendrite.leave_game().map_err(|e| e.into()))?;
-
-                    tx.send(()).unwrap();
-                },
-                MeleeRequest::Disconnect(tx) => {
-                    dendrite =
-                        await!(dendrite.disconnect().map_err(|e| e.into()))?;
-
-                    tx.send(()).unwrap();
-                },
-            }
-        }
-
-        Ok(())
-    }
 }
 
 impl MeleeClient {

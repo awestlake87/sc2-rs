@@ -1,11 +1,10 @@
 use futures::prelude::*;
+use futures::unsync::mpsc;
 use tokio_core::reactor;
-use url::Url;
 
 use super::{Error, Result};
-use data::{Difficulty, GameSetup, PlayerSetup, Race};
-use launcher::GamePorts;
-use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
+use data::{Difficulty, PlayerSetup, Race};
+use melee::{MeleeCompetitor, MeleeRequest};
 
 /// Build a built-in AI opponent.
 pub struct ComputerBuilder {
@@ -43,14 +42,13 @@ impl MeleeCompetitor for ComputerBuilder {
     fn spawn(
         &mut self,
         handle: &reactor::Handle,
-        controller: MeleeDendrite,
+        control_rx: mpsc::Receiver<MeleeRequest>,
     ) -> Result<()> {
         handle.spawn(
-            controller
-                .wrap(ComputerDendrite::new(PlayerSetup::Computer(
-                    self.race,
-                    self.difficulty,
-                )))
+            ComputerService::new(PlayerSetup::Computer(
+                self.race,
+                self.difficulty,
+            )).run(control_rx)
                 .map_err(|e| panic!("{:#?}", e)),
         );
 
@@ -58,46 +56,53 @@ impl MeleeCompetitor for ComputerBuilder {
     }
 }
 
-struct ComputerDendrite {
+struct ComputerService {
     setup: PlayerSetup,
 }
 
-impl MeleeContract for ComputerDendrite {
-    type Error = Error;
-
-    #[async(boxed)]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        let setup = self.setup;
-        Ok((self, setup))
-    }
-    #[async(boxed)]
-    fn connect(self, _: Url) -> Result<Self> {
-        Ok(self)
-    }
-    #[async(boxed)]
-    fn create_game(self, _: GameSetup, _: Vec<PlayerSetup>) -> Result<Self> {
-        Ok(self)
-    }
-    #[async(boxed)]
-    fn join_game(self, _: PlayerSetup, _: Option<GamePorts>) -> Result<Self> {
-        Ok(self)
-    }
-    #[async(boxed)]
-    fn run_game(self, _: UpdateScheme) -> Result<Self> {
-        Ok(self)
-    }
-    #[async(boxed)]
-    fn leave_game(self) -> Result<Self> {
-        Ok(self)
-    }
-    #[async(boxed)]
-    fn disconnect(self) -> Result<Self> {
-        Ok(self)
-    }
-}
-
-impl ComputerDendrite {
+impl ComputerService {
     fn new(setup: PlayerSetup) -> Self {
         Self { setup: setup }
+    }
+    #[async]
+    fn run(self, control_rx: mpsc::Receiver<MeleeRequest>) -> Result<()> {
+        #[async]
+        for req in control_rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                MeleeRequest::PlayerSetup(_, tx) => {
+                    tx.send(self.setup).map_err(|_| {
+                        Error::from("unable to get player setup")
+                    })?;
+                },
+                MeleeRequest::Connect(_, tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to connect"))?;
+                },
+
+                MeleeRequest::CreateGame(_, _, tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to create game"))?;
+                },
+                MeleeRequest::JoinGame(_, _, tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to join game"))?;
+                },
+                MeleeRequest::RunGame(_, tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to run game"))?;
+                },
+                MeleeRequest::LeaveGame(tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to leave game"))?;
+                },
+
+                MeleeRequest::Disconnect(tx) => {
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to disconnect"))?;
+                },
+            }
+        }
+
+        Ok(())
     }
 }

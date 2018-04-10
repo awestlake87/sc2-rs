@@ -1,4 +1,4 @@
-#![feature(proc_macro, generators)]
+#![feature(proc_macro, conservative_impl_trait, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -23,6 +23,17 @@ use std::rc::Rc;
 use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
+use sc2::{
+    ActionClient,
+    Error,
+    Event,
+    EventAck,
+    LauncherSettings,
+    MeleeBuilder,
+    Observation,
+    ObserverClient,
+    Result,
+};
 use sc2::data::{
     Ability,
     Action,
@@ -35,17 +46,6 @@ use sc2::data::{
     Race,
     Unit,
     Vector2,
-};
-use sc2::{
-    ActionClient,
-    Error,
-    Event,
-    EventAck,
-    LauncherSettings,
-    MeleeBuilder,
-    Observation,
-    ObserverClient,
-    Result,
 };
 use tokio_core::reactor;
 

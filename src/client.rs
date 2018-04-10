@@ -13,16 +13,6 @@ use url::Url;
 
 use super::{Error, Result};
 
-fn stream_next<T: Stream>(
-    stream: T,
-) -> impl Future<Item = (Option<T::Item>, T), Error = (T::Error, T)> {
-    stream
-        .and_then(|item| Ok(item))
-        .into_future()
-        .map(|(item, and_then)| (item, and_then.into_inner()))
-        .map_err(|(e, and_then)| (e, and_then.into_inner()))
-}
-
 #[derive(Debug)]
 enum ClientRequest {
     Connect(Url, oneshot::Sender<()>),
@@ -38,31 +28,38 @@ pub struct ProtoClient {
 
 impl ProtoClient {
     /// Connect to the game instance.
-    #[async]
-    pub fn connect(self, url: Url) -> Result<()> {
+    pub fn connect(&self, url: Url) -> impl Future<Item = (), Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ClientRequest::Connect(url, tx))
-                .map_err(|_| Error::from("unable to send connect"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ClientRequest::Connect(url, tx))
+                    .map_err(|_| Error::from("unable to send connect"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
+            await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
+        }
     }
 
     /// Send a request to the game instance.
-    #[async]
-    pub fn request(self, req: Request) -> Result<Response> {
+    pub fn request(
+        &self,
+        req: Request,
+    ) -> impl Future<Item = Response, Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send(ClientRequest::Request(req, tx))
-                .map_err(|_| Error::from("unable to send request"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send(ClientRequest::Request(req, tx))
+                    .map_err(|_| Error::from("unable to send request"))
+            )?;
 
-        await!(rx.map_err(|_| Error::from("unable to receive response")))?
+            await!(rx.map_err(|_| Error::from("unable to receive response")))?
+        }
     }
 
     pub fn disconnect(&self) -> impl Future<Item = (), Error = Error> {

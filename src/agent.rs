@@ -12,7 +12,7 @@ use action::{ActionBuilder, ActionClient, ActionControlClient, DebugClient};
 use client::{ProtoClient, ProtoClientBuilder};
 use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
 use launcher::GamePorts;
-use melee::{MeleeCompetitor, MeleeContract, MeleeDendrite, UpdateScheme};
+use melee::{MeleeCompetitor, MeleeRequest, UpdateScheme};
 use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
 
 /// An event from the game.
@@ -142,7 +142,7 @@ impl MeleeCompetitor for AgentBuilder {
     fn spawn(
         &mut self,
         handle: &reactor::Handle,
-        controller: MeleeDendrite,
+        rx: mpsc::Receiver<MeleeRequest>,
     ) -> Result<()> {
         let tx = mem::replace(&mut self.event_tx, None).unwrap();
 
@@ -156,7 +156,7 @@ impl MeleeCompetitor for AgentBuilder {
                 .as_ref()
                 .unwrap()
                 .add_control_client(),
-            controller,
+            rx,
             tx,
             mem::replace(&mut self.race, None).unwrap_or(Race::Random),
         );
@@ -178,11 +178,11 @@ impl MeleeCompetitor for AgentBuilder {
 }
 
 struct Agent {
-    controller: Option<MeleeDendrite>,
-    client: Option<ProtoClient>,
-    observer: Option<ObserverControlClient>,
-    agent: Option<AgentTerminal>,
-    action: Option<ActionControlClient>,
+    control_rx: Option<mpsc::Receiver<MeleeRequest>>,
+    client: ProtoClient,
+    observer: ObserverControlClient,
+    agent: AgentTerminal,
+    action: ActionControlClient,
 }
 
 impl Agent {
@@ -190,243 +190,293 @@ impl Agent {
         client: ProtoClient,
         action: ActionControlClient,
         observer: ObserverControlClient,
-        controller: MeleeDendrite,
+        control_rx: mpsc::Receiver<MeleeRequest>,
         events: mpsc::Sender<(Event, EventAck)>,
         race: Race,
     ) -> Agent {
         Self {
-            controller: Some(controller),
-            client: Some(client),
-            observer: Some(observer),
-            agent: Some(AgentTerminal {
+            control_rx: Some(control_rx),
+            client: client,
+            observer: observer,
+            agent: AgentTerminal {
                 tx: events,
                 race: race,
-            }),
-            action: Some(action),
+            },
+            action: action,
         }
     }
 
     fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        handle.spawn(
-            self.controller
-                .unwrap()
-                .wrap(AgentMeleeDendrite {
-                    client: self.client.unwrap(),
-                    observer: self.observer.unwrap(),
-                    action: self.action.unwrap(),
-                    agent: self.agent.unwrap(),
-                })
-                .map_err(|e| panic!("{:#?}", e)),
-        );
+        handle.spawn(self.run().map_err(|e| panic!("{:#?}", e)));
 
         Ok(())
     }
-}
 
-pub struct AgentMeleeDendrite {
-    client: ProtoClient,
-    observer: ObserverControlClient,
-    action: ActionControlClient,
-    agent: AgentTerminal,
-}
+    #[async]
+    fn run(mut self) -> Result<()> {
+        let control_rx = mem::replace(&mut self.control_rx, None).unwrap();
 
-impl MeleeContract for AgentMeleeDendrite {
-    type Error = Error;
+        #[async]
+        for req in control_rx.map_err(|_| -> Error { unreachable!() }) {
+            match req {
+                MeleeRequest::PlayerSetup(game, tx) => {
+                    let setup = await!(self.get_player_setup(game))?;
+                    tx.send(setup).map_err(|_| {
+                        Error::from("unable to get player setup")
+                    })?;
+                },
+                MeleeRequest::Connect(url, tx) => {
+                    await!(self.connect(url))?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to connect"))?;
+                },
 
-    #[async(boxed)]
-    fn get_player_setup(self, game: GameSetup) -> Result<(Self, PlayerSetup)> {
-        let setup = await!(self.agent.clone().get_player_setup(game))?;
+                MeleeRequest::CreateGame(game, players, tx) => {
+                    await!(self.create_game(game, players))?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to create game"))?;
+                },
+                MeleeRequest::JoinGame(player, ports, tx) => {
+                    await!(self.join_game(player, ports))?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to join game"))?;
+                },
+                MeleeRequest::RunGame(update_scheme, tx) => {
+                    await!(self.run_game(update_scheme))?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to run game"))?;
+                },
+                MeleeRequest::LeaveGame(tx) => {
+                    await!(self.leave_game())?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to leave game"))?;
+                },
 
-        Ok((self, setup))
+                MeleeRequest::Disconnect(tx) => {
+                    await!(self.disconnect())?;
+                    tx.send(())
+                        .map_err(|_| Error::from("unable to disconnect"))?;
+                },
+            }
+        }
+
+        Ok(())
     }
 
-    #[async(boxed)]
-    fn connect(self, url: Url) -> Result<Self> {
-        await!(self.client.clone().connect(url))?;
-        Ok(self)
+    fn get_player_setup(
+        &self,
+        game: GameSetup,
+    ) -> impl Future<Item = PlayerSetup, Error = Error> {
+        let future = self.agent.get_player_setup(game);
+
+        async_block! {
+            await!(future)
+        }
     }
 
-    #[async(boxed)]
+    fn connect(&self, url: Url) -> impl Future<Item = (), Error = Error> {
+        let future = self.client.connect(url);
+
+        async_block! {
+            await!(future)
+        }
+    }
+
     fn create_game(
-        self,
+        &self,
         settings: GameSetup,
         players: Vec<PlayerSetup>,
-    ) -> Result<Self> {
-        let mut req = sc2api::Request::new();
+    ) -> impl Future<Item = (), Error = Error> {
+        let client = self.client.clone();
 
-        match settings.get_map() {
-            &Map::LocalMap(ref path) => {
-                req.mut_create_game()
-                    .mut_local_map()
-                    .set_map_path(match path.clone()
-                        .into_os_string()
-                        .into_string()
-                    {
-                        Ok(s) => s,
-                        Err(_) => bail!("invalid path string"),
-                    });
-            },
-            &Map::BlizzardMap(ref map) => {
-                req.mut_create_game()
-                    .set_battlenet_map_name(map.clone());
-            },
-        };
+        async_block! {
+            let mut req = sc2api::Request::new();
 
-        for player in players {
-            let mut setup = sc2api::PlayerSetup::new();
-
-            match player {
-                PlayerSetup::Computer(race, difficulty) => {
-                    setup.set_field_type(sc2api::PlayerType::Computer);
-
-                    setup.set_difficulty(difficulty.to_proto());
-                    setup.set_race(race.into_proto()?);
+            match settings.get_map() {
+                &Map::LocalMap(ref path) => {
+                    req.mut_create_game()
+                        .mut_local_map()
+                        .set_map_path(match path.clone()
+                            .into_os_string()
+                            .into_string()
+                        {
+                            Ok(s) => s,
+                            Err(_) => bail!("invalid path string"),
+                        });
                 },
-                PlayerSetup::Player(race) => {
-                    setup.set_field_type(sc2api::PlayerType::Participant);
+                &Map::BlizzardMap(ref map) => {
+                    req.mut_create_game()
+                        .set_battlenet_map_name(map.clone());
+                },
+            };
 
-                    setup.set_race(race.into_proto()?);
-                }, /*PlayerSetup::Observer => {
-                    setup.set_field_type(sc2api::PlayerType::Observer);
-                }*/
+            for player in players {
+                let mut setup = sc2api::PlayerSetup::new();
+
+                match player {
+                    PlayerSetup::Computer(race, difficulty) => {
+                        setup.set_field_type(sc2api::PlayerType::Computer);
+
+                        setup.set_difficulty(difficulty.to_proto());
+                        setup.set_race(race.into_proto()?);
+                    },
+                    PlayerSetup::Player(race) => {
+                        setup.set_field_type(sc2api::PlayerType::Participant);
+
+                        setup.set_race(race.into_proto()?);
+                    }, /*PlayerSetup::Observer => {
+                        setup.set_field_type(sc2api::PlayerType::Observer);
+                    }*/
+                }
+
+                req.mut_create_game()
+                    .mut_player_setup()
+                    .push(setup);
             }
 
-            req.mut_create_game()
-                .mut_player_setup()
-                .push(setup);
+            req.mut_create_game().set_realtime(false);
+            await!(client.request(req))?;
+
+            Ok(())
         }
-
-        req.mut_create_game().set_realtime(false);
-
-        await!(self.client.clone().request(req))?;
-
-        Ok(self)
     }
 
-    #[async(boxed)]
     fn join_game(
-        self,
+        &self,
         setup: PlayerSetup,
         ports: Option<GamePorts>,
-    ) -> Result<Self> {
-        let mut req = sc2api::Request::new();
+    ) -> impl Future<Item = (), Error = Error> {
+        let client = self.client.clone();
+        let event_future = self.agent.handle_event(Event::GameLoaded);
 
-        match setup {
-            PlayerSetup::Computer(race, _) => {
-                req.mut_join_game().set_race(race.into_proto()?);
-            },
-            PlayerSetup::Player(race) => {
-                req.mut_join_game().set_race(race.into_proto()?);
-            }, //_ => req.mut_join_game().set_race(common::Race::NoRace)
-        };
+        async_block! {
+            let mut req = sc2api::Request::new();
 
-        if let Some(ports) = ports {
-            req.mut_join_game()
-                .set_shared_port(ports.shared_port as i32);
+            match setup {
+                PlayerSetup::Computer(race, _) => {
+                    req.mut_join_game().set_race(race.into_proto()?);
+                },
+                PlayerSetup::Player(race) => {
+                    req.mut_join_game().set_race(race.into_proto()?);
+                }, //_ => req.mut_join_game().set_race(common::Race::NoRace)
+            };
 
-            {
-                let s = req.mut_join_game().mut_server_ports();
+            if let Some(ports) = ports {
+                req.mut_join_game()
+                    .set_shared_port(ports.shared_port as i32);
 
-                s.set_game_port(ports.server_ports.game_port as i32);
-                s.set_base_port(ports.server_ports.base_port as i32);
-            }
+                {
+                    let s = req.mut_join_game().mut_server_ports();
 
-            {
-                let client_ports = req.mut_join_game().mut_client_ports();
+                    s.set_game_port(ports.server_ports.game_port as i32);
+                    s.set_base_port(ports.server_ports.base_port as i32);
+                }
 
-                for c in &ports.client_ports {
-                    let mut p = sc2api::PortSet::new();
+                {
+                    let client_ports = req.mut_join_game().mut_client_ports();
 
-                    p.set_game_port(c.game_port as i32);
-                    p.set_base_port(c.base_port as i32);
+                    for c in &ports.client_ports {
+                        let mut p = sc2api::PortSet::new();
 
-                    client_ports.push(p);
+                        p.set_game_port(c.game_port as i32);
+                        p.set_base_port(c.base_port as i32);
+
+                        client_ports.push(p);
+                    }
                 }
             }
+
+            {
+                let options = req.mut_join_game().mut_options();
+
+                options.set_raw(true);
+                options.set_score(true);
+            }
+
+            await!(client.request(req))?;
+            await!(event_future)?;
+
+            Ok(())
         }
-
-        {
-            let options = req.mut_join_game().mut_options();
-
-            options.set_raw(true);
-            options.set_score(true);
-        }
-
-        await!(self.client.clone().request(req))?;
-
-        await!(
-            self.agent
-                .clone()
-                .handle_event(Event::GameLoaded)
-        )?;
-
-        Ok(self)
     }
 
-    #[async(boxed)]
-    fn run_game(self, update_scheme: UpdateScheme) -> Result<Self> {
-        await!(self.observer.clone().reset())?;
+    fn run_game(
+        &self,
+        update_scheme: UpdateScheme,
+    ) -> impl Future<Item = (), Error = Error> {
+        let observer = self.observer.clone();
+        let agent = self.agent.clone();
+        let action = self.action.clone();
+        let client = self.client.clone();
 
-        let (initial_events, _) = await!(self.observer.clone().step())?;
+        async_block! {
+            await!(observer.clone().reset())?;
 
-        await!(
-            self.agent
-                .clone()
-                .handle_event(Event::GameStarted)
-        )?;
-        for e in initial_events {
-            await!(self.agent.clone().handle_event(e))?;
+            let (initial_events, _) = await!(observer.clone().step())?;
+
+            await!(
+                agent
+                    .clone()
+                    .handle_event(Event::GameStarted)
+            )?;
+            for e in initial_events {
+                await!(agent.clone().handle_event(e))?;
+            }
+
+            loop {
+                match update_scheme {
+                    UpdateScheme::Realtime => (),
+                    UpdateScheme::Interval(interval) => {
+                        let mut req = sc2api::Request::new();
+                        req.mut_step().set_count(interval);
+
+                        await!(client.clone().request(req))?;
+                    },
+                }
+
+                let (events, game_ended) = await!(observer.clone().step())?;
+
+                for e in events {
+                    await!(agent.clone().handle_event(e))?;
+                }
+
+                await!(agent.clone().handle_event(Event::Step))?;
+
+                if game_ended {
+                    await!(
+                        agent
+                            .clone()
+                            .handle_event(Event::GameEnded)
+                    )?;
+                    break;
+                }
+
+                await!(action.clone().step())?;
+            }
+
+            Ok(())
         }
-
-        loop {
-            match update_scheme {
-                UpdateScheme::Realtime => (),
-                UpdateScheme::Interval(interval) => {
-                    let mut req = sc2api::Request::new();
-                    req.mut_step().set_count(interval);
-
-                    await!(self.client.clone().request(req))?;
-                },
-            }
-
-            let (events, game_ended) = await!(self.observer.clone().step())?;
-
-            for e in events {
-                await!(self.agent.clone().handle_event(e))?;
-            }
-
-            await!(self.agent.clone().handle_event(Event::Step))?;
-
-            if game_ended {
-                await!(
-                    self.agent
-                        .clone()
-                        .handle_event(Event::GameEnded)
-                )?;
-                break;
-            }
-
-            await!(self.action.clone().step())?;
-        }
-
-        Ok(self)
     }
 
-    #[async(boxed)]
-    fn leave_game(self) -> Result<Self> {
+    fn leave_game(&self) -> impl Future<Item = (), Error = Error> {
         let mut req = sc2api::Request::new();
         req.mut_leave_game();
 
-        await!(self.client.clone().request(req))?;
+        let future = self.client.request(req);
 
-        Ok(self)
+        async_block! {
+            await!(future)?;
+
+            Ok(())
+        }
     }
 
-    #[async(boxed)]
-    fn disconnect(self) -> Result<Self> {
-        await!(self.client.clone().disconnect())?;
+    fn disconnect(&self) -> impl Future<Item = (), Error = Error> {
+        let future = self.client.disconnect();
 
-        Ok(self)
+        async_block! {
+            await!(future)
+        }
     }
 }
 
@@ -437,27 +487,38 @@ pub struct AgentTerminal {
 }
 
 impl AgentTerminal {
-    #[async]
-    fn get_player_setup(self, _game: GameSetup) -> Result<PlayerSetup> {
-        Ok(PlayerSetup::Player(self.race))
+    fn get_player_setup(
+        &self,
+        _game: GameSetup,
+    ) -> impl Future<Item = PlayerSetup, Error = Error> {
+        let race = self.race;
+
+        async_block! {
+            Ok(PlayerSetup::Player(race))
+        }
     }
 
-    #[async]
-    fn handle_event(self, event: Event) -> Result<()> {
+    fn handle_event(
+        &self,
+        event: Event,
+    ) -> impl Future<Item = (), Error = Error> {
         let (tx, rx) = oneshot::channel();
+        let sender = self.tx.clone();
 
-        await!(
-            self.tx
-                .send((event, EventAck { tx: tx }))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send event"))
-        )?;
+        async_block! {
+            await!(
+                sender
+                    .send((event, EventAck { tx: tx }))
+                    .map(|_| ())
+                    .map_err(|_| Error::from("unable to send event"))
+            )?;
 
-        if let Err(_) = await!(rx) {
-            // ACK went out of scope, we can assume this means they are done
-            // using the event
+            if let Err(_) = await!(rx) {
+                // ACK went out of scope, we can assume this means they are done
+                // using the event
+            }
+
+            Ok(())
         }
-
-        Ok(())
     }
 }
