@@ -174,30 +174,31 @@ impl IntoFuture for Melee {
     type Error = Error;
     type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
 
-    #[async(boxed)]
-    fn into_future(self) -> Result<()> {
-        if self.break_on_ctrlc {
-            let (tx, rx) = sync::mpsc::channel(1);
+    fn into_future(self) -> Self::Future {
+        Box::new(async_block! {
+            if self.break_on_ctrlc {
+                let (tx, rx) = sync::mpsc::channel(1);
 
-            ctrlc::set_handler(move || {
-                if let Err(e) = tx.clone().send(()).wait() {
-                    eprintln!("unable to send Ctrl-C signal {:?}", e);
-                }
-            })?;
+                ctrlc::set_handler(move || {
+                    if let Err(e) = tx.clone().send(()).wait() {
+                        eprintln!("unable to send Ctrl-C signal {:?}", e);
+                    }
+                })?;
 
-            await!(
-                self.run().select2(rx.into_future(),).then(
-                    |result| match result {
-                        Ok(_) => Ok(()),
-                        Err(Either::A((e, _))) => Err(e),
-                        Err(Either::B((_, _))) => {
-                            Err(Error::from("CTRL-C handler failed"))
+                await!(
+                    self.run().select2(rx.into_future(),).then(
+                        |result| match result {
+                            Ok(_) => Ok(()),
+                            Err(Either::A((e, _))) => Err(e),
+                            Err(Either::B((_, _))) => {
+                                Err(Error::from("CTRL-C handler failed"))
+                            },
                         },
-                    },
-                )
-            )?;
-        }
-        Ok(())
+                    )
+                )?;
+            }
+            Ok(())
+        })
     }
 }
 
