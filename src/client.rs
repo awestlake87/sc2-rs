@@ -11,7 +11,7 @@ use tokio_tungstenite::connect_async;
 use tungstenite;
 use url::Url;
 
-use super::{Error, Result};
+use super::{Error, ErrorKind, Result};
 
 #[derive(Debug)]
 enum ClientRequest {
@@ -36,10 +36,14 @@ impl ProtoClient {
             await!(
                 sender
                     .send(ClientRequest::Connect(url, tx))
-                    .map_err(|_| Error::from("unable to send connect"))
+                    .map_err(|_| -> Error {
+                        unreachable!("BUG in sc2-rs - Connect req failed")
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to receive connect ack")))
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("BUG in sc2-rs - Connect ack failed")
+            }))
         }
     }
 
@@ -55,10 +59,14 @@ impl ProtoClient {
             await!(
                 sender
                     .send(ClientRequest::Request(req, tx))
-                    .map_err(|_| Error::from("unable to send request"))
+                    .map_err(|_| -> Error {
+                        unreachable!("BUG in sc2-rs - Request req failed")
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to receive response")))?
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("BUG in sc2-rs - Request ack failed")
+            }))?
         }
     }
 
@@ -70,10 +78,14 @@ impl ProtoClient {
             await!(
                 sender
                     .send(ClientRequest::Disconnect(tx))
-                    .map_err(|_| Error::from("unable to disconnect"))
+                    .map_err(|_| -> Error {
+                        unreachable!("BUG in sc2-rs - Disconnect req failed")
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to receive response")))
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("BUG in sc2-rs - Disconnect ack failed")
+            }))
         }
     }
 }
@@ -117,7 +129,10 @@ impl ClientService {
     }
 
     fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        handle.spawn(self.run().map_err(|e| panic!("{:#?}", e)));
+        handle.spawn(
+            self.run()
+                .map_err(|e| panic!("Client exited unexpectedly {:#?}", e)),
+        );
 
         Ok(())
     }
@@ -143,7 +158,9 @@ impl ClientService {
                         await!(conn.request(req, tx))?;
                         connection = Some(conn)
                     },
-                    None => tx.send(Err(Error::from("no connection to game")))
+                    None => tx.send(Err(ErrorKind::ClientSendFailed(
+                        "No connection to game".to_string(),
+                    ).into()))
                         .unwrap(),
                 },
                 ClientRequest::Disconnect(tx) => {
@@ -162,11 +179,9 @@ impl ClientService {
 
         let timer = Timer::default();
 
-        let mut connection = None;
-
         for i in 0..NUM_RETRIES {
             println!(
-                "attempting to connect to instance {} - retries {}",
+                "Attempting to connect to instance {} - retries {}",
                 url,
                 (NUM_RETRIES - 1) - i
             );
@@ -180,20 +195,20 @@ impl ClientService {
                     .and_then(|_| connect_future)
             ) {
                 Ok(conn) => {
-                    connection = Some(conn);
-                    break;
+                    return Ok((self, conn));
                 },
-                Err(_) => {
-                    println!("connect failed. retrying in 5s");
+                Err(e) => {
+                    // if no retries left
+                    if NUM_RETRIES - i == 1 {
+                        return Err(e);
+                    } else {
+                        continue;
+                    }
                 },
             };
         }
 
-        if let Some(connection) = connection {
-            Ok((self, connection))
-        } else {
-            bail!("unable to connect")
-        }
+        unreachable!();
     }
 
     fn attempt_connect(
@@ -221,7 +236,7 @@ impl ClientService {
                         );
                         handle.spawn(
                             stream
-                                .map_err(|e| panic!("client error {:?}", e))
+                                .map_err(|_| -> () { unreachable!() })
                                 .zip(recv_rx)
                                 .for_each(|(msg, tx)| {
                                     if let tungstenite::Message::Binary(buf) = msg {
@@ -251,8 +266,10 @@ impl ClientService {
 
                         Ok(())
                     }
-                )
-            ).map_err(|e| Error::from(e))?;
+                ).map_err(|e| Error::with_chain(e, ErrorKind::ClientOpenFailed(
+                    "Unable to connect".to_string()
+                )))
+            )?;
 
             Ok(
                 Connection {
@@ -293,12 +310,16 @@ impl Connection {
 
             await!(
                 sender.send(msg)
-                    .map_err(|_| Error::from("unable to send request"))
+                    .map_err(|_| Error::from(ErrorKind::ClientSendFailed(
+                        "Send sink has closed".to_string()
+                    )))
             )?;
 
             await!(
                 receiver.send(tx)
-                    .map_err(|_| Error::from("unable to send responder"))
+                    .map_err(|_| Error::from(ErrorKind::ClientRecvFailed(
+                        "Recv stream has closed".to_string()
+                    )))
             )?;
 
             Ok(())

@@ -48,63 +48,58 @@ use std::path::PathBuf;
 
 error_chain! {
     foreign_links {
-        Io(std::io::Error) #[doc="link io errors"];
+        Io(std::io::Error) #[doc="Link io errors."];
 
-        Ctrlc(ctrlc::Error) #[doc="link to Ctrl-C errors"];
-        FutureCanceled(futures::Canceled) #[doc="link to futures"];
-        UrlParse(url::ParseError) #[doc="link to url parse errors"];
-        Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
-        Timer(tokio_timer::TimerError) #[doc="link to timer errors"];
-        Tungstenite(tungstenite::Error) #[doc="link to tungstenite errors"];
+        Ctrlc(ctrlc::Error) #[doc="Link to Ctrl-C errors."];
+        FutureCanceled(futures::Canceled) #[doc="Link to futures."];
+        UrlParse(url::ParseError) #[doc="Link to url parse errors."];
+        Protobuf(protobuf::ProtobufError) #[doc="Link to protobuf errors."];
+        Timer(tokio_timer::TimerError) #[doc="Link to timer errors."];
+        Tungstenite(tungstenite::Error) #[doc="Link to tungstenite errors."];
     }
     errors {
         /// Executable was not supplied to the coordinator.
         ExeNotSpecified {
-            description("exe not specified")
+            description("Executable was not supplied to the coordinator")
             display("StarCraft II exe was not specified")
         }
         /// Executable supplied to the coordinator does not exist.
         ExeDoesNotExist(exe: PathBuf) {
-            description("exe file does not exist")
+            description("Executable supplied to the coordinator does not exist")
             display("StarCraft II exe does not exist at {:?}", exe)
         }
 
         /// Client failed to open connection to the game instance.
-        ClientOpenFailed {
-            description("unable to open connection to the game instance")
-            display("client open failed")
+        ClientOpenFailed(msg: String) {
+            description("Client failed to open connection to the game instance")
+            display("Client open failed - {}", msg)
         }
         /// Client failed to send a message to the game instance.
-        ClientSendFailed {
-            description("unable to send message to the game instance")
-            display("client send failed")
+        ClientSendFailed(msg: String) {
+            description("Client failed to send a message to the game instance")
+            display("Client send failed - {}", msg)
         }
         /// Client failed to receive a message from the game instance.
-        ClientRecvFailed {
-            description("unable to receive message from game instance")
-            display("client recv failed")
+        ClientRecvFailed(msg: String) {
+            description("Client failed to receive a message from the game instance")
+            display("Client recv failed - {}", msg)
         }
         /// Client failed to initiate close handshake.
-        ClientCloseFailed {
-            description("unable to initiate close handshake")
-            display("client close failed")
+        ClientCloseFailed(msg: String) {
+            description("Client failed to complete close handshake")
+            display("Client close failed - {}", msg)
         }
 
         /// Errors received from game instance.
         GameErrors(errors: Vec<String>) {
-            description("errors in game response")
-            display("received errors: {:?}", errors)
-        }
-        /// An error occurred in agent callback.
-        AgentError {
-            description("error occurred in agent callback")
-            display("error occurred in agent callback")
+            description("Errors received from game instance")
+            display("Received errors: {:?}", errors)
         }
 
         /// Invalid protobuf data from game instance.
         InvalidProtobuf(msg: String) {
-            description("unable to convert protobuf data to game data")
-            display("unable to convert protobuf data: {}", msg)
+            description("Invalid protobuf data from game instance")
+            display("Unable to convert protobuf data: {}", msg)
         }
     }
 }
