@@ -86,6 +86,14 @@ impl MeleeContract for ComputerDendrite {
     fn run_game(self, _: UpdateScheme) -> Result<Self> {
         Ok(self)
     }
+    #[async(boxed)]
+    fn leave_game(self) -> Result<Self> {
+        Ok(self)
+    }
+    #[async(boxed)]
+    fn disconnect(self) -> Result<Self> {
+        Ok(self)
+    }
 }
 
 impl ComputerDendrite {

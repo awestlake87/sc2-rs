@@ -206,127 +206,162 @@ impl IntoFuture for Melee {
 impl Melee {
     #[async]
     fn run(mut self) -> Result<()> {
-        let (game, _suite) = match self.suite {
-            MeleeSuite::OneAndDone(game) => (game, None),
-            MeleeSuite::EndlessRepeat(game) => {
-                let suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
+        let instance1 = self.launcher.launch()?;
+        let mut maybe_instance2 = None;
+        let mut maybe_ports = None;
 
-                (game, suite)
-            },
-        };
+        let mut suite = Some(self.suite);
 
-        let player1 = await!(
-            self.agents[0]
-                .clone()
-                .get_player_setup(game.clone())
-        )?;
-        let player2 = await!(
-            self.agents[1]
-                .clone()
-                .get_player_setup(game.clone())
-        )?;
-
-        let is_pvp = {
-            if player1.is_player() && player2.is_computer() {
-                false
-            } else if player1.is_computer() && player2.is_player() {
-                false
-            } else if player1.is_player() && player2.is_player() {
-                true
-            } else {
-                bail!("invalid player setups")
-            }
-        };
-
-        if is_pvp {
-            // launch both at the same time
-            let instances = {
-                let instance1 = self.launcher.launch()?;
-                let instance2 = self.launcher.launch()?;
-
-                (instance1, instance2)
+        while suite.is_some() {
+            let game = match suite.unwrap() {
+                MeleeSuite::OneAndDone(game) => {
+                    suite = None;
+                    game
+                },
+                MeleeSuite::EndlessRepeat(game) => {
+                    suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
+                    game
+                },
             };
 
-            // connect to both at the same time
-            {
-                let connect1 = self.agents[0]
-                    .clone()
-                    .connect(instances.0.get_url()?);
-                let connect2 = self.agents[1]
-                    .clone()
-                    .connect(instances.1.get_url()?);
-
-                await!(connect1.join(connect2))?;
-            }
-
-            await!(
+            let player1 = await!(
                 self.agents[0]
                     .clone()
-                    .create_game(game.clone(), vec![player1, player2])
+                    .get_player_setup(game.clone())
+            )?;
+            let player2 = await!(
+                self.agents[1]
+                    .clone()
+                    .get_player_setup(game.clone())
             )?;
 
-            let mut ports = self.launcher.create_game_ports();
-
-            ports.client_ports.push(instances.0.ports);
-            ports.client_ports.push(instances.1.ports);
-
-            {
-                let join1 = self.agents[0]
-                    .clone()
-                    .join_game(player1, Some(ports.clone()));
-                let join2 = self.agents[1]
-                    .clone()
-                    .join_game(player2, Some(ports));
-
-                await!(join1.join(join2))?;
-            }
-
-            {
-                let run1 = self.agents[0]
-                    .clone()
-                    .run_game(self.update_scheme);
-                let run2 = self.agents[1]
-                    .clone()
-                    .run_game(self.update_scheme);
-
-                await!(run1.join(run2))?;
-            }
-
-            // just quit for now
-            return Ok(());
-        } else {
-            let (player, computer) = if player1.is_computer() {
-                (
-                    (self.agents[1].clone(), player2),
-                    (self.agents[0].clone(), player1),
-                )
-            } else if player2.is_computer() {
-                (
-                    (self.agents[0].clone(), player1),
-                    (self.agents[1].clone(), player2),
-                )
-            } else {
-                unreachable!()
+            let is_pvp = {
+                if player1.is_player() && player2.is_computer() {
+                    false
+                } else if player1.is_computer() && player2.is_player() {
+                    false
+                } else if player1.is_player() && player2.is_player() {
+                    true
+                } else {
+                    bail!("invalid player setups")
+                }
             };
 
-            assert!(player.1.is_player() && computer.1.is_computer());
+            if is_pvp {
+                let instance2 = match maybe_instance2 {
+                    Some(instance) => instance,
+                    None => self.launcher.launch()?,
+                };
 
-            let instance = self.launcher.launch()?;
+                let ports = match maybe_ports {
+                    Some(ports) => ports,
+                    None => {
+                        let mut ports = self.launcher.create_game_ports();
 
-            await!(player.0.clone().connect(instance.get_url()?))?;
-            await!(
-                player
-                    .0
-                    .clone()
-                    .create_game(game.clone(), vec![player.1, computer.1])
-            )?;
-            await!(player.0.clone().join_game(player.1, None))?;
+                        ports.client_ports.push(instance1.ports);
+                        ports.client_ports.push(instance2.ports);
 
-            await!(player.0.clone().run_game(self.update_scheme))?;
+                        ports
+                    },
+                };
 
-            // just quit for now
-            return Ok(());
+                // connect to both at the same time
+                {
+                    let connect1 = self.agents[0]
+                        .clone()
+                        .connect(instance1.get_url()?);
+                    let connect2 = self.agents[1]
+                        .clone()
+                        .connect(instance2.get_url()?);
+
+                    await!(connect1.join(connect2))?;
+                }
+
+                await!(
+                    self.agents[0]
+                        .clone()
+                        .create_game(game.clone(), vec![player1, player2])
+                )?;
+
+                {
+                    let join1 = self.agents[0]
+                        .clone()
+                        .join_game(player1, Some(ports.clone()));
+                    let join2 = self.agents[1]
+                        .clone()
+                        .join_game(player2, Some(ports.clone()));
+
+                    await!(join1.join(join2))?;
+                }
+
+                {
+                    let run1 = self.agents[0]
+                        .clone()
+                        .run_game(self.update_scheme);
+                    let run2 = self.agents[1]
+                        .clone()
+                        .run_game(self.update_scheme);
+
+                    await!(run1.join(run2))?;
+                }
+
+                {
+                    let leave1 = self.agents[0].clone().leave_game();
+                    let leave2 = self.agents[1].clone().leave_game();
+
+                    await!(leave1.join(leave2))?;
+                }
+
+                {
+                    let disconnect1 = self.agents[0]
+                        .clone()
+                        .connect(instance1.get_url()?);
+                    let disconnect2 = self.agents[1]
+                        .clone()
+                        .connect(instance2.get_url()?);
+
+                    await!(disconnect1.join(disconnect2))?;
+                }
+
+                maybe_instance2 = Some(instance2);
+                maybe_ports = Some(ports);
+            } else {
+                let (player, computer) = if player1.is_computer() {
+                    (
+                        (self.agents[1].clone(), player2),
+                        (self.agents[0].clone(), player1),
+                    )
+                } else if player2.is_computer() {
+                    (
+                        (self.agents[0].clone(), player1),
+                        (self.agents[1].clone(), player2),
+                    )
+                } else {
+                    unreachable!()
+                };
+
+                assert!(player.1.is_player() && computer.1.is_computer());
+
+                let instance = self.launcher.launch()?;
+
+                await!(player.0.clone().connect(instance.get_url()?))?;
+                await!(
+                    player
+                        .0
+                        .clone()
+                        .create_game(game.clone(), vec![player.1, computer.1])
+                )?;
+                await!(player.0.clone().join_game(player.1, None))?;
+
+                await!(player.0.clone().run_game(self.update_scheme))?;
+
+                await!(player.0.clone().leave_game())?;
+
+                await!(player.0.clone().disconnect())?;
+            }
         }
+
+        Ok(())
     }
 }
 
@@ -342,6 +377,9 @@ enum MeleeRequest {
         oneshot::Sender<()>,
     ),
     RunGame(UpdateScheme, oneshot::Sender<()>),
+    LeaveGame(oneshot::Sender<()>),
+
+    Disconnect(oneshot::Sender<()>),
 }
 
 /// Wrapper around a sender to provide a melee interface.
@@ -384,6 +422,10 @@ pub trait MeleeContract: Sized {
         self,
         update_scheme: UpdateScheme,
     ) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    fn leave_game(self) -> Box<Future<Item = Self, Error = Self::Error>>;
+
+    fn disconnect(self) -> Box<Future<Item = Self, Error = Self::Error>>;
 }
 
 /// Wrapper around a receiver to provide a controlled interface.
@@ -440,6 +482,18 @@ impl MeleeDendrite {
                             .run_game(update_scheme)
                             .map_err(|e| e.into())
                     )?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::LeaveGame(tx) => {
+                    dendrite =
+                        await!(dendrite.leave_game().map_err(|e| e.into()))?;
+
+                    tx.send(()).unwrap();
+                },
+                MeleeRequest::Disconnect(tx) => {
+                    dendrite =
+                        await!(dendrite.disconnect().map_err(|e| e.into()))?;
 
                     tx.send(()).unwrap();
                 },
@@ -528,114 +582,30 @@ impl MeleeClient {
 
         await!(rx.map_err(|_| Error::from("unable to run game")))
     }
+
+    #[async]
+    pub fn leave_game(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::LeaveGame(tx))
+                .map_err(|_| Error::from("unable to leave game"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to leave game")))
+    }
+
+    #[async]
+    pub fn disconnect(self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        await!(
+            self.tx
+                .send(MeleeRequest::Disconnect(tx))
+                .map_err(|_| Error::from("unable to disconnect"))
+        )?;
+
+        await!(rx.map_err(|_| Error::from("unable to disconnect")))
+    }
 }
-
-// /// MeleeSoma state that pits players against the built-in AI
-// pub struct PlayerVsComputer {
-//     suite: Option<MeleeSuite>,
-
-//     game: GameSettings,
-//     player_setup: PlayerSetup,
-//     computer_setup: PlayerSetup,
-
-//     player: Handle,
-// }
-
-// impl PlayerVsComputer {
-//     fn start(
-//         suite: Option<MeleeSuite>,
-//         player: (Handle, PlayerSetup),
-//         computer: (Handle, PlayerSetup),
-//         game: GameSettings,
-//     ) -> Result<MeleeSoma> {
-//         Ok(MeleeSoma::PlayerVsComputer(PlayerVsComputer {
-//             suite: suite,
-
-//             game: game,
-//             player_setup: player.1,
-//             computer_setup: computer.1,
-
-//             player: player.0,
-//         }))
-//     }
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<MeleeSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::Ready) => {
-//                 self.on_agent_ready(axon, src)
-//             },
-//             Impulse::Signal(src, Signal::GameCreated) => {
-//                 self.on_game_created(axon, src)
-//             },
-//             Impulse::Signal(src, Signal::GameEnded) => {
-//                 self.on_game_ended(axon, src)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-
-//     fn on_agent_ready(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-//         if src != self.player {
-//             bail!("expected source of Ready to be the agent")
-//         }
-
-//         axon.effector()?.send(
-//             self.player,
-//             Signal::CreateGame(
-//                 self.game.clone(),
-//                 vec![self.player_setup, self.computer_setup],
-//             ),
-//         );
-
-//         Ok(MeleeSoma::PlayerVsComputer(self))
-//     }
-
-//     fn on_game_created(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-//         if src != self.player {
-//             bail!("expected source of GameCreated to be the agent")
-//         }
-
-//         axon.effector()?
-//             .send(self.player, Signal::GameReady(self.player_setup, None));
-
-//         Ok(MeleeSoma::PlayerVsComputer(self))
-//     }
-
-//     fn on_game_ended(self, axon: &Axon, src: Handle) -> Result<MeleeSoma> {
-//         if src != self.player {
-//             bail!("expected source of GameEnded to be an agent")
-//         }
-
-//         if self.suite.is_none() {
-//             Completed::complete(axon)
-//         } else {
-//             Setup::setup(axon, self.suite.unwrap())
-//         }
-//     }
-// }
-
-// pub struct Completed;
-
-// impl Completed {
-//     fn complete(axon: &Axon) -> Result<MeleeSoma> {
-//         axon.effector()?.stop();
-
-//         Ok(MeleeSoma::Completed(Completed {}))
-//     }
-
-//     fn update(
-//         self,
-//         _axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<MeleeSoma> {
-//         match msg {
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }

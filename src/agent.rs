@@ -411,6 +411,23 @@ impl MeleeContract for AgentMeleeDendrite {
 
         Ok(self)
     }
+
+    #[async(boxed)]
+    fn leave_game(self) -> Result<Self> {
+        let mut req = sc2api::Request::new();
+        req.mut_leave_game();
+
+        await!(self.client.clone().request(req))?;
+
+        Ok(self)
+    }
+
+    #[async(boxed)]
+    fn disconnect(self) -> Result<Self> {
+        await!(self.client.clone().disconnect())?;
+
+        Ok(self)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -444,71 +461,3 @@ impl AgentTerminal {
         Ok(())
     }
 }
-
-// pub struct LeaveGame {
-//     transactor: Transactor,
-// }
-
-// impl LeaveGame {
-//     fn leave(axon: &Axon) -> Result<AgentSoma> {
-//         let mut req = sc2api::Request::new();
-
-//         req.mut_leave_game();
-
-//         let transactor = Transactor::send(axon, ClientRequest::new(req))?;
-
-//         Ok(AgentSoma::LeaveGame(LeaveGame {
-//             transactor: transactor,
-//         }))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(src, Signal::ClientResult(result)) => {
-//                 self.transactor.expect(src, result)?;
-
-//                 Reset::reset(axon)
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
-
-// pub struct Reset;
-
-// impl Reset {
-//     fn reset(axon: &Axon) -> Result<AgentSoma> {
-//         axon.send_req_output(Synapse::Client, Signal::ClientDisconnect)?;
-
-//         Ok(AgentSoma::Reset(Reset {}))
-//     }
-
-//     fn update(
-//         self,
-//         axon: &Axon,
-//         msg: Impulse<Signal, Synapse>,
-//     ) -> Result<AgentSoma> {
-//         match msg {
-//             Impulse::Signal(_, Signal::ClientError(_)) => {
-//                 // client does not close cleanly anyway right now, so just
-//                 // ignore the error and wait for ClientClosed.
-//                 Ok(AgentSoma::Reset(self))
-//             },
-//             Impulse::Signal(_, Signal::ClientClosed) => {
-//                 axon.send_req_input(Synapse::Controller, Signal::GameEnded)?;
-//                 axon.send_req_output(Synapse::Agent, Signal::GameEnded)?;
-
-//                 Setup::setup()
-//             },
-
-// Impulse::Signal(_, msg) => bail!("unexpected message {:#?}",
-// msg),             _ => bail!("unexpected protocol message"),
-//         }
-//     }
-// }
