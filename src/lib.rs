@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 #![recursion_limit = "1024"]
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 //! StarCraft II API for Rust
 //!
