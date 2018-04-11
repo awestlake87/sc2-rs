@@ -129,10 +129,12 @@ impl ClientService {
     }
 
     fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        handle.spawn(
-            self.run()
-                .map_err(|e| panic!("Client exited unexpectedly {:#?}", e)),
-        );
+        handle.spawn(self.run().map_err(|e| {
+            panic!(
+                "BUG in sc2-rs - Client exited unexpectedly - {:#?}",
+                e
+            )
+        }));
 
         Ok(())
     }

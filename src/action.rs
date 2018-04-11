@@ -67,7 +67,12 @@ impl ActionBuilder {
             self.user_rx,
         );
 
-        handle.spawn(service.run().map_err(|e| panic!("{:#?}", e)));
+        handle.spawn(service.run().map_err(|e| {
+            panic!(
+                "BUG in sc2-rs - ActionService exited unexpectedly - {:#?}",
+                e
+            )
+        }));
 
         Ok(())
     }
@@ -114,19 +119,21 @@ impl ActionService {
                     self = await!(self.send_actions())?;
                     self = await!(self.send_debug())?;
 
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack step"))?;
+                    tx.send(()).expect(
+                        "BUG in sc2-rs - Unable to ack Step in ActionService",
+                    );
                 },
                 Either::Request(ActionRequest::SendAction(action, tx)) => {
                     self.action_batch.push(action);
-                    tx.send(()).map_err(|_| {
-                        Error::from("unable to ack send command")
-                    })?;
+                    tx.send(()).expect(
+                        "BUG in sc2-rs - Unable to ack SendAction in ActionService"
+                    );
                 },
                 Either::Request(ActionRequest::SendDebug(cmd, tx)) => {
                     self.debug_batch.push(cmd);
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack send debug"))?;
+                    tx.send(()).expect(
+                        "BUG in sc2-rs - Unable to ack SendDebug in ActionService"
+                    );
                 },
             }
         }
@@ -205,9 +212,13 @@ impl ActionControlClient {
             self.tx
                 .send(ActionControlRequest::Step(tx))
                 .map(|_| ())
-                .map_err(|_| Error::from("unable to send debug command"))
+                .map_err(|_| -> Error {
+                    unreachable!("BUG in sc2-rs - Unable to req step")
+                })
         )?;
-        await!(rx.map_err(|_| Error::from("unable to send debug ack")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("BUG in sc2-rs - Unable to ack step")
+        }))
     }
 }
 
@@ -231,9 +242,9 @@ impl ActionClient {
                 sender
                     .send(ActionRequest::SendAction(action, tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send command"))
+                    .map_err(|_| -> Error { unreachable!("BUG in sc2-rs - Unable to req action ") })
             )?;
-            await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
+            await!(rx.map_err(|_| -> Error { unreachable!("BUG in sc2-rs - Unable to ack action") }))
         }
     }
 }
@@ -258,9 +269,9 @@ impl DebugClient {
                 sender
                     .send(ActionRequest::SendDebug(cmd.into(), tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send debug command"))
+                    .map_err(|_| -> Error { unreachable!("BUG in sc2-rs - Unable to req debug command") })
             )?;
-            await!(rx.map_err(|_| Error::from("unable to send debug ack")))
+            await!(rx.map_err(|_| -> Error { unreachable!("BUG in sc2-rs - Unable to ack debug command") }))
         }
     }
 }
