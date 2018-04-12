@@ -20,10 +20,11 @@ use std::path::PathBuf;
 use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
+use sc2::data::{Difficulty, GameSetup, Map, Point2, Race};
 use sc2::{
+    debug::{DebugClient, DebugCommand, DebugText, DebugTextTarget},
     AgentBuilder,
     ComputerBuilder,
-    DebugClient,
     Error,
     Event,
     EventAck,
@@ -31,16 +32,6 @@ use sc2::{
     MeleeBuilder,
     ObserverClient,
     Result,
-};
-use sc2::data::{
-    DebugCommand,
-    DebugText,
-    DebugTextTarget,
-    Difficulty,
-    GameSetup,
-    Map,
-    Point2,
-    Race,
 };
 use tokio_core::reactor;
 

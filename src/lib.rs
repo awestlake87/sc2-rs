@@ -34,9 +34,9 @@ mod services;
 
 pub mod action;
 pub mod data;
+pub mod debug;
 
 pub use self::launcher::LauncherSettings;
-pub use self::services::action_service::DebugClient;
 pub use self::services::agent_service::{AgentBuilder, Event, EventAck};
 pub use self::services::computer_service::ComputerBuilder;
 pub use self::services::melee_service::MeleeBuilder;

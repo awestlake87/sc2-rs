@@ -8,7 +8,7 @@ use tokio_core::reactor;
 use super::client_service::ProtoClient;
 use action::Action;
 use constants::sc2_bug_tag;
-use data::DebugCommand;
+use debug::DebugCommand;
 use {Error, IntoProto, Result};
 
 pub struct ActionBuilder {
