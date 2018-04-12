@@ -6,7 +6,8 @@ use futures::unsync::{mpsc, oneshot};
 use tokio_core::reactor;
 use url::Url;
 
-use super::{Error, Result};
+use super::{Error, ErrorKind, Result};
+use constants::{sc2_bug_tag, warning_tag};
 use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
 
@@ -123,11 +124,17 @@ impl MeleeBuilder {
     /// Build the Melee coordinator.
     pub fn create(self) -> Result<Melee> {
         if self.launcher_settings.is_none() {
-            bail!("missing launcher settings")
+            bail!(ErrorKind::MissingRequirement(
+                "MeleeBuilder needs LauncherSettings".to_string()
+            ))
         } else if self.suite.is_none() {
-            bail!("missing melee suite")
+            bail!(ErrorKind::MissingRequirement(
+                "MeleeBuilder needs MeleeSuite".to_string()
+            ))
         } else if self.handle.is_none() {
-            bail!("missing reactor handle")
+            bail!(ErrorKind::MissingRequirement(
+                "MeleeBuilder needs a reactor handle".to_string()
+            ))
         }
 
         let handle = self.handle.unwrap();
@@ -181,7 +188,7 @@ impl IntoFuture for Melee {
 
                 ctrlc::set_handler(move || {
                     if let Err(e) = tx.clone().send(()).wait() {
-                        eprintln!("unable to send Ctrl-C signal {:?}", e);
+                        println!("{}: Unable to send Ctrl-C signal {:?}", warning_tag(), e);
                     }
                 })?;
 
@@ -191,7 +198,7 @@ impl IntoFuture for Melee {
                             Ok(_) => Ok(()),
                             Err(Either::A((e, _))) => Err(e),
                             Err(Either::B((_, _))) => {
-                                Err(Error::from("CTRL-C handler failed"))
+                                panic!("{}: CTRL-C handler failed", sc2_bug_tag());
                             },
                         },
                     )
@@ -234,16 +241,16 @@ impl Melee {
                     .get_player_setup(game.clone())
             )?;
 
-            let is_pvp = {
-                if player1.is_player() && player2.is_computer() {
-                    false
-                } else if player1.is_computer() && player2.is_player() {
-                    false
-                } else if player1.is_player() && player2.is_player() {
-                    true
-                } else {
-                    bail!("invalid player setups")
-                }
+            let is_pvp = match (player1, player2) {
+                (PlayerSetup::Player(_), PlayerSetup::Player(_)) => true,
+                (PlayerSetup::Player(_), PlayerSetup::Computer(_, _)) => false,
+                (PlayerSetup::Computer(_, _), PlayerSetup::Player(_)) => false,
+                (PlayerSetup::Computer(_, _), PlayerSetup::Computer(_, _)) => {
+                    bail!(ErrorKind::InvalidMatch(
+                        "A match between two built-in SC2 AI is not allowed"
+                            .to_string()
+                    ))
+                },
             };
 
             if is_pvp {
@@ -341,9 +348,7 @@ impl Melee {
 
                 assert!(player.1.is_player() && computer.1.is_computer());
 
-                let instance = self.launcher.launch()?;
-
-                await!(player.0.clone().connect(instance.get_url()?))?;
+                await!(player.0.clone().connect(instance1.get_url()?))?;
                 await!(
                     player
                         .0
@@ -396,10 +401,20 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::PlayerSetup(game, tx))
-                .map_err(|_| Error::from("unable to request player setup"))
+                .map_err(|_| -> Error {
+                    unreachable!(
+                        "{}: Unable to request player setup",
+                        sc2_bug_tag()
+                    )
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!(
+                "{}: Unable to receive player setup",
+                sc2_bug_tag()
+            )
+        }))
     }
 
     /// Tell agent to connect to instance.
@@ -410,10 +425,20 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::Connect(url, tx))
-                .map_err(|_| Error::from("unable to request player setup"))
+                .map_err(|_| -> Error {
+                    unreachable!(
+                        "{}: Unable to request player setup",
+                        sc2_bug_tag()
+                    )
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to receive player setup")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!(
+                "{}: Unable to receive player setup",
+                sc2_bug_tag()
+            )
+        }))
     }
 
     /// Tell agent to create a game.
@@ -428,10 +453,14 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::CreateGame(game, players, tx))
-                .map_err(|_| Error::from("unable to create game"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to create game", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to create game")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to create game", sc2_bug_tag())
+        }))
     }
 
     /// Tell agent to join a game.
@@ -446,10 +475,14 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::JoinGame(setup, ports, tx))
-                .map_err(|_| Error::from("unable to join game"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to join game", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to join game")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to join game", sc2_bug_tag())
+        }))
     }
 
     /// Run the game to completion.
@@ -460,10 +493,14 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::RunGame(update_scheme, tx))
-                .map_err(|_| Error::from("unable to run game"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to run game", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to run game")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to run game", sc2_bug_tag())
+        }))
     }
 
     #[async]
@@ -473,10 +510,14 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::LeaveGame(tx))
-                .map_err(|_| Error::from("unable to leave game"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to leave game", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to leave game")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to leave game", sc2_bug_tag())
+        }))
     }
 
     #[async]
@@ -486,9 +527,13 @@ impl MeleeClient {
         await!(
             self.tx
                 .send(MeleeRequest::Disconnect(tx))
-                .map_err(|_| Error::from("unable to disconnect"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to disconnect", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to disconnect")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to disconnect", sc2_bug_tag())
+        }))
     }
 }

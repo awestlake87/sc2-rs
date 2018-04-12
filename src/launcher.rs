@@ -1,10 +1,12 @@
 use std::env::home_dir;
 use std::path::{PathBuf, MAIN_SEPARATOR};
 
+use colored::Colorize;
 use glob::glob;
 use regex::Regex;
 
 use super::{ErrorKind, Result};
+use constants::{sc2_bug_tag, warning_tag};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
 
@@ -80,14 +82,27 @@ impl LauncherSettings {
 impl Launcher {
     /// Build the settings object.
     pub fn create(settings: LauncherSettings) -> Result<Self> {
+        let use_wine = if cfg!(target_os = "windows") && settings.use_wine {
+            println!(
+                "{}: {}",
+                warning_tag(),
+                "Wine is not necessary for Windows - Disable Wine support to get rid of this message"
+                    .white()
+                    .bold()
+            );
+            false
+        } else {
+            settings.use_wine
+        };
+
         let dir = {
             if let Some(dir) = settings.dir {
                 dir
             } else {
-                auto_detect_starcraft(settings.use_wine)?
+                auto_detect_starcraft(use_wine)?
             }
         };
-        let (exe, arch) = select_exe(&dir, settings.use_wine)?;
+        let (exe, arch) = select_exe(&dir, use_wine)?;
         let pwd = select_pwd(&dir, arch);
 
         Ok(Self {
@@ -186,32 +201,36 @@ fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
 }
 
 fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
-    if cfg!(target_os = "windows") && use_wine {
-        bail!("wine not supported on windows")
-    }
-
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
+        _ => panic!(
+            "{}: Unexpected path separator {}",
+            sc2_bug_tag(),
+            MAIN_SEPARATOR
+        ),
     };
 
     let glob_iter = match glob(
         &format!("{}/Versions/Base*/SC2*", dir.to_str().unwrap())[..],
     ) {
         Ok(iter) => iter,
-        Err(_) => bail!("failed to read glob pattern"),
+        Err(_) => bail!(ErrorKind::AutoDetectFailed(
+            "Failed to crawl SC2 installation".to_string()
+        )),
     };
 
     let exe_re =
         match Regex::new(&format!("Base([0-9]*){}SC2(_x64)?", separator)[..]) {
             Ok(re) => re,
-            Err(_) => bail!("failed to parse regex"),
+            Err(_) => unreachable!("{}: Failed to parse regex", sc2_bug_tag()),
         };
 
     let mut current_version = 0;
     let mut current_arch = ExeArch::X32;
-    let mut exe: Result<(PathBuf, ExeArch)> = Err("exe not found".into());
+    let mut exe: Result<(PathBuf, ExeArch)> = Err(ErrorKind::AutoDetectFailed(
+        "SC2 exe file not found".to_string(),
+    ).into());
 
     for entry in glob_iter {
         match entry {
@@ -220,7 +239,11 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                 let path_str = match path_clone.to_str() {
                     Some(s) => s,
                     None => {
-                        eprintln!("unable to convert path to string");
+                        println!(
+                            "{}: Unable to convert {:?} to string",
+                            warning_tag(),
+                            path
+                        );
                         continue;
                     },
                 };
@@ -230,7 +253,10 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                         let v = match caps.get(1).unwrap().as_str().parse() {
                             Ok(v) => v,
                             Err(_) => {
-                                eprintln!("unable to parse version as int");
+                                println!(
+                                    "{}: Unable to parse version as int",
+                                    warning_tag()
+                                );
                                 continue;
                             },
                         };
@@ -239,7 +265,10 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                             Some(a) => match a.as_str() {
                                 "_x64" => ExeArch::X64,
                                 _ => {
-                                    eprintln!("unrecognized suffix");
+                                    println!(
+                                        "{}: Unrecognized suffix",
+                                        warning_tag()
+                                    );
                                     continue;
                                 },
                             },
@@ -282,7 +311,11 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
+        _ => panic!(
+            "{}: Unexpected path separator {}",
+            sc2_bug_tag(),
+            MAIN_SEPARATOR
+        ),
     };
 
     let support_dir = PathBuf::from(

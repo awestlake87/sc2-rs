@@ -4,6 +4,7 @@ use std::process;
 use url::Url;
 
 use super::{ErrorKind, Result};
+use constants::warning_tag;
 use data::Rect;
 use launcher::PortSet;
 
@@ -100,7 +101,10 @@ impl Instance {
 
     pub fn get_url(&self) -> Result<Url> {
         let (host, port) = self.address.clone();
-        Ok(Url::parse(&*format!("ws://{}:{}/sc2api", host, port))?)
+        Ok(Url::parse(&*format!(
+            "ws://{}:{}/sc2api",
+            host, port
+        ))?)
     }
 
     pub fn kill(&mut self) -> Result<()> {
@@ -117,7 +121,11 @@ impl Instance {
 impl Drop for Instance {
     fn drop(&mut self) {
         if let Err(e) = self.kill() {
-            eprintln!("unable to drop instance {:?}", e);
+            println!(
+                "{}: Unable to drop instance {:?}",
+                warning_tag(),
+                e
+            );
         }
     }
 }

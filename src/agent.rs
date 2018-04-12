@@ -7,9 +7,10 @@ use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
 
-use super::{Error, IntoProto, Result};
+use super::{Error, ErrorKind, IntoProto, Result};
 use action::{ActionBuilder, ActionClient, ActionControlClient, DebugClient};
 use client::{ProtoClient, ProtoClientBuilder};
+use constants::sc2_bug_tag;
 use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
 use launcher::GamePorts;
 use melee::{MeleeCompetitor, MeleeRequest, UpdateScheme};
@@ -58,9 +59,9 @@ impl EventAck {
     /// Send a signal indicating that the user is done handling this event.
     #[async]
     pub fn done(self) -> Result<()> {
-        self.tx
-            .send(())
-            .map_err(|_| Error::from("unable to ack event"))
+        self.tx.send(()).map_err(|_| -> Error {
+            unreachable!("{}: Unable to ack event", sc2_bug_tag())
+        })
     }
 }
 
@@ -125,16 +126,15 @@ impl AgentBuilder {
 
     /// Take the stream of game events to listen for.
     ///
-    /// This can be called only once per builder. Subsequent calls will fail.
+    /// This should be called only once per builder! Subsequent calls will
+    /// return None because Streams should not be shared.
+    ///
     /// The stream item is a tuple containing the event, and a promise to be
     /// fulfilled once the user is done with the event.
     pub fn take_event_stream(
         &mut self,
-    ) -> Result<mpsc::Receiver<(Event, EventAck)>> {
-        match mem::replace(&mut self.event_rx, None) {
-            Some(rx) => Ok(rx),
-            None => bail!("agent stream has already been taken"),
-        }
+    ) -> Option<mpsc::Receiver<(Event, EventAck)>> {
+        mem::replace(&mut self.event_rx, None)
     }
 }
 
@@ -207,7 +207,13 @@ impl Agent {
     }
 
     fn spawn(self, handle: &reactor::Handle) -> Result<()> {
-        handle.spawn(self.run().map_err(|e| panic!("{:#?}", e)));
+        handle.spawn(self.run().map_err(|e| {
+            panic!(
+                "{}: AgentService ended unexpectedly {:#?}",
+                sc2_bug_tag(),
+                e
+            )
+        }));
 
         Ok(())
     }
@@ -221,41 +227,50 @@ impl Agent {
             match req {
                 MeleeRequest::PlayerSetup(game, tx) => {
                     let setup = await!(self.get_player_setup(game))?;
-                    tx.send(setup).map_err(|_| {
-                        Error::from("unable to get player setup")
+                    tx.send(setup).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to rsp PlayerSetup",
+                            sc2_bug_tag()
+                        )
                     })?;
                 },
                 MeleeRequest::Connect(url, tx) => {
                     await!(self.connect(url))?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to connect"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to ack connect", sc2_bug_tag())
+                    })?;
                 },
 
                 MeleeRequest::CreateGame(game, players, tx) => {
                     await!(self.create_game(game, players))?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to create game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to create game", sc2_bug_tag())
+                    })?;
                 },
                 MeleeRequest::JoinGame(player, ports, tx) => {
                     await!(self.join_game(player, ports))?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to join game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to join game", sc2_bug_tag())
+                    })?;
                 },
                 MeleeRequest::RunGame(update_scheme, tx) => {
                     await!(self.run_game(update_scheme))?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to run game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to run game", sc2_bug_tag())
+                    })?;
                 },
                 MeleeRequest::LeaveGame(tx) => {
                     await!(self.leave_game())?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to leave game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to leave game", sc2_bug_tag())
+                    })?;
                 },
 
                 MeleeRequest::Disconnect(tx) => {
                     await!(self.disconnect())?;
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to disconnect"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to disconnect", sc2_bug_tag())
+                    })?;
                 },
             }
         }
@@ -301,7 +316,10 @@ impl Agent {
                             .into_string()
                         {
                             Ok(s) => s,
-                            Err(_) => bail!("invalid path string"),
+                            Err(_) => bail!(ErrorKind::InvalidMapPath(format!(
+                                "{:?} cannot be converted to an OS string",
+                                *path
+                            ))),
                         });
                 },
                 &Map::BlizzardMap(ref map) => {
@@ -506,16 +524,22 @@ impl AgentTerminal {
         let sender = self.tx.clone();
 
         async_block! {
-            await!(
+            if let Err(_) = await!(
                 sender
                     .send((event, EventAck { tx: tx }))
-                    .map(|_| ())
-                    .map_err(|_| Error::from("unable to send event"))
-            )?;
+            ) {
+                // This is not really an error, it just means that the user's
+                // event stream has been closed or dropped. For now I'm just
+                // dropping the event and continuing.
+                //
+                // It might be worth adding a warning for this later.
+            }
 
             if let Err(_) = await!(rx) {
                 // ACK went out of scope, we can assume this means they are done
-                // using the event
+                // using the event.
+                //
+                // It might be worth adding a warning for this later.
             }
 
             Ok(())

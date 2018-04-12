@@ -12,6 +12,7 @@ use tungstenite;
 use url::Url;
 
 use super::{Error, ErrorKind, Result};
+use constants::{info_tag, sc2_bug_tag};
 
 #[derive(Debug)]
 enum ClientRequest {
@@ -37,12 +38,12 @@ impl ProtoClient {
                 sender
                     .send(ClientRequest::Connect(url, tx))
                     .map_err(|_| -> Error {
-                        unreachable!("BUG in sc2-rs - Connect req failed")
+                        unreachable!("{}: Connect req failed", sc2_bug_tag())
                     })
             )?;
 
             await!(rx.map_err(|_| -> Error {
-                unreachable!("BUG in sc2-rs - Connect ack failed")
+                unreachable!("{}: Connect ack failed", sc2_bug_tag())
             }))
         }
     }
@@ -60,12 +61,12 @@ impl ProtoClient {
                 sender
                     .send(ClientRequest::Request(req, tx))
                     .map_err(|_| -> Error {
-                        unreachable!("BUG in sc2-rs - Request req failed")
+                        unreachable!("{}: Request req failed", sc2_bug_tag())
                     })
             )?;
 
             await!(rx.map_err(|_| -> Error {
-                unreachable!("BUG in sc2-rs - Request ack failed")
+                unreachable!("{}: Request ack failed", sc2_bug_tag())
             }))?
         }
     }
@@ -79,12 +80,12 @@ impl ProtoClient {
                 sender
                     .send(ClientRequest::Disconnect(tx))
                     .map_err(|_| -> Error {
-                        unreachable!("BUG in sc2-rs - Disconnect req failed")
+                        unreachable!("{}: Disconnect req failed", sc2_bug_tag())
                     })
             )?;
 
             await!(rx.map_err(|_| -> Error {
-                unreachable!("BUG in sc2-rs - Disconnect ack failed")
+                unreachable!("{}: Disconnect ack failed", sc2_bug_tag())
             }))
         }
     }
@@ -131,7 +132,8 @@ impl ClientService {
     fn spawn(self, handle: &reactor::Handle) -> Result<()> {
         handle.spawn(self.run().map_err(|e| {
             panic!(
-                "BUG in sc2-rs - Client exited unexpectedly - {:#?}",
+                "{}: Client exited unexpectedly - {:#?}",
+                sc2_bug_tag(),
                 e
             )
         }));
@@ -183,7 +185,8 @@ impl ClientService {
 
         for i in 0..NUM_RETRIES {
             println!(
-                "Attempting to connect to instance {} - retries {}",
+                "{}: Attempting to connect to instance {} - retries {}",
+                info_tag(),
                 url,
                 (NUM_RETRIES - 1) - i
             );
@@ -204,6 +207,10 @@ impl ClientService {
                     if NUM_RETRIES - i == 1 {
                         return Err(e);
                     } else {
+                        println!(
+                            "{}: Unable to connect, retrying...",
+                            info_tag()
+                        );
                         continue;
                     }
                 },

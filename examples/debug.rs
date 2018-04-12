@@ -198,7 +198,7 @@ quick_main!(|| -> sc2::Result<()> {
         agent.add_observer_client(),
         agent.add_debug_client(),
     );
-    bot.spawn(&handle, agent.take_event_stream()?)?;
+    bot.spawn(&handle, agent.take_event_stream().unwrap())?;
 
     let zerg = ComputerBuilder::new()
         .race(Race::Zerg)

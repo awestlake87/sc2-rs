@@ -301,7 +301,7 @@ quick_main!(|| -> sc2::Result<()> {
         bot_agent.add_action_client(),
     );
 
-    bot.spawn(&handle, bot_agent.take_event_stream()?)?;
+    bot.spawn(&handle, bot_agent.take_event_stream().unwrap())?;
 
     let zerg = sc2::ComputerBuilder::new()
         .race(Race::Zerg)

@@ -11,6 +11,7 @@
 extern crate error_chain;
 
 extern crate bytes;
+extern crate colored;
 extern crate ctrlc;
 extern crate futures_await as futures;
 extern crate glob;
@@ -30,6 +31,7 @@ mod action;
 mod agent;
 mod client;
 mod computer;
+mod constants;
 mod instance;
 mod launcher;
 mod melee;
@@ -67,6 +69,35 @@ error_chain! {
         ExeDoesNotExist(exe: PathBuf) {
             description("Executable supplied to the coordinator does not exist")
             display("StarCraft II exe does not exist at {:?}", exe)
+        }
+
+        /// Auto-detecting the SC2 installation was unsuccessful.
+        AutoDetectFailed(msg: String) {
+            description("Auto-detecting the SC2 installation was unsuccessful")
+            display("SC2 Auto-detect failed {}", msg)
+        }
+
+        /// An invalid map path was supplied to the library.
+        InvalidMapPath(msg: String) {
+            description("An invalid map path was supplied to the library")
+            display("Invalid map path - {}", msg)
+        }
+
+        /// A required field was not provided to a builder.
+        ///
+        /// Often, a builder will have no suitable default for a value. These
+        /// fields require the user to supply a value. When the builder is
+        /// finalized, it will check these values and if it is missing a
+        /// requirement, you should expect this error.
+        MissingRequirement(msg: String) {
+            description("A required field was not provided to a builder")
+            display("Missing requirement - {}", msg)
+        }
+
+        /// Match settings are invalid.
+        InvalidMatch(msg: String) {
+            description("Match settings are invalid"),
+            display("Invalid Match - {}", msg)
         }
 
         /// Client failed to open connection to the game instance.

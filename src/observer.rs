@@ -10,6 +10,7 @@ use tokio_core::reactor;
 use super::{Error, FromProto, IntoSc2, Result};
 use agent::Event;
 use client::ProtoClient;
+use constants::sc2_bug_tag;
 use data::{
     Ability,
     AbilityData,
@@ -228,7 +229,13 @@ impl ObserverBuilder {
             self.user_rx,
         );
 
-        handle.spawn(task.run().map_err(move |e| panic!("{:#?}", e)));
+        handle.spawn(task.run().map_err(move |e| {
+            panic!(
+                "{}: ObserverService ended unexpectedly - {:#?}",
+                sc2_bug_tag(),
+                e
+            )
+        }));
 
         Ok(())
     }
@@ -301,8 +308,9 @@ impl ObserverService {
                     map_info = None;
                     unit_data = None;
 
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack reset"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to ack reset", sc2_bug_tag())
+                    })?;
                 },
                 Either::Control(ObserverControlRequest::Step(tx)) => {
                     let (observer, new_observation, events, game_ended) =
@@ -312,14 +320,22 @@ impl ObserverService {
                     observation = Some(new_observation);
 
                     tx.send((events, game_ended))
-                        .map_err(|_| Error::from("unable to ack step"))?;
+                        .map_err(|_| -> Error {
+                            unreachable!(
+                                "{}: Unable to ack step",
+                                sc2_bug_tag()
+                            )
+                        })?;
                 },
 
                 Either::Request(ObserverRequest::Observe(tx)) => {
                     // observation should exist because step should create it
                     tx.send(Rc::clone(observation.as_ref().unwrap()))
-                        .map_err(|_| {
-                            Error::from("unable to return observation")
+                        .map_err(|_| -> Error {
+                            unreachable!(
+                                "{}: Unable to return observation",
+                                sc2_bug_tag()
+                            )
                         })?;
                 },
                 Either::Request(ObserverRequest::GetMapInfo(tx)) => {
@@ -332,7 +348,12 @@ impl ObserverService {
                     }
 
                     tx.send(Rc::clone(map_info.as_ref().unwrap()))
-                        .map_err(|_| Error::from("unable to return map info"))?;
+                        .map_err(|_| -> Error {
+                            unreachable!(
+                                "{}: Unable to return map info",
+                                sc2_bug_tag()
+                            )
+                        })?;
                 },
                 Either::Request(ObserverRequest::GetUnitData(_))
                 | Either::Request(ObserverRequest::GetAbilityData(_))
@@ -357,30 +378,42 @@ impl ObserverService {
                     match req {
                         Either::Request(ObserverRequest::GetUnitData(tx)) => {
                             tx.send(Rc::clone(unit_data.as_ref().unwrap()))
-                                .map_err(|_| {
-                                    Error::from("unable to return unit data")
+                                .map_err(|_| -> Error {
+                                    unreachable!(
+                                        "{}: Unable to return unit data",
+                                        sc2_bug_tag()
+                                    )
                                 })?;
                         },
                         Either::Request(ObserverRequest::GetAbilityData(
                             tx,
                         )) => {
                             tx.send(Rc::clone(ability_data.as_ref().unwrap()))
-                                .map_err(|_| {
-                                    Error::from("unable to return ability data")
+                                .map_err(|_| -> Error {
+                                    unreachable!(
+                                        "{}: Unable to return ability data",
+                                        sc2_bug_tag()
+                                    )
                                 })?;
                         },
                         Either::Request(ObserverRequest::GetUpgradeData(
                             tx,
                         )) => {
                             tx.send(Rc::clone(upgrade_data.as_ref().unwrap()))
-                                .map_err(|_| {
-                                    Error::from("unable to return upgrade data")
+                                .map_err(|_| -> Error {
+                                    unreachable!(
+                                        "{}: Unable to return upgrade data",
+                                        sc2_bug_tag()
+                                    )
                                 })?;
                         },
                         Either::Request(ObserverRequest::GetBuffData(tx)) => {
                             tx.send(Rc::clone(buff_data.as_ref().unwrap()))
-                                .map_err(|_| {
-                                    Error::from("unable to return buff data")
+                                .map_err(|_| -> Error {
+                                    unreachable!(
+                                        "{}: Unable to return buff data",
+                                        sc2_bug_tag()
+                                    )
                                 })?;
                         },
 
@@ -712,10 +745,14 @@ impl ObserverControlClient {
             self.tx
                 .send(ObserverControlRequest::Reset(tx))
                 .map(|_| ())
-                .map_err(|_| Error::from("unable to send reset"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to send reset", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv reset ack")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to recv reset ack", sc2_bug_tag())
+        }))
     }
 
     /// returns a list of game events that have occurred since last step
@@ -727,10 +764,14 @@ impl ObserverControlClient {
             self.tx
                 .send(ObserverControlRequest::Step(tx))
                 .map(|_| ())
-                .map_err(|_| Error::from("unable to send step"))
+                .map_err(|_| -> Error {
+                    unreachable!("{}: Unable to send step", sc2_bug_tag())
+                })
         )?;
 
-        await!(rx.map_err(|_| Error::from("unable to recv step ack")))
+        await!(rx.map_err(|_| -> Error {
+            unreachable!("{}: Unable to recv step ack", sc2_bug_tag())
+        }))
     }
 }
 
@@ -753,10 +794,12 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::Observe(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send observation"))
+                    .map_err(|_| -> Error {
+                        unreachable!("{}: Unable to send observation", sc2_bug_tag())
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv observation")))
+            await!(rx.map_err(|_| -> Error { unreachable!("{}: Unable to recv observation", sc2_bug_tag()) }))
         }
     }
 
@@ -772,10 +815,10 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::GetMapInfo(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send map info request"))
+                    .map_err(|_| -> Error { unreachable!("{}: Unable to send map info request", sc2_bug_tag()) })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv map info")))
+            await!(rx.map_err(|_| -> Error { unreachable!("{}: Unable to recv map info", sc2_bug_tag()) }))
         }
     }
 
@@ -792,10 +835,10 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::GetUnitData(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send unit data request"))
+                    .map_err(|_| -> Error { unreachable!("{}: Unable to send unit data request", sc2_bug_tag()) })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv unit data")))
+            await!(rx.map_err(|_| -> Error { unreachable!("{}: Unable to recv unit data", sc2_bug_tag()) }))
         }
     }
 
@@ -812,12 +855,17 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::GetAbilityData(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from(
-                        "unable to send ability data request"
-                    ))
+                    .map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to send ability data request",
+                            sc2_bug_tag()
+                        )
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv ability data")))
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("{}: Unable to recv ability data", sc2_bug_tag())
+            }))
         }
     }
 
@@ -834,12 +882,17 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::GetUpgradeData(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from(
-                        "unable to send upgrade data request"
-                    ))
+                    .map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to send upgrade data request",
+                            sc2_bug_tag()
+                        )
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv upgrade data")))
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("{}: Unable to recv upgrade data", sc2_bug_tag())
+            }))
         }
     }
 
@@ -855,10 +908,14 @@ impl ObserverClient {
                 sender
                     .send(ObserverRequest::GetBuffData(tx))
                     .map(|_| ())
-                    .map_err(|_| Error::from("unable to send buff data request"))
+                    .map_err(|_| -> Error {
+                        unreachable!("{}: Unable to send buff data request", sc2_bug_tag())
+                    })
             )?;
 
-            await!(rx.map_err(|_| Error::from("unable to recv buff data")))
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("{}: Unable to recv buff data", sc2_bug_tag())
+            }))
         }
     }
 }

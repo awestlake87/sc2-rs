@@ -3,6 +3,7 @@ use futures::unsync::mpsc;
 use tokio_core::reactor;
 
 use super::{Error, Result};
+use constants::sc2_bug_tag;
 use data::{Difficulty, PlayerSetup, Race};
 use melee::{MeleeCompetitor, MeleeRequest};
 
@@ -49,7 +50,13 @@ impl MeleeCompetitor for ComputerBuilder {
                 self.race,
                 self.difficulty,
             )).run(control_rx)
-                .map_err(|e| panic!("{:#?}", e)),
+                .map_err(|e| {
+                    panic!(
+                        "{}: ComputerService ended unexpectedly - {:#?}",
+                        sc2_bug_tag(),
+                        e
+                    )
+                }),
         );
 
         Ok(())
@@ -70,35 +77,59 @@ impl ComputerService {
         for req in control_rx.map_err(|_| -> Error { unreachable!() }) {
             match req {
                 MeleeRequest::PlayerSetup(_, tx) => {
-                    tx.send(self.setup).map_err(|_| {
-                        Error::from("unable to get player setup")
+                    tx.send(self.setup).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to rsp player setup",
+                            sc2_bug_tag()
+                        )
                     })?;
                 },
                 MeleeRequest::Connect(_, tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to connect"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!("{}: Unable to ack connect", sc2_bug_tag())
+                    })?;
                 },
 
                 MeleeRequest::CreateGame(_, _, tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to create game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to ack create game",
+                            sc2_bug_tag()
+                        )
+                    })?;
                 },
                 MeleeRequest::JoinGame(_, _, tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to join game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to ack join game",
+                            sc2_bug_tag()
+                        )
+                    })?;
                 },
                 MeleeRequest::RunGame(_, tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to run game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to ack run game",
+                            sc2_bug_tag()
+                        )
+                    })?;
                 },
                 MeleeRequest::LeaveGame(tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to leave game"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to ack leave game",
+                            sc2_bug_tag()
+                        )
+                    })?;
                 },
 
                 MeleeRequest::Disconnect(tx) => {
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to disconnect"))?;
+                    tx.send(()).map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to ack disconnect",
+                            sc2_bug_tag()
+                        )
+                    })?;
                 },
             }
         }

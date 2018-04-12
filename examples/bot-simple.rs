@@ -217,8 +217,8 @@ quick_main!(|| -> sc2::Result<()> {
         agent2.add_action_client(),
     );
 
-    bot1.spawn(&handle, agent1.take_event_stream()?)?;
-    bot2.spawn(&handle, agent2.take_event_stream()?)?;
+    bot1.spawn(&handle, agent1.take_event_stream().unwrap())?;
+    bot2.spawn(&handle, agent2.take_event_stream().unwrap())?;
 
     let melee = MeleeBuilder::new()
         .add_player(agent1)
