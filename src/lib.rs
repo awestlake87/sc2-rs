@@ -34,12 +34,12 @@ mod services;
 
 pub mod action;
 pub mod agent;
+pub mod ai;
 pub mod data;
 pub mod debug;
 pub mod observer;
 
 pub use self::launcher::LauncherSettings;
-pub use self::services::computer_service::ComputerBuilder;
 pub use self::services::melee_service::MeleeBuilder;
 
 use std::path::PathBuf;

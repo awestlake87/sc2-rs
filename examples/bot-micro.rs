@@ -37,6 +37,7 @@ use sc2::data::{
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
     agent::AgentBuilder,
+    ai::OpponentBuilder,
     observer::{Event, EventAck, Observation, ObserverClient},
     Error,
     LauncherSettings,
@@ -299,7 +300,7 @@ quick_main!(|| -> sc2::Result<()> {
 
     bot.spawn(&handle, bot_agent.take_event_stream().unwrap())?;
 
-    let zerg = sc2::ComputerBuilder::new()
+    let zerg = OpponentBuilder::new()
         .race(Race::Zerg)
         .difficulty(Difficulty::VeryEasy);
 

@@ -23,9 +23,9 @@ use futures::unsync::mpsc;
 use sc2::data::{Difficulty, GameSetup, Map, Point2, Race};
 use sc2::{
     agent::AgentBuilder,
+    ai::OpponentBuilder,
     debug::{DebugClient, DebugCommand, DebugText, DebugTextTarget},
     observer::{Event, EventAck, ObserverClient},
-    ComputerBuilder,
     Error,
     LauncherSettings,
     MeleeBuilder,
@@ -189,7 +189,7 @@ quick_main!(|| -> sc2::Result<()> {
     );
     bot.spawn(&handle, agent.take_event_stream().unwrap())?;
 
-    let zerg = ComputerBuilder::new()
+    let zerg = OpponentBuilder::new()
         .race(Race::Zerg)
         .difficulty(Difficulty::VeryEasy);
 

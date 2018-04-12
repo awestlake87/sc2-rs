@@ -1,78 +1,21 @@
 use futures::prelude::*;
 use futures::unsync::mpsc;
-use tokio_core::reactor;
 
-use super::melee_service::{MeleeCompetitor, MeleeRequest};
 use constants::sc2_bug_tag;
-use data::{Difficulty, PlayerSetup, Race};
+use data::PlayerSetup;
+use services::melee_service::MeleeRequest;
 use {Error, Result};
 
-/// Build a built-in AI opponent.
-pub struct ComputerBuilder {
-    race: Race,
-    difficulty: Difficulty,
-}
-
-impl ComputerBuilder {
-    /// Create the builder.
-    pub fn new() -> Self {
-        Self {
-            race: Race::Random,
-            difficulty: Difficulty::Medium,
-        }
-    }
-
-    /// Set the race of the AI (default is Random).
-    pub fn race(self, race: Race) -> Self {
-        Self {
-            race: race,
-            ..self
-        }
-    }
-
-    /// Set the difficulty of the AI (default is Medium).
-    pub fn difficulty(self, difficulty: Difficulty) -> Self {
-        Self {
-            difficulty: difficulty,
-            ..self
-        }
-    }
-}
-
-impl MeleeCompetitor for ComputerBuilder {
-    fn spawn(
-        &mut self,
-        handle: &reactor::Handle,
-        control_rx: mpsc::Receiver<MeleeRequest>,
-    ) -> Result<()> {
-        handle.spawn(
-            ComputerService::new(PlayerSetup::Computer(
-                self.race,
-                self.difficulty,
-            )).run(control_rx)
-                .map_err(|e| {
-                    panic!(
-                        "{}: ComputerService ended unexpectedly - {:#?}",
-                        sc2_bug_tag(),
-                        e
-                    )
-                }),
-        );
-
-        Ok(())
-    }
-}
-
-struct ComputerService {
+pub struct ComputerService {
     setup: PlayerSetup,
 }
 
 impl ComputerService {
-    fn new(setup: PlayerSetup) -> Self {
+    pub fn new(setup: PlayerSetup) -> Self {
         Self { setup: setup }
     }
     #[async]
-    fn run(self, control_rx: mpsc::Receiver<MeleeRequest>) -> Result<()> {
+    pub fn run(self, control_rx: mpsc::Receiver<MeleeRequest>) -> Result<()> {
         #[async]
         for req in control_rx.map_err(|_| -> Error { unreachable!() }) {
             match req {
