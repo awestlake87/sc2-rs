@@ -25,13 +25,11 @@ use rand::random;
 use sc2::data::{Ability, Alliance, GameSetup, Map, MapInfo, Point2, Race};
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
-    AgentBuilder,
+    agent::AgentBuilder,
+    observer::{Event, EventAck, ObserverClient},
     Error,
-    Event,
-    EventAck,
     LauncherSettings,
     MeleeBuilder,
-    ObserverClient,
     Result,
 };
 use tokio_core::reactor;

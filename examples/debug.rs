@@ -22,15 +22,13 @@ use futures::prelude::*;
 use futures::unsync::mpsc;
 use sc2::data::{Difficulty, GameSetup, Map, Point2, Race};
 use sc2::{
+    agent::AgentBuilder,
     debug::{DebugClient, DebugCommand, DebugText, DebugTextTarget},
-    AgentBuilder,
+    observer::{Event, EventAck, ObserverClient},
     ComputerBuilder,
     Error,
-    Event,
-    EventAck,
     LauncherSettings,
     MeleeBuilder,
-    ObserverClient,
     Result,
 };
 use tokio_core::reactor;

@@ -36,13 +36,11 @@ use sc2::data::{
 };
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
+    agent::AgentBuilder,
+    observer::{Event, EventAck, Observation, ObserverClient},
     Error,
-    Event,
-    EventAck,
     LauncherSettings,
     MeleeBuilder,
-    Observation,
-    ObserverClient,
     Result,
 };
 use tokio_core::reactor;
@@ -293,7 +291,7 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let mut bot_agent = sc2::AgentBuilder::new().race(Race::Terran);
+    let mut bot_agent = AgentBuilder::new().race(Race::Terran);
     let bot = MarineMicroBot::new(
         bot_agent.add_observer_client(),
         bot_agent.add_action_client(),

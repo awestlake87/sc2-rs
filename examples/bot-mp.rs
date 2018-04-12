@@ -35,14 +35,11 @@ use sc2::data::{
 };
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
-    AgentBuilder,
+    agent::AgentBuilder,
+    observer::{Event, EventAck, Observation, ObserverClient},
     Error,
-    Event,
-    EventAck,
     LauncherSettings,
     MeleeBuilder,
-    Observation,
-    ObserverClient,
     Result,
 };
 use tokio_core::reactor;

@@ -33,14 +33,14 @@ mod launcher;
 mod services;
 
 pub mod action;
+pub mod agent;
 pub mod data;
 pub mod debug;
+pub mod observer;
 
 pub use self::launcher::LauncherSettings;
-pub use self::services::agent_service::{AgentBuilder, Event, EventAck};
 pub use self::services::computer_service::ComputerBuilder;
 pub use self::services::melee_service::MeleeBuilder;
-pub use self::services::observer_service::{Observation, ObserverClient};
 
 use std::path::PathBuf;
 
@@ -121,6 +121,16 @@ error_chain! {
         GameErrors(errors: Vec<String>) {
             description("Errors received from game instance")
             display("Received errors: {:?}", errors)
+        }
+
+        /// EventAck receiver was dropped or closed.
+        ///
+        /// This should not happen in sc2-rs, but any external libraries with
+        /// more flexible event subscribers may encounter this problem, and this
+        /// error will allow them the freedom to deal with it in their own way.
+        EventAckCanceled(msg: String) {
+            description("EventAck receiver was dropped or closed")
+            display("Event ACK canceled {}", msg)
         }
 
         /// Invalid protobuf data from game instance.

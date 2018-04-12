@@ -1,5 +1,4 @@
 use std::mem;
-use std::rc::Rc;
 
 use futures::prelude::*;
 use futures::unsync::{mpsc, oneshot};
@@ -21,58 +20,10 @@ use super::observer_service::{
     ObserverControlClient,
 };
 use constants::sc2_bug_tag;
-use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
+use data::{GameSetup, Map, PlayerSetup, Race};
 use launcher::GamePorts;
+use observer::{Event, EventAck};
 use {Error, ErrorKind, IntoProto, Result};
-
-/// An event from the game.
-#[derive(Debug, Clone)]
-pub enum Event {
-    /// Game has loaded - not called for fast restarts.
-    GameLoaded,
-    /// Game has started.
-    GameStarted,
-    /// Game has ended.
-    GameEnded,
-
-    /// A unit was destroyed.
-    UnitDestroyed(Rc<Unit>),
-    /// A unit was created.
-    UnitCreated(Rc<Unit>),
-    /// A unit does not have any orders.
-    UnitIdle(Rc<Unit>),
-    /// A unit was detected.
-    UnitDetected(Rc<Unit>),
-
-    /// An upgrade completed.
-    UpgradeCompleted(Upgrade),
-    /// A unit finished constructing a building.
-    BuildingCompleted(Rc<Unit>),
-
-    /// Number of nydus worms detected.
-    NydusWormsDetected(u32),
-    /// Number of nukes launched.
-    NukesDetected(u32),
-
-    /// Step the agent or observer.
-    Step,
-}
-
-/// Notify the coordinator that we are done with this event.
-#[derive(Debug)]
-pub struct EventAck {
-    tx: oneshot::Sender<()>,
-}
-
-impl EventAck {
-    /// Send a signal indicating that the user is done handling this event.
-    #[async]
-    pub fn done(self) -> Result<()> {
-        self.tx.send(()).map_err(|_| -> Error {
-            unreachable!("{}: Unable to ack event", sc2_bug_tag())
-        })
-    }
-}
 
 /// Build an agent.
 pub struct AgentBuilder {
@@ -535,7 +486,7 @@ impl AgentTerminal {
         async_block! {
             if let Err(_) = await!(
                 sender
-                    .send((event, EventAck { tx: tx }))
+                    .send((event, EventAck::wrap(tx)))
             ) {
                 // This is not really an error, it just means that the user's
                 // event stream has been closed or dropped. For now I'm just

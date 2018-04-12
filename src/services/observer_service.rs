@@ -7,8 +7,6 @@ use futures::unsync::{mpsc, oneshot};
 use sc2_proto::sc2api;
 use tokio_core::reactor;
 
-use super::agent_service::Event;
-use super::client_service::ProtoClient;
 use action::Action;
 use constants::sc2_bug_tag;
 use data::{
@@ -32,6 +30,8 @@ use data::{
     UpgradeData,
     Visibility,
 };
+use observer::Event;
+use services::client_service::ProtoClient;
 use {Error, FromProto, IntoSc2, Result};
 
 /// State of the game (changes every frame).
