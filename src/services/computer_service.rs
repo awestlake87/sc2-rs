@@ -2,10 +2,10 @@ use futures::prelude::*;
 use futures::unsync::mpsc;
 use tokio_core::reactor;
 
-use super::{Error, Result};
+use super::melee_service::{MeleeCompetitor, MeleeRequest};
 use constants::sc2_bug_tag;
 use data::{Difficulty, PlayerSetup, Race};
-use melee::{MeleeCompetitor, MeleeRequest};
+use {Error, Result};
 
 /// Build a built-in AI opponent.
 pub struct ComputerBuilder {

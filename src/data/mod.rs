@@ -5,11 +5,11 @@ mod action;
 mod buff;
 mod game;
 mod image;
+mod map_info;
 mod player;
 mod score;
 mod unit;
 mod upgrade;
-mod map_info;
 
 use na;
 use na::geometry;
@@ -20,8 +20,6 @@ use super::{FromProto, IntoSc2, Result};
 
 pub use self::ability::{Ability, AbilityData};
 pub use self::action::{
-    Action,
-    ActionTarget,
     DebugAabb,
     DebugCommand,
     DebugLine,
@@ -35,7 +33,14 @@ pub use self::image::ImageData;
 pub use self::map_info::MapInfo;
 pub use self::player::{Difficulty, PlayerSetup, Race};
 pub use self::score::Score;
-pub use self::unit::{Alliance, DisplayType, Tag, Unit, UnitType, UnitTypeData};
+pub use self::unit::{
+    Alliance,
+    DisplayType,
+    Tag,
+    Unit,
+    UnitType,
+    UnitTypeData,
+};
 pub use self::upgrade::{Upgrade, UpgradeData};
 
 /// Color type for debug commands.

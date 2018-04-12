@@ -21,22 +21,8 @@ use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
 use rand::random;
-use sc2::{
-    ActionClient,
-    AgentBuilder,
-    Error,
-    Event,
-    EventAck,
-    LauncherSettings,
-    MeleeBuilder,
-    Observation,
-    ObserverClient,
-    Result,
-};
 use sc2::data::{
     Ability,
-    Action,
-    ActionTarget,
     Alliance,
     GameSetup,
     Map,
@@ -46,6 +32,18 @@ use sc2::data::{
     Tag,
     UnitType,
     Vector2,
+};
+use sc2::{
+    action::{Action, ActionClient, ActionTarget},
+    AgentBuilder,
+    Error,
+    Event,
+    EventAck,
+    LauncherSettings,
+    MeleeBuilder,
+    Observation,
+    ObserverClient,
+    Result,
 };
 use tokio_core::reactor;
 

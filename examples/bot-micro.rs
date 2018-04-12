@@ -23,21 +23,8 @@ use std::rc::Rc;
 use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
-use sc2::{
-    ActionClient,
-    Error,
-    Event,
-    EventAck,
-    LauncherSettings,
-    MeleeBuilder,
-    Observation,
-    ObserverClient,
-    Result,
-};
 use sc2::data::{
     Ability,
-    Action,
-    ActionTarget,
     Alliance,
     Difficulty,
     GameSetup,
@@ -46,6 +33,17 @@ use sc2::data::{
     Race,
     Unit,
     Vector2,
+};
+use sc2::{
+    action::{Action, ActionClient, ActionTarget},
+    Error,
+    Event,
+    EventAck,
+    LauncherSettings,
+    MeleeBuilder,
+    Observation,
+    ObserverClient,
+    Result,
 };
 use tokio_core::reactor;
 

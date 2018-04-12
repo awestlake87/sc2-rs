@@ -7,14 +7,23 @@ use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
 
-use super::{Error, ErrorKind, IntoProto, Result};
-use action::{ActionBuilder, ActionClient, ActionControlClient, DebugClient};
-use client::{ProtoClient, ProtoClientBuilder};
+use super::action_service::{
+    ActionBuilder,
+    ActionClient,
+    ActionControlClient,
+    DebugClient,
+};
+use super::client_service::{ProtoClient, ProtoClientBuilder};
+use super::melee_service::{MeleeCompetitor, MeleeRequest, UpdateScheme};
+use super::observer_service::{
+    ObserverBuilder,
+    ObserverClient,
+    ObserverControlClient,
+};
 use constants::sc2_bug_tag;
 use data::{GameSetup, Map, PlayerSetup, Race, Unit, Upgrade};
 use launcher::GamePorts;
-use melee::{MeleeCompetitor, MeleeRequest, UpdateScheme};
-use observer::{ObserverBuilder, ObserverClient, ObserverControlClient};
+use {Error, ErrorKind, IntoProto, Result};
 
 /// An event from the game.
 #[derive(Debug, Clone)]

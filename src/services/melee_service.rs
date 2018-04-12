@@ -6,10 +6,10 @@ use futures::unsync::{mpsc, oneshot};
 use tokio_core::reactor;
 use url::Url;
 
-use super::{Error, ErrorKind, Result};
 use constants::{sc2_bug_tag, warning_tag};
 use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
+use {Error, ErrorKind, Result};
 
 /// Update scheme for the agents to use.
 #[derive(Debug, Copy, Clone)]

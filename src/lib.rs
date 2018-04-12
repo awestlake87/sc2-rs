@@ -27,24 +27,20 @@ extern crate tungstenite;
 extern crate url;
 extern crate uuid;
 
-mod action;
-mod agent;
-mod client;
-mod computer;
 mod constants;
 mod instance;
 mod launcher;
-mod melee;
-mod observer;
+mod services;
 
+pub mod action;
 pub mod data;
 
-pub use self::action::{ActionClient, DebugClient};
-pub use self::agent::{AgentBuilder, Event, EventAck};
-pub use self::computer::ComputerBuilder;
 pub use self::launcher::LauncherSettings;
-pub use self::melee::MeleeBuilder;
-pub use self::observer::{Observation, ObserverClient};
+pub use self::services::action_service::DebugClient;
+pub use self::services::agent_service::{AgentBuilder, Event, EventAck};
+pub use self::services::computer_service::ComputerBuilder;
+pub use self::services::melee_service::MeleeBuilder;
+pub use self::services::observer_service::{Observation, ObserverClient};
 
 use std::path::PathBuf;
 

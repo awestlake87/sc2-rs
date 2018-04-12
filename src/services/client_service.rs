@@ -11,8 +11,8 @@ use tokio_tungstenite::connect_async;
 use tungstenite;
 use url::Url;
 
-use super::{Error, ErrorKind, Result};
 use constants::{info_tag, sc2_bug_tag};
+use {Error, ErrorKind, Result};
 
 #[derive(Debug)]
 enum ClientRequest {
