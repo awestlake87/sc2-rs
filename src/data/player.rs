@@ -2,6 +2,7 @@ use sc2_proto::common;
 use sc2_proto::sc2api;
 
 use super::super::{FromProto, IntoProto, Result};
+use constants::sc2_bug_tag;
 
 /// Race of the player.
 #[allow(missing_docs)]
@@ -20,10 +21,10 @@ impl FromProto<common::Race> for Race {
             common::Race::Zerg => Race::Zerg,
             common::Race::Protoss => Race::Protoss,
             common::Race::Random => Race::Random,
-            common::Race::NoRace => panic!(concat!(
-                "NoRace value (Library Bug! please let us know that ",
-                "this can in fact happen!)"
-            )),
+            common::Race::NoRace => unreachable!(
+                "{}: I assumed NoRace was not a legitimate value",
+                sc2_bug_tag()
+            ),
         })
     }
 }
