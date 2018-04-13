@@ -1,7 +1,7 @@
 use sc2_proto::sc2api;
 
-use super::super::{FromProto, IntoSc2, Result};
 use data::{ImageData, Point2, Rect2};
+use {FromProto, IntoSc2, Result};
 
 /// Info about the terrain.
 #[derive(Debug, Clone)]

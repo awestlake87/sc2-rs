@@ -6,23 +6,23 @@ use sc2_proto::sc2api;
 use tokio_core::reactor;
 use url::Url;
 
-use super::action_service::{
+use constants::sc2_bug_tag;
+use data::{GameSetup, Map, PlayerSetup, Race};
+use launcher::GamePorts;
+use observer::{Event, EventAck};
+use services::action_service::{
     ActionBuilder,
     ActionClient,
     ActionControlClient,
     DebugClient,
 };
-use super::client_service::{ProtoClient, ProtoClientBuilder};
-use super::melee_service::{MeleeCompetitor, MeleeRequest, UpdateScheme};
-use super::observer_service::{
+use services::client_service::{ProtoClient, ProtoClientBuilder};
+use services::melee_service::{MeleeCompetitor, MeleeRequest, UpdateScheme};
+use services::observer_service::{
     ObserverBuilder,
     ObserverClient,
     ObserverControlClient,
 };
-use constants::sc2_bug_tag;
-use data::{GameSetup, Map, PlayerSetup, Race};
-use launcher::GamePorts;
-use observer::{Event, EventAck};
 use {Error, ErrorKind, IntoProto, Result};
 
 /// Build an agent.

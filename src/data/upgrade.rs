@@ -1,7 +1,7 @@
 use sc2_proto::data;
 
-use super::super::{ErrorKind, FromProto, IntoProto, Result};
 use data::Ability;
+use {ErrorKind, FromProto, IntoProto, Result};
 
 /// A list of known StarCraft II upgrades.
 #[allow(missing_docs)]
@@ -253,7 +253,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Upgrade| {
             assert_eq!(
                 element,

@@ -1,8 +1,8 @@
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::super::{FromProto, IntoProto, Result};
 use constants::sc2_bug_tag;
+use {FromProto, IntoProto, Result};
 
 /// Race of the player.
 #[allow(missing_docs)]

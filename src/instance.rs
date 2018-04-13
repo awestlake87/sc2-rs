@@ -3,10 +3,10 @@ use std::process;
 
 use url::Url;
 
-use super::{ErrorKind, Result};
 use constants::warning_tag;
 use data::Rect;
 use launcher::PortSet;
+use {ErrorKind, Result};
 
 #[derive(Debug, Copy, Clone)]
 pub enum InstanceKind {

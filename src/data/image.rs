@@ -1,6 +1,6 @@
 use sc2_proto::common;
 
-use super::super::{FromProto, Result};
+use {FromProto, Result};
 
 /// Data used to sample the current state of the map at certain points.
 #[derive(Debug, Clone)]

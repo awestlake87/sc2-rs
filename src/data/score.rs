@@ -6,7 +6,7 @@ use sc2_proto::score::{
     VitalScoreDetails as ProtoVitalScoreDetails,
 };
 
-use super::super::{FromProto, IntoSc2, Result};
+use {FromProto, IntoSc2, Result};
 
 /// Source of a score.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

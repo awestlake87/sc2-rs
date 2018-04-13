@@ -1,6 +1,6 @@
 use sc2_proto::data;
 
-use super::super::{ErrorKind, FromProto, IntoProto, Result};
+use {ErrorKind, FromProto, IntoProto, Result};
 
 /// A list of known StarCraft II buffs.
 #[allow(missing_docs)]
@@ -148,7 +148,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Buff| {
             assert_eq!(
                 element,

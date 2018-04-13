@@ -1,7 +1,7 @@
 use sc2_proto::{common, data, raw};
 
-use super::super::{FromProto, IntoSc2, Result};
 use data::{Ability, Buff, Point2, Point3, Race};
+use {FromProto, IntoSc2, Result};
 
 /// Unique tag for a unit instance.
 pub type Tag = u64;

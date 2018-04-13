@@ -5,10 +5,10 @@ use colored::Colorize;
 use glob::glob;
 use regex::Regex;
 
-use super::{ErrorKind, Result};
 use constants::{sc2_bug_tag, warning_tag};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
+use {ErrorKind, Result};
 
 /// Endpoint port settings.
 #[allow(missing_docs)]

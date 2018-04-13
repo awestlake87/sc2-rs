@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use sc2_proto::sc2api;
 
-use super::super::{FromProto, Result};
+use {FromProto, Result};
 
 /// Result of the game.
 #[allow(missing_docs)]

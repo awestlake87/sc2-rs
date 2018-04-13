@@ -15,7 +15,7 @@ use na::geometry;
 
 use sc2_proto::{common, raw, sc2api};
 
-use super::{FromProto, IntoSc2, Result};
+use {FromProto, IntoSc2, Result};
 
 pub use self::ability::{Ability, AbilityData};
 pub use self::buff::{Buff, BuffData};

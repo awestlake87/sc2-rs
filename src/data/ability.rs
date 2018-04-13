@@ -1,6 +1,6 @@
 use sc2_proto::data;
 
-use super::super::{FromProto, IntoProto, Result};
+use {FromProto, IntoProto, Result};
 
 /// A list of known StarCraft II abilities
 #[allow(missing_docs)]
@@ -1193,7 +1193,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Ability| {
             assert_eq!(
                 element,
