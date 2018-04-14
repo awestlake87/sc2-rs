@@ -1,19 +1,38 @@
 
-image: "rust:latest"
-
-before_script:
-  - rustup update nightly
-  - rustup default nightly
-  - rustc --version && cargo --version
-
 stages:
   - test
-  
-build_sc2:
+  - deploy
+
+cargo:
+  image: rustdocker/rust:nightly
   stage: test
   script:
-    - rustc --version && cargo --version
+    - rustc --version
+    - cargo --version
     - cargo build --all --verbose
     - cargo build --examples --verbose
-    - rustc --version && cargo --version
     - cargo test --all --verbose
+  
+deploy:pages:
+  image: rustdocker/rust:nightly
+  stage: deploy
+  only:
+    - master
+  script:
+    - cargo doc --all-features --no-deps
+    - rm -rf public
+    - mkdir public
+    - cp -R target/doc/* public
+  artifacts:
+    paths:
+      - public
+
+deploy:crates:
+  image: rustdocker/rust:nightly
+  stage: deploy
+  only:
+    - pre-release
+    - release
+  when: manual
+  script:
+    - echo "TODO deploy"
