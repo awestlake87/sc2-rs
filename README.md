@@ -2,7 +2,7 @@
 [![crates version](https://img.shields.io/crates/v/sc2.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[Documentation]()
+[Documentation (master)](https://awestlake87.gitlab.io/sc2-rs/sc2/)
 
 Rust implementation of StarCraft II Client API
 
