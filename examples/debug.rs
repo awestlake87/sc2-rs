@@ -1,4 +1,4 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -9,7 +9,6 @@ extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
-extern crate organelle;
 extern crate rand;
 extern crate serde;
 extern crate tokio_core;
@@ -20,27 +19,17 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::unsync::mpsc;
+use sc2::data::{Difficulty, GameSetup, Map, Point2, Race};
 use sc2::{
-    AgentControl,
+    agent::AgentBuilder,
+    ai::OpponentBuilder,
+    debug::{DebugClient, DebugCommand, DebugText, DebugTextTarget},
+    observer::{Event, EventAck, ObserverClient},
     Error,
-    GameEvent,
-    Launcher,
-    LauncherBuilder,
+    LauncherSettings,
     MeleeBuilder,
-    Player,
     Result,
-    UpdateScheme,
-};
-use sc2::data::{
-    DebugCommand,
-    DebugText,
-    DebugTextTarget,
-    Difficulty,
-    GameSetup,
-    Map,
-    PlayerSetup,
-    Point2,
-    Race,
 };
 use tokio_core::reactor;
 
@@ -77,18 +66,18 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
-    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
+pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+    let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
-        builder = builder.install_dir(dir);
+        settings = settings.install_dir(dir);
     }
 
     if let Some(port) = args.flag_port {
-        builder = builder.base_port(port);
+        settings = settings.base_port(port);
     }
 
-    Ok(builder.create()?)
+    Ok(settings)
 }
 
 pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
@@ -101,41 +90,57 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 }
 
 struct DebugBot {
-    control: AgentControl,
-}
-
-impl Player for DebugBot {
-    type Error = Error;
-
-    #[async(boxed)]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player(Race::Terran)))
-    }
-
-    #[async(boxed)]
-    fn on_event(self, e: GameEvent) -> Result<Self> {
-        match e {
-            GameEvent::Step => await!(self.on_step()),
-            _ => Ok(self),
-        }
-    }
+    observer: ObserverClient,
+    debug: DebugClient,
 }
 
 impl DebugBot {
-    fn new(control: AgentControl) -> Self {
-        Self { control: control }
+    fn new(observer: ObserverClient, debug: DebugClient) -> Self {
+        Self {
+            observer: observer,
+            debug: debug,
+        }
+    }
+    fn spawn(
+        self,
+        handle: &reactor::Handle,
+        rx: mpsc::Receiver<(Event, EventAck)>,
+    ) -> Result<()> {
+        handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
+
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, rx: mpsc::Receiver<(Event, EventAck)>) -> Result<()> {
+        #[async]
+        for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
+            self = await!(self.on_event(e))?;
+
+            await!(ack.done())?;
+        }
+
+        Ok(())
+    }
+
+    #[async]
+    fn on_event(self, e: Event) -> Result<Self> {
+        match e {
+            Event::Step => await!(self.on_step()),
+            _ => Ok(self),
+        }
     }
 
     #[async]
     fn on_step(self) -> Result<Self> {
-        let observation = await!(self.control.observer().observe())?;
-        let unit_type_data = await!(self.control.observer().get_unit_data())?;
+        let observation = await!(self.observer.observe())?;
+        let unit_type_data = await!(self.observer.get_unit_data())?;
 
-        await!(self.control.action().send_debug(
+        await!(self.debug.send_debug(
             DebugText::new("in the corner".to_string()).color((0xFF, 0, 0)),
         ))?;
         await!(
-            self.control.action().send_debug(
+            self.debug.send_debug(
                 DebugText::new("screen pos".to_string())
                     .target(DebugTextTarget::Screen(Point2::new(1.0, 1.0)))
                     .color((0, 0xFF, 0))
@@ -147,7 +152,9 @@ impl DebugBot {
             .iter()
             .map(|u| {
                 DebugText::new(
-                    unit_type_data[&u.get_unit_type()].get_name().into(),
+                    unit_type_data[&u.get_unit_type()]
+                        .get_name()
+                        .into(),
                 ).target(DebugTextTarget::World(u.get_pos()))
                     .color((0xFF, 0xFF, 0xFF))
                     .into()
@@ -155,7 +162,7 @@ impl DebugBot {
             .collect();
 
         for cmd in commands {
-            await!(self.control.action().send_debug(cmd))?;
+            await!(self.debug.send_debug(cmd))?;
         }
 
         Ok(self)
@@ -175,19 +182,25 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let melee = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|control| DebugBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-        sc2::ComputerBuilder::new()
-            .race(Race::Zerg)
-            .difficulty(Difficulty::VeryEasy)
-            .create()?,
-    ).launcher_settings(get_launcher_settings(&args)?)
+    let mut agent = AgentBuilder::new().race(Race::Terran);
+    let bot = DebugBot::new(
+        agent.add_observer_client(),
+        agent.add_debug_client(),
+    );
+    bot.spawn(&handle, agent.take_event_stream().unwrap())?;
+
+    let zerg = OpponentBuilder::new()
+        .race(Race::Zerg)
+        .difficulty(Difficulty::VeryEasy);
+
+    let melee = MeleeBuilder::new()
+        .add_player(agent)
+        .add_player(zerg)
+        .launcher_settings(create_launcher_settings(&args)?)
         .one_and_done(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .step_interval(args.flag_step_size.unwrap_or(1))
         .break_on_ctrlc(args.flag_wine)
-        .handle(handle.clone())
+        .handle(&handle)
         .create()?;
 
     core.run(melee.into_future())?;

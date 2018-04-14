@@ -1,8 +1,8 @@
 use sc2_proto::data;
 
-use super::super::{ErrorKind, FromProto, IntoProto, Result};
+use {ErrorKind, FromProto, IntoProto, Result};
 
-/// list of known StarCraft II buffs
+/// A list of known StarCraft II buffs.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Buff {
@@ -101,7 +101,10 @@ impl FromProto<u32> for Buff {
             274 => Buff::CarryHarvestableVespeneGeyserGasProtoss,
             275 => Buff::CarryHarvestableVespeneGeyserGasZerg,
 
-            _ => bail!(ErrorKind::InvalidProtobuf(format!("Buff id({})", id))),
+            _ => bail!(ErrorKind::InvalidProtobuf(format!(
+                "Buff id({})",
+                id
+            ))),
         })
     }
 }
@@ -112,7 +115,7 @@ impl IntoProto<u32> for Buff {
     }
 }
 
-/// buff data
+/// Buff data.
 #[derive(Debug, Clone)]
 pub struct BuffData {
     buff: Buff,
@@ -120,12 +123,12 @@ pub struct BuffData {
 }
 
 impl BuffData {
-    /// stable buff ID
+    /// Stable buff ID.
     pub fn get_id(&self) -> Buff {
         self.buff
     }
 
-    /// buff name (corresponds to the game's catalog)
+    /// Buff name (corresponds to the game's catalog).
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -145,7 +148,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Buff| {
             assert_eq!(
                 element,

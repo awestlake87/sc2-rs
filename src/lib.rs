@@ -1,21 +1,21 @@
 #![warn(missing_docs)]
 #![recursion_limit = "1024"]
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 //! StarCraft II API for Rust
 //!
-//! this API is intended to provide functionality similar to that of Blizzard
-//! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api)
+//! This API is intended to provide functionality similar to that of Blizzard
+//! and Google's [StarCraft II API](https://github.com/Blizzard/s2client-api).
 
 #[macro_use]
 extern crate error_chain;
 
 extern crate bytes;
+extern crate colored;
 extern crate ctrlc;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
-extern crate organelle;
 extern crate protobuf;
 extern crate rand;
 extern crate regex;
@@ -27,113 +27,117 @@ extern crate tungstenite;
 extern crate url;
 extern crate uuid;
 
-mod agent;
-mod client;
-mod action;
-mod computer;
-mod ctrlc_breaker;
+mod constants;
 mod instance;
 mod launcher;
-mod melee;
-mod observer;
-mod synapses;
+mod services;
 
+pub mod action;
+pub mod agent;
+pub mod ai;
 pub mod data;
+pub mod debug;
+pub mod observer;
 
-pub use self::agent::{Agent, AgentBuilder, AgentControl, GameEvent, Player};
-pub use self::computer::{Computer, ComputerBuilder};
-pub use self::launcher::{Launcher, LauncherBuilder};
-pub use self::melee::{Melee, MeleeBuilder, UpdateScheme};
-pub use self::observer::Observation;
-
-#[cfg(feature = "with-organelle")]
-pub use self::action::{
-    synapse as action_synapse,
-    ActionDendrite,
-    ActionTerminal,
-};
-#[cfg(feature = "with-organelle")]
-pub use self::agent::{synapse as agent_synapse, AgentDendrite, AgentTerminal};
-#[cfg(feature = "with-organelle")]
-pub use self::observer::{
-    synapse as observer_synapse,
-    ObserverDendrite,
-    ObserverTerminal,
-};
-#[cfg(feature = "with-organelle")]
-pub use self::synapses::{PlayerDendrite, PlayerSynapse, PlayerTerminal};
+pub use self::launcher::LauncherSettings;
+pub use self::services::melee_service::MeleeBuilder;
 
 use std::path::PathBuf;
 
 error_chain! {
-    links {
-        Organelle(organelle::Error, organelle::ErrorKind) #[doc="organelle glue"];
-    }
     foreign_links {
-        Io(std::io::Error) #[doc="link io errors"];
+        Io(std::io::Error) #[doc="Link io errors."];
 
-        Ctrlc(ctrlc::Error) #[doc="link to Ctrl-C errors"];
-        FutureCanceled(futures::Canceled) #[doc="link to futures"];
-        UrlParse(url::ParseError) #[doc="link to url parse errors"];
-        Protobuf(protobuf::ProtobufError) #[doc="link to protobuf errors"];
-        Timer(tokio_timer::TimerError) #[doc="link to timer errors"];
-        Tungstenite(tungstenite::Error) #[doc="link to tungstenite errors"];
+        Ctrlc(ctrlc::Error) #[doc="Link to Ctrl-C errors."];
+        FutureCanceled(futures::Canceled) #[doc="Link to futures."];
+        UrlParse(url::ParseError) #[doc="Link to url parse errors."];
+        Protobuf(protobuf::ProtobufError) #[doc="Link to protobuf errors."];
+        Timer(tokio_timer::TimerError) #[doc="Link to timer errors."];
+        Tungstenite(tungstenite::Error) #[doc="Link to tungstenite errors."];
     }
     errors {
-        /// exe was not supplied to the coordinator
+        /// Executable was not supplied to the coordinator.
         ExeNotSpecified {
-            description("exe not specified")
+            description("Executable was not supplied to the coordinator")
             display("StarCraft II exe was not specified")
         }
-        /// exe supplied to the coordinator does not exist
+        /// Executable supplied to the coordinator does not exist.
         ExeDoesNotExist(exe: PathBuf) {
-            description("exe file does not exist")
+            description("Executable supplied to the coordinator does not exist")
             display("StarCraft II exe does not exist at {:?}", exe)
         }
 
-        /// client failed to open connection to the game instance
-        ClientOpenFailed {
-            description("unable to open connection to the game instance")
-            display("client open failed")
-        }
-        /// client failed to send a message to the game instance
-        ClientSendFailed {
-            description("unable to send message to the game instance")
-            display("client send failed")
-        }
-        /// client failed to receive a message from the game instance
-        ClientRecvFailed {
-            description("unable to receive message from game instance")
-            display("client recv failed")
-        }
-        /// client failed to initiate close handshake
-        ClientCloseFailed {
-            description("unable to initiate close handshake")
-            display("client close failed")
+        /// Auto-detecting the SC2 installation was unsuccessful.
+        AutoDetectFailed(msg: String) {
+            description("Auto-detecting the SC2 installation was unsuccessful")
+            display("SC2 Auto-detect failed {}", msg)
         }
 
-        /// errors received from game instance
+        /// An invalid map path was supplied to the library.
+        InvalidMapPath(msg: String) {
+            description("An invalid map path was supplied to the library")
+            display("Invalid map path - {}", msg)
+        }
+
+        /// A required field was not provided to a builder.
+        ///
+        /// Often, a builder will have no suitable default for a value. These
+        /// fields require the user to supply a value. When the builder is
+        /// finalized, it will check these values and if it is missing a
+        /// requirement, you should expect this error.
+        MissingRequirement(msg: String) {
+            description("A required field was not provided to a builder")
+            display("Missing requirement - {}", msg)
+        }
+
+        /// Match settings are invalid.
+        InvalidMatch(msg: String) {
+            description("Match settings are invalid"),
+            display("Invalid Match - {}", msg)
+        }
+
+        /// Client failed to open connection to the game instance.
+        ClientOpenFailed(msg: String) {
+            description("Client failed to open connection to the game instance")
+            display("Client open failed - {}", msg)
+        }
+        /// Client failed to send a message to the game instance.
+        ClientSendFailed(msg: String) {
+            description("Client failed to send a message to the game instance")
+            display("Client send failed - {}", msg)
+        }
+        /// Client failed to receive a message from the game instance.
+        ClientRecvFailed(msg: String) {
+            description("Client failed to receive a message from the game instance")
+            display("Client recv failed - {}", msg)
+        }
+        /// Client failed to initiate close handshake.
+        ClientCloseFailed(msg: String) {
+            description("Client failed to complete close handshake")
+            display("Client close failed - {}", msg)
+        }
+
+        /// Errors received from game instance.
         GameErrors(errors: Vec<String>) {
-            description("errors in game response")
-            display("received errors: {:?}", errors)
-        }
-        /// an error occurred in agent callback
-        AgentError {
-            description("error occurred in agent callback")
-            display("error occurred in agent callback")
+            description("Errors received from game instance")
+            display("Received errors: {:?}", errors)
         }
 
-        /// invalid protobuf data from game instance
+        /// EventAck receiver was dropped or closed.
+        ///
+        /// This should not happen in sc2-rs, but any external libraries with
+        /// more flexible event subscribers may encounter this problem, and this
+        /// error will allow them the freedom to deal with it in their own way.
+        EventAckCanceled(msg: String) {
+            description("EventAck receiver was dropped or closed")
+            display("Event ACK canceled {}", msg)
+        }
+
+        /// Invalid protobuf data from game instance.
         InvalidProtobuf(msg: String) {
-            description("unable to convert protobuf data to game data")
-            display("unable to convert protobuf data: {}", msg)
+            description("Invalid protobuf data from game instance")
+            display("Unable to convert protobuf data: {}", msg)
         }
-    }
-}
-
-impl From<Error> for organelle::Error {
-    fn from(e: Error) -> organelle::Error {
-        organelle::Error::with_chain(e, organelle::ErrorKind::SomaError)
     }
 }
 
@@ -141,7 +145,7 @@ trait FromProto<T>
 where
     Self: Sized,
 {
-    /// convert from protobuf data
+    /// Convert from protobuf data.
     fn from_proto(p: T) -> Result<Self>;
 }
 
@@ -159,6 +163,6 @@ where
 }
 
 trait IntoProto<T> {
-    /// convert into protobuf data
+    /// Convert into protobuf data
     fn into_proto(self) -> Result<T>;
 }

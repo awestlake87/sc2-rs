@@ -1,298 +1,131 @@
-use std::mem;
+//! Contains the public API for all structures dealing directly with the SC2
+//! Actions. These are used to give orders to units and perform upgrades in the
+//! game.
 
-use futures::prelude::*;
-use futures::unsync::{mpsc, oneshot};
-use organelle::{Axon, Constraint, Impulse, Soma};
-use sc2_proto::sc2api;
+use std::rc::Rc;
 
-use super::{Error, IntoProto, Result};
-use client::ClientTerminal;
-use data::{Action, DebugCommand};
-use synapses::{Dendrite, Synapse, Terminal};
+use sc2_proto::{raw, sc2api};
 
-pub struct ActionSoma {
-    control: Option<ActionControlDendrite>,
-    client: Option<ClientTerminal>,
-    users: Vec<ActionDendrite>,
+use data::{Ability, Point2, Tag, Unit};
+use {FromProto, IntoProto, Result};
+
+pub use services::action_service::ActionClient;
+
+/// Action target.
+#[derive(Debug, Copy, Clone)]
+pub enum ActionTarget {
+    /// Target a unit with this action.
+    Unit(Tag),
+    /// Target a location with this action.
+    Location(Point2),
 }
 
-impl ActionSoma {
-    pub fn axon() -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                control: None,
-                client: None,
-                users: vec![],
-            },
-            vec![
-                Constraint::Variadic(Synapse::Action),
-                Constraint::One(Synapse::ActionControl),
-            ],
-            vec![Constraint::One(Synapse::Client)],
-        ))
+/// An action (command or ability) applied to a unit or set of units.
+#[derive(Debug, Clone)]
+pub struct Action {
+    /// The ability to invoke.
+    ability: Ability,
+    units: Vec<Tag>,
+    target: Option<ActionTarget>,
+}
+
+impl Action {
+    /// Perform the given ability.
+    pub fn new(ability: Ability) -> Self {
+        Self {
+            ability: ability,
+            units: vec![],
+            target: None,
+        }
+    }
+
+    /// Units that this action applies to.
+    ///
+    /// Take the tags from an arbitrary iterator of units.
+    pub fn units<'a, T>(self, units: T) -> Self
+    where
+        T: Iterator<Item = &'a Rc<Unit>>,
+    {
+        Self {
+            units: units.map(|u| u.get_tag()).collect(),
+            ..self
+        }
+    }
+
+    /// Tnits that this action applies to.
+    ///
+    /// Directly assign the unit tags.
+    pub fn unit_tags(self, units: Vec<Tag>) -> Self {
+        Self {
+            units: units,
+            ..self
+        }
+    }
+
+    /// Set the target of the action.
+    pub fn target(self, target: ActionTarget) -> Self {
+        Self {
+            target: Some(target),
+            ..self
+        }
     }
 }
 
-pub fn synapse() -> (ActionTerminal, ActionDendrite) {
-    let (tx, rx) = mpsc::channel(10);
+impl FromProto<raw::ActionRawUnitCommand> for Action {
+    fn from_proto(action: raw::ActionRawUnitCommand) -> Result<Self> {
+        Ok(Self {
+            ability: Ability::from_proto(action.get_ability_id() as u32)?,
+            units: {
+                let mut unit_tags = vec![];
 
-    (ActionTerminal { tx: tx }, ActionDendrite { rx: rx })
-}
-
-pub fn control_synapse() -> (ActionControlTerminal, ActionControlDendrite) {
-    let (tx, rx) = mpsc::channel(1);
-
-    (
-        ActionControlTerminal { tx: tx },
-        ActionControlDendrite { rx: rx },
-    )
-}
-
-impl Soma for ActionSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, imp: Impulse<Self::Synapse>) -> Result<Self> {
-        match imp {
-            Impulse::AddTerminal(_, Synapse::Client, Terminal::Client(tx)) => {
-                Ok(Self {
-                    client: Some(tx),
-                    ..self
-                })
-            },
-            Impulse::AddDendrite(_, Synapse::Action, Dendrite::Action(rx)) => {
-                self.users.push(rx);
-
-                Ok(self)
-            },
-            Impulse::AddDendrite(
-                _,
-                Synapse::ActionControl,
-                Dendrite::ActionControl(rx),
-            ) => Ok(Self {
-                control: Some(rx),
-                ..self
-            }),
-
-            Impulse::Start(_, main_tx, handle) => {
-                let (tx, rx) = mpsc::channel(10);
-
-                // merge all queues
-                for user in self.users {
-                    handle.spawn(
-                        tx.clone()
-                            .send_all(user.rx.map_err(|_| unreachable!()))
-                            .map(|_| ())
-                            .map_err(|_| ()),
-                    );
+                for tag in action.get_unit_tags() {
+                    unit_tags.push(*tag);
                 }
 
-                let task = ActionTask::new(
-                    self.client.unwrap(),
-                    self.control.unwrap(),
-                    rx,
-                );
-
-                handle.spawn(task.run().or_else(move |e| {
-                    main_tx
-                        .send(Impulse::Error(e.into()))
-                        .map(|_| ())
-                        .map_err(|_| ())
-                }));
-
-                Ok(Self {
-                    client: None,
-                    control: None,
-                    users: vec![],
-                })
+                unit_tags
             },
-
-            _ => bail!("unexpected impulse"),
-        }
+            target: {
+                if action.has_target_unit_tag() {
+                    Some(ActionTarget::Unit(action.get_target_unit_tag()))
+                } else if action.has_target_world_space_pos() {
+                    let pos = action.get_target_world_space_pos();
+                    Some(ActionTarget::Location(Point2::new(
+                        pos.get_x(),
+                        pos.get_y(),
+                    )))
+                } else {
+                    None
+                }
+            },
+        })
     }
 }
 
-struct ActionTask {
-    client: ClientTerminal,
-    control: Option<ActionControlDendrite>,
-    queue: Option<mpsc::Receiver<ActionRequest>>,
+impl IntoProto<sc2api::Action> for Action {
+    fn into_proto(self) -> Result<sc2api::Action> {
+        let mut action = sc2api::Action::new();
+        {
+            let cmd = action.mut_action_raw().mut_unit_command();
 
-    action_batch: Vec<Action>,
-    debug_batch: Vec<DebugCommand>,
-}
+            cmd.set_ability_id(self.ability.into_proto()? as i32);
 
-impl ActionTask {
-    fn new(
-        client: ClientTerminal,
-        control: ActionControlDendrite,
-        rx: mpsc::Receiver<ActionRequest>,
-    ) -> Self {
-        Self {
-            client: client,
-            control: Some(control),
-            queue: Some(rx),
-
-            action_batch: vec![],
-            debug_batch: vec![],
-        }
-    }
-
-    #[async]
-    fn run(mut self) -> Result<()> {
-        let requests = mem::replace(&mut self.queue, None).unwrap();
-
-        let queue = mem::replace(&mut self.control, None)
-            .unwrap()
-            .rx
-            .map(|req| Either::Control(req))
-            .select(requests.map(|req| Either::Request(req)));
-
-        #[async]
-        for req in queue.map_err(|_| -> Error { unreachable!() }) {
-            match req {
-                Either::Control(ActionControlRequest::Step(tx)) => {
-                    self = await!(self.send_actions())?;
-                    self = await!(self.send_debug())?;
-
-                    tx.send(()).map_err(|_| Error::from("unable to ack step"))?;
+            match self.target {
+                Some(ActionTarget::Unit(tag)) => {
+                    cmd.set_target_unit_tag(tag);
                 },
-                Either::Request(ActionRequest::SendAction(action, tx)) => {
-                    self.action_batch.push(action);
-                    tx.send(()).map_err(|_| {
-                        Error::from("unable to ack send command")
-                    })?;
+                Some(ActionTarget::Location(pos)) => {
+                    let target = cmd.mut_target_world_space_pos();
+                    target.set_x(pos.x);
+                    target.set_y(pos.y);
                 },
-                Either::Request(ActionRequest::SendDebug(cmd, tx)) => {
-                    self.debug_batch.push(cmd);
-                    tx.send(())
-                        .map_err(|_| Error::from("unable to ack send debug"))?;
-                },
+                None => (),
+            }
+
+            for tag in self.units {
+                cmd.mut_unit_tags().push(tag);
             }
         }
 
-        Ok(())
+        Ok(action)
     }
-
-    #[async]
-    fn send_actions(self) -> Result<Self> {
-        let mut req = sc2api::Request::new();
-        req.mut_action().mut_actions();
-
-        for action in self.action_batch {
-            req.mut_action().mut_actions().push(action.into_proto()?);
-        }
-
-        await!(self.client.clone().request(req))?;
-
-        Ok(Self {
-            action_batch: vec![],
-            ..self
-        })
-    }
-
-    #[async]
-    fn send_debug(self) -> Result<Self> {
-        let mut req = sc2api::Request::new();
-        req.mut_debug().mut_debug();
-
-        for cmd in self.debug_batch {
-            req.mut_debug().mut_debug().push(cmd.into_proto()?);
-        }
-
-        await!(self.client.clone().request(req))?;
-
-        Ok(Self {
-            debug_batch: vec![],
-            ..self
-        })
-    }
-}
-
-#[derive(Debug)]
-enum ActionControlRequest {
-    Step(oneshot::Sender<()>),
-}
-
-#[derive(Debug)]
-enum ActionRequest {
-    SendAction(Action, oneshot::Sender<()>),
-    SendDebug(DebugCommand, oneshot::Sender<()>),
-}
-
-#[derive(Debug)]
-enum Either {
-    Control(ActionControlRequest),
-    Request(ActionRequest),
-}
-
-#[derive(Debug, Clone)]
-pub struct ActionControlTerminal {
-    tx: mpsc::Sender<ActionControlRequest>,
-}
-
-impl ActionControlTerminal {
-    /// step the action soma and send all commands to the game instance
-    #[async]
-    pub fn step(self) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
-        await!(
-            self.tx
-                .send(ActionControlRequest::Step(tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send debug command"))
-        )?;
-        await!(rx.map_err(|_| Error::from("unable to send debug ack")))
-    }
-}
-
-#[derive(Debug)]
-pub struct ActionControlDendrite {
-    rx: mpsc::Receiver<ActionControlRequest>,
-}
-
-/// action interface for a game instance
-#[derive(Debug, Clone)]
-pub struct ActionTerminal {
-    tx: mpsc::Sender<ActionRequest>,
-}
-
-impl ActionTerminal {
-    /// send a command to the game instance
-    #[async]
-    pub fn send_action(self, action: Action) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
-        await!(
-            self.tx
-                .send(ActionRequest::SendAction(action, tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send command"))
-        )?;
-        await!(rx.map_err(|_| Error::from("unable to recv send command ack")))
-    }
-
-    /// send a debug command to the game instance
-    #[async]
-    pub fn send_debug<T>(self, cmd: T) -> Result<()>
-    where
-        T: Into<DebugCommand> + 'static,
-    {
-        let (tx, rx) = oneshot::channel();
-
-        await!(
-            self.tx
-                .send(ActionRequest::SendDebug(cmd.into(), tx))
-                .map(|_| ())
-                .map_err(|_| Error::from("unable to send debug command"))
-        )?;
-        await!(rx.map_err(|_| Error::from("unable to send debug ack")))
-    }
-}
-
-/// internal action receiver for action soma
-#[derive(Debug)]
-pub struct ActionDendrite {
-    rx: mpsc::Receiver<ActionRequest>,
 }

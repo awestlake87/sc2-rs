@@ -1,0 +1,19 @@
+
+image: "rust:latest"
+
+before_script:
+  - rustup update nightly
+  - rustup default nightly
+  - rustc --version && cargo --version
+
+stages:
+  - test
+  
+build_sc2:
+  stage: test
+  script:
+    - rustc --version && cargo --version
+    - cargo build --all --verbose
+    - cargo build --examples --verbose
+    - rustc --version && cargo --version
+    - cargo test --all --verbose

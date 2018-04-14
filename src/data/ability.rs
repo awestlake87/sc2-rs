@@ -1,8 +1,8 @@
 use sc2_proto::data;
 
-use super::super::{FromProto, IntoProto, Result};
+use {FromProto, IntoProto, Result};
 
-/// list of known StarCraft II abilities
+/// A list of known StarCraft II abilities
 #[allow(missing_docs)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Ability {
@@ -1005,20 +1005,20 @@ impl IntoProto<u32> for Ability {
 //     }
 // }
 
-/// target type of the ability
+/// Target type of the ability.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AbilityTarget {
-    /// ability targets a location
+    /// Ability targets a location.
     Point,
-    /// ability targets another unit
+    /// Ability targets another unit.
     Unit,
-    /// ability can target either a location or a unit
+    /// Ability can target either a location or a unit.
     PointOrUnit,
-    /// ability can target either a location or nothing
+    /// Ability can target either a location or nothing.
     PointOrNone,
 }
 
-/// data about an ability
+/// Data about an ability.
 #[derive(Debug, Clone)]
 pub struct AbilityData {
     available: bool,
@@ -1040,7 +1040,7 @@ pub struct AbilityData {
 }
 
 impl AbilityData {
-    /// get the most generalized id of the ability
+    /// Get the most generalized id of the ability.
     pub fn get_generalized_ability(&self) -> Ability {
         match self.remaps_to_ability {
             Some(remap) => remap,
@@ -1048,70 +1048,69 @@ impl AbilityData {
         }
     }
 
-    /// indicates whether the ability is available to the current mods/map
+    /// Indicates whether the ability is available to the current mods/map.
     pub fn is_available(&self) -> bool {
         self.available
     }
 
-    /// stable ID for the ability
+    /// Stable ID for the ability.
     pub fn get_id(&self) -> Ability {
         self.ability
     }
 
-    /// catalog (game data xml) name of the ability
+    /// Catalog (game data xml) name of the ability.
     pub fn get_link_name(&self) -> &str {
         &self.link_name
     }
 
-    /// catalog (game data xml) index of the ability
+    /// Catalog (game data xml) index of the ability.
     pub fn get_link_index(&self) -> u32 {
         self.link_index
     }
 
-    /// name of the button for the command card
+    /// Name of the button for the command card.
     pub fn get_button_name(&self) -> &str {
         &self.button_name
     }
-    /// in case the button name is not descriptive
+    /// In case the button name is not descriptive.
     pub fn get_friendly_name(&self) -> &str {
         &self.friendly_name
     }
-    /// UI hotkey
+    /// UI hotkey.
     pub fn get_hotkey(&self) -> &str {
         &self.hotkey
     }
 
-    /// other abilities that can remap to this generic ability
+    /// Other abilities that can remap to this generic ability.
     pub fn get_remap_abilities(&self) -> &[Ability] {
         &self.remaps_from_ability
     }
 
-    /// type of target that this ability uses
+    /// Type of target that this ability uses.
     pub fn get_target(&self) -> Option<AbilityTarget> {
         self.target
     }
-    /// can be cast in the minimap (unimplemented)
+    /// Can be cast in the minimap (unimplemented).
     pub fn casts_in_minimap(&self) -> bool {
         self.allow_minimap
     }
-    /// autocast can be set
+    /// Autocast can be set.
     pub fn can_autocast(&self) -> bool {
         self.allow_autocast
     }
-    /// requires placement to construct a building
+    /// Requires placement to construct a building.
     pub fn is_building(&self) -> bool {
         self.is_building
     }
-    /// if the ability is placing a building, give the radius of the
-    /// footprint
+    /// If the ability is placing a building, give the radius of the footprint.
     pub fn get_footprint_radius(&self) -> Option<f32> {
         self.footprint_radius
     }
-    /// placement next to an existing structure (an addon like a Tech Lab)
+    /// Placement next to an existing structure (an addon like a Tech Lab).
     pub fn is_instant_placement(&self) -> bool {
         self.is_instant_placement
     }
-    /// range unit can cast ability without needing to approach target
+    /// Range unit can cast ability without needing to approach target.
     pub fn get_cast_range(&self) -> f32 {
         self.cast_range
     }
@@ -1129,7 +1128,9 @@ impl FromProto<data::AbilityData> for AbilityData {
             hotkey: data.take_hotkey(),
             remaps_to_ability: {
                 if data.has_remaps_to_ability_id() {
-                    Some(Ability::from_proto(data.get_remaps_to_ability_id())?)
+                    Some(Ability::from_proto(
+                        data.get_remaps_to_ability_id(),
+                    )?)
                 } else {
                     None
                 }
@@ -1192,7 +1193,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Ability| {
             assert_eq!(
                 element,

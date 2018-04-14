@@ -6,28 +6,28 @@ use sc2_proto::score::{
     VitalScoreDetails as ProtoVitalScoreDetails,
 };
 
-use super::super::{FromProto, IntoSc2, Result};
+use {FromProto, IntoSc2, Result};
 
-/// source of a score
+/// Source of a score.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ScoreType {
-    /// map generated score (from curriculum maps with special scoring)
+    /// Map generated score (from curriculum maps with special scoring).
     Curriculum,
-    /// melee score
+    /// Melee score.
     ///
-    /// summation of in-progress and current units/buildings value + minerals
-    /// + vespene
+    /// Summation of in-progress and current units/buildings value + minerals
+    /// + vespene.
     Melee,
 }
 
-/// score evaluated at the end of a game
+/// Score evaluated at the end of a game.
 #[derive(Debug, Copy, Clone)]
 pub struct Score {
-    /// method of scoring
+    /// Method of scoring.
     score_type: ScoreType,
-    /// overall score
+    /// Overall score.
     score: f32,
-    /// more detailed scoring
+    /// More detailed scoring.
     details: ScoreDetails,
 }
 
@@ -50,18 +50,18 @@ impl FromProto<ProtoScore> for Score {
     }
 }
 
-/// score by category
+/// Score by category.
 #[derive(Debug, Copy, Clone)]
 pub struct CategoryScoreDetails {
-    /// overall score
+    /// Overall score.
     none: f32,
-    /// military score
+    /// Military score.
     army: f32,
-    /// economic score
+    /// Economic score.
     economy: f32,
-    /// tech score
+    /// Tech score.
     technology: f32,
-    /// upgrade score
+    /// Upgrade score.
     upgrade: f32,
 }
 
@@ -77,14 +77,14 @@ impl FromProto<ProtoCategoryScoreDetails> for CategoryScoreDetails {
     }
 }
 
-/// details related to health or damage
+/// Details related to health or damage.
 #[derive(Debug, Copy, Clone)]
 pub struct VitalScoreDetails {
-    /// health score
+    /// Health score.
     life: f32,
-    /// shield score
+    /// Shield score.
     shields: f32,
-    /// energy score
+    /// Energy score.
     energy: f32,
 }
 
@@ -98,82 +98,82 @@ impl FromProto<ProtoVitalScoreDetails> for VitalScoreDetails {
     }
 }
 
-/// detailed scoring
+/// Detailed scoring.
 #[derive(Debug, Copy, Clone)]
 pub struct ScoreDetails {
-    /// time elapsed while production was idle
+    /// Time elapsed while production was idle.
     idle_production_time: f32,
-    /// time elapsed while workers were idle
+    /// Time elapsed while workers were idle.
     idle_worker_time: f32,
 
-    /// total unit value
+    /// Total unit value.
     total_value_units: f32,
-    /// total structural value
+    /// Total structural value.
     total_value_structures: f32,
 
-    /// value of enemy units destroyed
+    /// Value of enemy units destroyed.
     ///
-    /// note that this field is a combo of minerals, vespene, and a human
-    /// designer guess. might be useful as a delta. the weighting of the
+    /// Note that this field is a combo of minerals, vespene, and a human
+    /// designer guess. Might be useful as a delta. the weighting of the
     /// combination and the human designer guess is asymmetric with the total
-    /// value
+    /// value.
     killed_value_units: f32,
-    /// value of enemy structures destroyed
+    /// Value of enemy structures destroyed.
     ///
-    /// note that this field is a combo of minerals, vespene, and a human
-    /// designer guess. might be useful as a delta. the weighting of the
+    /// Note that this field is a combo of minerals, vespene, and a human
+    /// designer guess. Might be useful as a delta. the weighting of the
     /// combination and the human designer guess is asymmetric with the total
-    /// value
+    /// value.
     killed_value_structures: f32,
 
-    /// total minerals collected
+    /// Total minerals collected.
     collected_minerals: f32,
-    /// total vespene collected
+    /// Total vespene collected.
     collected_vespene: f32,
 
-    /// collection rate of minerals
+    /// Collection rate of minerals.
     collection_rate_minerals: f32,
-    /// collection rate of vespene
+    /// Collection rate of vespene.
     collection_rate_vespene: f32,
 
-    /// total minerals spent
+    /// Total minerals spent.
     spent_minerals: f32,
-    /// total vespene spent
+    /// Total vespene spent.
     spent_vespene: f32,
 
-    /// total food used
+    /// Total food used.
     food_used: Option<CategoryScoreDetails>,
 
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     killed_minerals: Option<CategoryScoreDetails>,
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     killed_vespene: Option<CategoryScoreDetails>,
 
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     lost_minerals: Option<CategoryScoreDetails>,
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     lost_vespene: Option<CategoryScoreDetails>,
 
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     friendly_fire_minerals: Option<CategoryScoreDetails>,
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     friendly_fire_vespene: Option<CategoryScoreDetails>,
 
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     used_minerals: Option<CategoryScoreDetails>,
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     used_vespene: Option<CategoryScoreDetails>,
 
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     total_used_minerals: Option<CategoryScoreDetails>,
-    /// TODO: find out what this means
+    /// TODO: Find out what this means.
     total_used_vespene: Option<CategoryScoreDetails>,
 
-    /// total damage dealt to enemies
+    /// Total damage dealt to enemies.
     total_damage_dealt: Option<VitalScoreDetails>,
-    /// total damage taken from enemies
+    /// Total damage taken from enemies.
     total_damage_taken: Option<VitalScoreDetails>,
-    /// total damage healed
+    /// Total damage healed.
     total_healed: Option<VitalScoreDetails>,
 }
 
@@ -238,7 +238,9 @@ impl FromProto<ProtoScoreDetails> for ScoreDetails {
 
             friendly_fire_minerals: {
                 if details.has_friendly_fire_minerals() {
-                    Some(details.take_friendly_fire_minerals().into_sc2()?)
+                    Some(details
+                        .take_friendly_fire_minerals()
+                        .into_sc2()?)
                 } else {
                     None
                 }

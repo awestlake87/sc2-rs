@@ -1,4 +1,4 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -8,7 +8,6 @@ extern crate serde_derive;
 extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
-extern crate organelle;
 extern crate rand;
 extern crate serde;
 extern crate tokio_core;
@@ -20,33 +19,28 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::unsync::mpsc;
 use rand::random;
-use sc2::{
-    AgentControl,
-    Error,
-    GameEvent,
-    Launcher,
-    LauncherBuilder,
-    MeleeBuilder,
-    Observation,
-    Player,
-    Result,
-    UpdateScheme,
-};
 use sc2::data::{
     Ability,
-    Action,
-    ActionTarget,
     Alliance,
     GameSetup,
     Map,
     MapInfo,
-    PlayerSetup,
     Point2,
     Race,
     Tag,
     UnitType,
     Vector2,
+};
+use sc2::{
+    action::{Action, ActionClient, ActionTarget},
+    agent::AgentBuilder,
+    observer::{Event, EventAck, Observation, ObserverClient},
+    Error,
+    LauncherSettings,
+    MeleeBuilder,
+    Result,
 };
 use tokio_core::reactor;
 
@@ -85,18 +79,18 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
-    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
+pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+    let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
-        builder = builder.install_dir(dir);
+        settings = settings.install_dir(dir);
     }
 
     if let Some(port) = args.flag_port {
-        builder = builder.base_port(port);
+        settings = settings.base_port(port);
     }
 
-    Ok(builder.create()?)
+    Ok(settings)
 }
 
 pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
@@ -109,22 +103,45 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 }
 
 struct TerranBot {
-    control: AgentControl,
+    observer: ObserverClient,
+    action: ActionClient,
 }
 
-impl Player for TerranBot {
-    type Error = Error;
-
-    #[async(boxed)]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player(Race::Terran)))
+impl TerranBot {
+    fn new(observer: ObserverClient, action: ActionClient) -> Self {
+        Self {
+            observer: observer,
+            action: action,
+        }
     }
 
-    #[async(boxed)]
-    fn on_event(mut self, e: GameEvent) -> Result<Self> {
+    fn spawn(
+        self,
+        handle: &reactor::Handle,
+        rx: mpsc::Receiver<(Event, EventAck)>,
+    ) -> Result<()> {
+        handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
+
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, rx: mpsc::Receiver<(Event, EventAck)>) -> Result<()> {
+        #[async]
+        for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
+            self = await!(self.on_event(e))?;
+
+            await!(ack.done())?;
+        }
+
+        Ok(())
+    }
+
+    #[async]
+    fn on_event(mut self, e: Event) -> Result<Self> {
         match e {
-            GameEvent::Step => {
-                let observation = await!(self.control.observer().observe())?;
+            Event::Step => {
+                let observation = await!(self.observer.observe())?;
 
                 self =
                     await!(self.scout_with_marines(Rc::clone(&observation)))?;
@@ -141,12 +158,6 @@ impl Player for TerranBot {
         }
 
         Ok(self)
-    }
-}
-
-impl TerranBot {
-    fn new(control: AgentControl) -> Self {
-        Self { control: control }
     }
 
     fn find_enemy_structure(&self, observation: &Observation) -> Option<Tag> {
@@ -175,7 +186,7 @@ impl TerranBot {
 
     #[async]
     fn scout_with_marines(self, observation: Rc<Observation>) -> Result<Self> {
-        let map_info = await!(self.control.observer().get_map_info())?;
+        let map_info = await!(self.observer.get_map_info())?;
 
         let units = observation.filter_units(|u| {
             u.get_alliance() == Alliance::Domestic
@@ -187,7 +198,7 @@ impl TerranBot {
             match self.find_enemy_structure(&*observation) {
                 Some(enemy_tag) => {
                     await!(
-                        self.control.action().send_action(
+                        self.action.send_action(
                             Action::new(Ability::Attack)
                                 .units([Rc::clone(&u)].iter())
                                 .target(ActionTarget::Unit(enemy_tag))
@@ -202,7 +213,7 @@ impl TerranBot {
             match self.find_enemy_pos(&*map_info) {
                 Some(target_pos) => {
                     await!(
-                        self.control.action().send_action(
+                        self.action.send_action(
                             Action::new(Ability::Smart)
                                 .units([Rc::clone(&u)].iter())
                                 .target(ActionTarget::Location(target_pos))
@@ -293,7 +304,7 @@ impl TerranBot {
         if units.is_empty() {
             Ok(self)
         } else {
-            await!(self.control.action().send_action(
+            await!(self.action.send_action(
                 Action::new(ability).units([Rc::clone(&units[0])].iter())
             ))?;
             Ok(self)
@@ -324,7 +335,7 @@ impl TerranBot {
             let u = random::<usize>() % units.len();
 
             await!(
-                self.control.action().send_action(
+                self.action.send_action(
                     Action::new(ability)
                         .units([Rc::clone(&units[u])].iter())
                         .target(ActionTarget::Location(
@@ -353,18 +364,29 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let melee = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|control| TerranBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-        sc2::AgentBuilder::factory(|control| TerranBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-    ).launcher_settings(get_launcher_settings(&args)?)
+    let mut agent1 = AgentBuilder::new().race(Race::Terran);
+    let mut agent2 = AgentBuilder::new().race(Race::Terran);
+
+    let bot1 = TerranBot::new(
+        agent1.add_observer_client(),
+        agent1.add_action_client(),
+    );
+    let bot2 = TerranBot::new(
+        agent2.add_observer_client(),
+        agent2.add_action_client(),
+    );
+
+    bot1.spawn(&handle, agent1.take_event_stream().unwrap())?;
+    bot2.spawn(&handle, agent2.take_event_stream().unwrap())?;
+
+    let melee = MeleeBuilder::new()
+        .add_player(agent1)
+        .add_player(agent2)
+        .launcher_settings(create_launcher_settings(&args)?)
         .repeat_forever(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .step_interval(args.flag_step_size.unwrap_or(1))
         .break_on_ctrlc(args.flag_wine)
-        .handle(handle)
+        .handle(&handle)
         .create()?;
 
     core.run(melee.into_future())?;

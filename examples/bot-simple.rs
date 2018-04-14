@@ -1,4 +1,4 @@
-#![feature(proc_macro, conservative_impl_trait, generators)]
+#![feature(proc_macro, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -9,7 +9,6 @@ extern crate docopt;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;
-extern crate organelle;
 extern crate rand;
 extern crate serde;
 extern crate tokio_core;
@@ -21,29 +20,17 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::unsync::mpsc;
 use rand::random;
+use sc2::data::{Ability, Alliance, GameSetup, Map, MapInfo, Point2, Race};
 use sc2::{
-    AgentControl,
+    action::{Action, ActionClient, ActionTarget},
+    agent::AgentBuilder,
+    observer::{Event, EventAck, ObserverClient},
     Error,
-    GameEvent,
-    Launcher,
-    LauncherBuilder,
+    LauncherSettings,
     MeleeBuilder,
-    Player,
     Result,
-    UpdateScheme,
-};
-use sc2::data::{
-    Ability,
-    Action,
-    ActionTarget,
-    Alliance,
-    GameSetup,
-    Map,
-    MapInfo,
-    PlayerSetup,
-    Point2,
-    Race,
 };
 use tokio_core::reactor;
 
@@ -79,18 +66,18 @@ pub struct Args {
     pub flag_step_size: Option<u32>,
 }
 
-pub fn get_launcher_settings(args: &Args) -> Result<Launcher> {
-    let mut builder = LauncherBuilder::new().use_wine(args.flag_wine);
+pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+    let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
-        builder = builder.install_dir(dir);
+        settings = settings.install_dir(dir);
     }
 
     if let Some(port) = args.flag_port {
-        builder = builder.base_port(port);
+        settings = settings.base_port(port);
     }
 
-    Ok(builder.create()?)
+    Ok(settings)
 }
 
 pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
@@ -103,45 +90,63 @@ pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
 }
 
 struct SimpleBot {
-    control: AgentControl,
+    observer: ObserverClient,
+    action: ActionClient,
 
     restarts: u32,
 }
 
-impl Player for SimpleBot {
-    type Error = Error;
-
-    #[async(boxed)]
-    fn get_player_setup(self, _: GameSetup) -> Result<(Self, PlayerSetup)> {
-        Ok((self, PlayerSetup::Player(Race::Terran)))
-    }
-
-    #[async(boxed)]
-    fn on_event(self, e: GameEvent) -> Result<Self> {
-        match e {
-            GameEvent::GameStarted => {
-                println!("starting a new game ({} restarts)", self.restarts);
-                Ok(self)
-            },
-            GameEvent::Step => await!(self.on_step()),
-            _ => Ok(self),
-        }
-    }
-}
-
 impl SimpleBot {
-    fn new(control: AgentControl) -> Self {
+    fn new(observer: ObserverClient, action: ActionClient) -> Self {
         Self {
-            control: control,
+            observer: observer,
+            action: action,
 
             restarts: 0,
         }
     }
 
+    fn spawn(
+        self,
+        handle: &reactor::Handle,
+        rx: mpsc::Receiver<(Event, EventAck)>,
+    ) -> Result<()> {
+        handle.spawn(self.run(rx).map_err(|e| panic!("{:#?}", e)));
+
+        Ok(())
+    }
+
+    #[async]
+    fn run(mut self, rx: mpsc::Receiver<(Event, EventAck)>) -> Result<()> {
+        #[async]
+        for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
+            self = await!(self.on_event(e))?;
+
+            await!(ack.done())?;
+        }
+
+        Ok(())
+    }
+
+    #[async]
+    fn on_event(self, e: Event) -> Result<Self> {
+        match e {
+            Event::GameStarted => {
+                println!(
+                    "starting a new game ({} restarts)",
+                    self.restarts
+                );
+                Ok(self)
+            },
+            Event::Step => await!(self.on_step()),
+            _ => Ok(self),
+        }
+    }
+
     #[async]
     fn on_step(self) -> Result<Self> {
-        let observation = await!(self.control.observer().observe())?;
-        let map_info = await!(self.control.observer().get_map_info())?;
+        let observation = await!(self.observer.observe())?;
+        let map_info = await!(self.observer.get_map_info())?;
 
         let step = observation.get_current_step();
 
@@ -152,7 +157,7 @@ impl SimpleBot {
             for u in units {
                 let target = find_random_location(&map_info);
                 await!(
-                    self.control.action().send_action(
+                    self.action.send_action(
                         Action::new(Ability::Smart)
                             .units([u].iter())
                             .target(ActionTarget::Location(target))
@@ -188,18 +193,29 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let melee = MeleeBuilder::new(
-        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-        sc2::AgentBuilder::factory(|control| SimpleBot::new(control))
-            .handle(handle.clone())
-            .create()?,
-    ).launcher_settings(get_launcher_settings(&args)?)
+    let mut agent1 = AgentBuilder::new().race(Race::Terran);
+    let mut agent2 = AgentBuilder::new().race(Race::Terran);
+
+    let bot1 = SimpleBot::new(
+        agent1.add_observer_client(),
+        agent1.add_action_client(),
+    );
+    let bot2 = SimpleBot::new(
+        agent2.add_observer_client(),
+        agent2.add_action_client(),
+    );
+
+    bot1.spawn(&handle, agent1.take_event_stream().unwrap())?;
+    bot2.spawn(&handle, agent2.take_event_stream().unwrap())?;
+
+    let melee = MeleeBuilder::new()
+        .add_player(agent1)
+        .add_player(agent2)
+        .launcher_settings(create_launcher_settings(&args)?)
         .repeat_forever(get_game_setup(&args)?)
-        .update_scheme(UpdateScheme::Interval(args.flag_step_size.unwrap_or(1)))
+        .step_interval(args.flag_step_size.unwrap_or(1))
         .break_on_ctrlc(args.flag_wine)
-        .handle(handle)
+        .handle(&handle)
         .create()?;
 
     core.run(melee.into_future())?;

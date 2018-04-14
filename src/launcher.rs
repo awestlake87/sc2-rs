@@ -1,19 +1,16 @@
 use std::env::home_dir;
-use std::mem;
 use std::path::{PathBuf, MAIN_SEPARATOR};
 
-use futures::prelude::*;
-use futures::unsync;
+use colored::Colorize;
 use glob::glob;
-use organelle::{Axon, Constraint, Impulse, Soma};
 use regex::Regex;
 
-use super::{Error, ErrorKind, Result};
+use constants::{sc2_bug_tag, warning_tag};
 use data::Rect;
 use instance::{Instance, InstanceKind, InstanceSettings};
-use synapses::{Dendrite, Synapse};
+use {ErrorKind, Result};
 
-/// endpoint port settings
+/// Endpoint port settings.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub struct PortSet {
@@ -21,7 +18,7 @@ pub struct PortSet {
     pub base_port: u16,
 }
 
-/// all port settings for a game
+/// All port settings for a game.
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GamePorts {
@@ -30,72 +27,7 @@ pub struct GamePorts {
     pub client_ports: Vec<PortSet>,
 }
 
-/// sender for launcher
-#[derive(Debug, Clone)]
-pub struct LauncherTerminal {
-    tx: unsync::mpsc::Sender<LauncherRequest>,
-}
-
-impl LauncherTerminal {
-    fn new(tx: unsync::mpsc::Sender<LauncherRequest>) -> Self {
-        Self { tx: tx }
-    }
-
-    /// launch an instance
-    #[async]
-    pub fn launch(self) -> Result<Instance> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(LauncherRequest::Launch(tx))
-                .map_err(|_| Error::from("unable to send launch request"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive instance")))
-    }
-
-    /// get a set of game ports
-    #[async]
-    pub fn get_game_ports(self) -> Result<GamePorts> {
-        let (tx, rx) = unsync::oneshot::channel();
-
-        await!(
-            self.tx
-                .send(LauncherRequest::Ports(tx))
-                .map_err(|_| Error::from("unable to send ports request"))
-        )?;
-
-        await!(rx.map_err(|_| Error::from("unable to receive ports")))
-    }
-}
-
-#[derive(Debug)]
-enum LauncherRequest {
-    Launch(unsync::oneshot::Sender<Instance>),
-    Ports(unsync::oneshot::Sender<GamePorts>),
-}
-
-/// receiver for launcher
-#[derive(Debug)]
-pub struct LauncherDendrite {
-    rx: unsync::mpsc::Receiver<LauncherRequest>,
-}
-
-impl LauncherDendrite {
-    fn new(rx: unsync::mpsc::Receiver<LauncherRequest>) -> Self {
-        Self { rx: rx }
-    }
-}
-
-/// create a launcher synapse
-pub fn synapse() -> (LauncherTerminal, LauncherDendrite) {
-    let (tx, rx) = unsync::mpsc::channel(1);
-
-    (LauncherTerminal::new(tx), LauncherDendrite::new(rx))
-}
-
-/// launches game instances upon request
+/// Launches game instances upon request.
 pub struct Launcher {
     exe: PathBuf,
     pwd: Option<PathBuf>,
@@ -103,15 +35,15 @@ pub struct Launcher {
     use_wine: bool,
 }
 
-/// builder used to create launcher
-pub struct LauncherBuilder {
+/// Builder used to create launcher.
+pub struct LauncherSettings {
     dir: Option<PathBuf>,
     use_wine: bool,
     base_port: u16,
 }
 
-impl LauncherBuilder {
-    /// create a new builder
+impl LauncherSettings {
+    /// Create a new builder.
     pub fn new() -> Self {
         Self {
             dir: None,
@@ -120,9 +52,9 @@ impl LauncherBuilder {
         }
     }
 
-    /// installation directory
+    /// Set the StarCraft II installation directory.
     ///
-    /// auto-detect if not specified
+    /// auto-detect if not specified.
     pub fn install_dir(self, dir: PathBuf) -> Self {
         Self {
             dir: Some(dir),
@@ -130,7 +62,7 @@ impl LauncherBuilder {
         }
     }
 
-    /// use Wine to run the game - for unix users
+    /// Use Wine to run the game - for unix users.
     pub fn use_wine(self, flag: bool) -> Self {
         Self {
             use_wine: flag,
@@ -138,37 +70,50 @@ impl LauncherBuilder {
         }
     }
 
-    /// starting point for game ports
+    /// Set the starting point for game ports.
     pub fn base_port(self, port: u16) -> Self {
         Self {
             base_port: port,
             ..self
         }
     }
-
-    /// build the settings object
-    pub fn create(self) -> Result<Launcher> {
-        let dir = {
-            if let Some(dir) = self.dir {
-                dir
-            } else {
-                auto_detect_starcraft(self.use_wine)?
-            }
-        };
-        let (exe, arch) = select_exe(&dir, self.use_wine)?;
-        let pwd = select_pwd(&dir, arch);
-
-        Ok(Launcher {
-            exe: exe,
-            pwd: pwd,
-            current_port: self.base_port,
-            use_wine: self.use_wine,
-        })
-    }
 }
 
 impl Launcher {
-    fn launch(&mut self) -> Result<Instance> {
+    /// Build the settings object.
+    pub fn create(settings: LauncherSettings) -> Result<Self> {
+        let use_wine = if cfg!(target_os = "windows") && settings.use_wine {
+            println!(
+                "{}: {}",
+                warning_tag(),
+                "Wine is not necessary for Windows - Disable Wine support to get rid of this message"
+                    .white()
+                    .bold()
+            );
+            false
+        } else {
+            settings.use_wine
+        };
+
+        let dir = {
+            if let Some(dir) = settings.dir {
+                dir
+            } else {
+                auto_detect_starcraft(use_wine)?
+            }
+        };
+        let (exe, arch) = select_exe(&dir, use_wine)?;
+        let pwd = select_pwd(&dir, arch);
+
+        Ok(Self {
+            exe: exe,
+            pwd: pwd,
+            current_port: settings.base_port,
+            use_wine: settings.use_wine,
+        })
+    }
+
+    pub fn launch(&mut self) -> Result<Instance> {
         let mut instance = Instance::from_settings(InstanceSettings {
             kind: {
                 if self.use_wine {
@@ -199,26 +144,7 @@ impl Launcher {
         Ok(instance)
     }
 
-    #[async]
-    fn listen(mut self, dendrite: LauncherDendrite) -> Result<()> {
-        #[async]
-        for req in dendrite.rx.map_err(|_| Error::from("streams can't fail")) {
-            match req {
-                LauncherRequest::Launch(tx) => {
-                    tx.send(self.launch()?)
-                        .map_err(|_| Error::from("unable to send instance"))?;
-                },
-                LauncherRequest::Ports(tx) => {
-                    tx.send(self.create_game_ports())
-                        .map_err(|_| Error::from("unable to send game ports"))?;
-                },
-            }
-        }
-
-        Ok(())
-    }
-
-    /// create a set of ports for multiplayer games
+    /// Create a set of ports for multiplayer games.
     pub fn create_game_ports(&mut self) -> GamePorts {
         let ports = GamePorts {
             shared_port: self.current_port,
@@ -232,65 +158,6 @@ impl Launcher {
         self.current_port += 3;
 
         ports
-    }
-}
-
-/// soma in charge of launching game instances and assigning ports
-pub struct LauncherSoma {
-    launcher: Option<Launcher>,
-    dendrite: Option<LauncherDendrite>,
-}
-
-impl LauncherSoma {
-    /// create a launcher from settings
-    pub fn axon(launcher: Launcher) -> Result<Axon<Self>> {
-        Ok(Axon::new(
-            Self {
-                launcher: Some(launcher),
-                dendrite: None,
-            },
-            vec![Constraint::One(Synapse::Launcher)],
-            vec![],
-        ))
-    }
-}
-
-impl Soma for LauncherSoma {
-    type Synapse = Synapse;
-    type Error = Error;
-
-    #[async(boxed)]
-    fn update(mut self, msg: Impulse<Self::Synapse>) -> Result<Self> {
-        match msg {
-            Impulse::AddDendrite(
-                _,
-                Synapse::Launcher,
-                Dendrite::Launcher(dendrite),
-            ) => {
-                self.dendrite = Some(dendrite);
-
-                Ok(self)
-            },
-            Impulse::Start(_, tx, handle) => {
-                assert!(self.launcher.is_some());
-                assert!(self.dendrite.is_some());
-
-                handle.spawn(
-                    mem::replace(&mut self.launcher, None)
-                        .unwrap()
-                        .listen(mem::replace(&mut self.dendrite, None).unwrap())
-                        .or_else(move |e| {
-                            tx.send(Impulse::Error(e.into()))
-                                .map(|_| ())
-                                .map_err(|_| ())
-                        }),
-                );
-
-                Ok(self)
-            },
-
-            _ => bail!("unexpected impulse"),
-        }
     }
 }
 
@@ -334,32 +201,36 @@ fn auto_detect_starcraft(use_wine: bool) -> Result<PathBuf> {
 }
 
 fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
-    if cfg!(target_os = "windows") && use_wine {
-        bail!("wine not supported on windows")
-    }
-
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
+        _ => panic!(
+            "{}: Unexpected path separator {}",
+            sc2_bug_tag(),
+            MAIN_SEPARATOR
+        ),
     };
 
     let glob_iter = match glob(
         &format!("{}/Versions/Base*/SC2*", dir.to_str().unwrap())[..],
     ) {
         Ok(iter) => iter,
-        Err(_) => bail!("failed to read glob pattern"),
+        Err(_) => bail!(ErrorKind::AutoDetectFailed(
+            "Failed to crawl SC2 installation".to_string()
+        )),
     };
 
     let exe_re =
         match Regex::new(&format!("Base([0-9]*){}SC2(_x64)?", separator)[..]) {
             Ok(re) => re,
-            Err(_) => bail!("failed to parse regex"),
+            Err(_) => unreachable!("{}: Failed to parse regex", sc2_bug_tag()),
         };
 
     let mut current_version = 0;
     let mut current_arch = ExeArch::X32;
-    let mut exe: Result<(PathBuf, ExeArch)> = Err("exe not found".into());
+    let mut exe: Result<(PathBuf, ExeArch)> = Err(ErrorKind::AutoDetectFailed(
+        "SC2 exe file not found".to_string(),
+    ).into());
 
     for entry in glob_iter {
         match entry {
@@ -368,7 +239,11 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                 let path_str = match path_clone.to_str() {
                     Some(s) => s,
                     None => {
-                        eprintln!("unable to convert path to string");
+                        println!(
+                            "{}: Unable to convert {:?} to string",
+                            warning_tag(),
+                            path
+                        );
                         continue;
                     },
                 };
@@ -378,7 +253,10 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                         let v = match caps.get(1).unwrap().as_str().parse() {
                             Ok(v) => v,
                             Err(_) => {
-                                eprintln!("unable to parse version as int");
+                                println!(
+                                    "{}: Unable to parse version as int",
+                                    warning_tag()
+                                );
                                 continue;
                             },
                         };
@@ -387,7 +265,10 @@ fn select_exe(dir: &PathBuf, use_wine: bool) -> Result<(PathBuf, ExeArch)> {
                             Some(a) => match a.as_str() {
                                 "_x64" => ExeArch::X64,
                                 _ => {
-                                    eprintln!("unrecognized suffix");
+                                    println!(
+                                        "{}: Unrecognized suffix",
+                                        warning_tag()
+                                    );
                                     continue;
                                 },
                             },
@@ -430,7 +311,11 @@ fn select_pwd(dir: &PathBuf, arch: ExeArch) -> Option<PathBuf> {
     let separator = match MAIN_SEPARATOR {
         '\\' => "\\\\",
         '/' => "/",
-        _ => panic!("unsupported path separator {}", MAIN_SEPARATOR),
+        _ => panic!(
+            "{}: Unexpected path separator {}",
+            sc2_bug_tag(),
+            MAIN_SEPARATOR
+        ),
     };
 
     let support_dir = PathBuf::from(

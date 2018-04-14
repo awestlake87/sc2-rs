@@ -1,9 +1,10 @@
 use sc2_proto::common;
 use sc2_proto::sc2api;
 
-use super::super::{FromProto, IntoProto, Result};
+use constants::sc2_bug_tag;
+use {FromProto, IntoProto, Result};
 
-/// race of the player
+/// Race of the player.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum Race {
@@ -20,10 +21,10 @@ impl FromProto<common::Race> for Race {
             common::Race::Zerg => Race::Zerg,
             common::Race::Protoss => Race::Protoss,
             common::Race::Random => Race::Random,
-            common::Race::NoRace => panic!(concat!(
-                "NoRace value (Library Bug! please let us know that ",
-                "this can in fact happen!)"
-            )),
+            common::Race::NoRace => unreachable!(
+                "{}: I assumed NoRace was not a legitimate value",
+                sc2_bug_tag()
+            ),
         })
     }
 }
@@ -39,7 +40,7 @@ impl IntoProto<common::Race> for Race {
     }
 }
 
-/// difficulty setting for built-in StarCraft II AI
+/// Difficulty setting for built-in StarCraft II AI.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum Difficulty {
@@ -73,18 +74,18 @@ impl Difficulty {
     }
 }
 
-/// settings for players
+/// Settings for players.
 #[derive(Debug, Copy, Clone)]
 pub enum PlayerSetup {
-    /// add a built-in StarCraft II bot with the given race and difficulty
+    /// Add a built-in StarCraft II bot with the given race and difficulty.
     Computer(Race, Difficulty),
-    /// add a user-controlled player
+    /// Add a user-controlled player.
     Player(Race),
     //Observer,
 }
 
 impl PlayerSetup {
-    /// does the PlayerSetup represent a player
+    /// Does the PlayerSetup represent a player?
     pub fn is_player(&self) -> bool {
         match self {
             &PlayerSetup::Player(_) => true,
@@ -92,7 +93,7 @@ impl PlayerSetup {
         }
     }
 
-    /// does the PlayerSetup represent a computer
+    /// Does the PlayerSetup represent a computer?
     pub fn is_computer(&self) -> bool {
         match self {
             &PlayerSetup::Computer(_, _) => true,

@@ -1,9 +1,9 @@
 use sc2_proto::data;
 
-use super::super::{ErrorKind, FromProto, IntoProto, Result};
 use data::Ability;
+use {ErrorKind, FromProto, IntoProto, Result};
 
-/// a list of known StarCraft II upgrades
+/// A list of known StarCraft II upgrades.
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Upgrade {
@@ -183,9 +183,10 @@ impl FromProto<u32> for Upgrade {
             140 => Upgrade::LiberatorAgRangeUpgrade,
             141 => Upgrade::DarkTemplarBlinkUpgrade,
 
-            _ => {
-                bail!(ErrorKind::InvalidProtobuf(format!("Upgrade id({})", id)))
-            },
+            _ => bail!(ErrorKind::InvalidProtobuf(format!(
+                "Upgrade id({})",
+                id
+            ))),
         })
     }
 }
@@ -196,7 +197,7 @@ impl IntoProto<u32> for Upgrade {
     }
 }
 
-/// upgrade data
+/// Upgrade data.
 #[derive(Debug, Clone)]
 pub struct UpgradeData {
     upgrade: Upgrade,
@@ -208,27 +209,27 @@ pub struct UpgradeData {
 }
 
 impl UpgradeData {
-    /// stable upgrade ID
+    /// Stable upgrade ID.
     pub fn get_id(&self) -> Upgrade {
         self.upgrade
     }
-    /// upgrade name (corresponds to the game's catalog)
+    /// Upgrade name (corresponds to the game's catalog).
     pub fn get_name(&self) -> &str {
         &self.name
     }
-    /// mineral cost of researching this upgrade
+    /// Mineral cost of researching this upgrade.
     pub fn get_mineral_cost(&self) -> u32 {
         self.mineral_cost
     }
-    /// vespene cost of researching this upgrade
+    /// Vespene cost of researching this upgrade.
     pub fn get_vespene_cost(&self) -> u32 {
         self.vespene_cost
     }
-    /// ability that researches this upgrade
+    /// Ability that researches this upgrade.
     pub fn get_ability(&self) -> Ability {
         self.ability
     }
-    /// time in game steps to research this upgrade
+    /// Time in game steps to research this upgrade.
     pub fn get_research_time(&self) -> f32 {
         self.research_time
     }
@@ -252,7 +253,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_commutativity() {
+    fn test_invertibility() {
         let test_element = |element: Upgrade| {
             assert_eq!(
                 element,
