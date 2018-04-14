@@ -35,4 +35,6 @@ deploy:crates:
     - release
   when: manual
   script:
-    - echo "TODO deploy"
+    - cargo login $CRATES_API_TOKEN
+    - cargo package
+    - cargo publish
