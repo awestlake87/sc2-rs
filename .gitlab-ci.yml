@@ -1,7 +1,6 @@
 
 stages:
   - test
-  - doc
   - deploy
 
 test:cargo:
@@ -16,7 +15,7 @@ test:cargo:
   
 pages:
   image: rustdocker/rust:nightly
-  stage: doc
+  stage: deploy
   only:
     - master
   script:
