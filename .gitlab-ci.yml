@@ -11,7 +11,7 @@ cargo:
     - cargo --version
     - cargo build --all --verbose
     - cargo build --examples --verbose
-    - cargo test --all --verbose
+    - cargo test --verbose
   
 deploy:pages:
   image: rustdocker/rust:nightly
@@ -19,7 +19,7 @@ deploy:pages:
   only:
     - master
   script:
-    - cargo doc --all-features --no-deps
+    - cargo doc --no-deps
     - rm -rf public
     - mkdir public
     - cp -R target/doc/* public
