@@ -1,4 +1,4 @@
-[![build status](https://travis-ci.org/awestlake87/sc2-rs.svg?branch=master)]()
+[![pipeline status](https://gitlab.com/awestlake87/sc2-rs/badges/master/pipeline.svg)](https://gitlab.com/awestlake87/sc2-rs/commits/master)
 [![crates version](https://img.shields.io/crates/v/sc2.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
