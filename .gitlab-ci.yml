@@ -1,9 +1,10 @@
 
 stages:
   - test
+  - doc
   - deploy
 
-cargo:
+test:cargo:
   image: rustdocker/rust:nightly
   stage: test
   script:
@@ -13,9 +14,9 @@ cargo:
     - cargo build --examples --verbose
     - cargo test --verbose
   
-deploy:pages:
+doc:cargo:
   image: rustdocker/rust:nightly
-  stage: deploy
+  stage: doc
   only:
     - master
   script:
@@ -26,6 +27,19 @@ deploy:pages:
   artifacts:
     paths:
       - public
+
+deploy:docs:
+  image: ruby:2.1
+  stage: deploy
+  only:
+    - master
+  script:
+    - gem install jekyll
+    - jekyll build -d public/
+  artifacts:
+    paths:
+      - public
+
 
 deploy:crates:
   image: rustdocker/rust:nightly
