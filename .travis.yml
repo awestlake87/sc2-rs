@@ -6,8 +6,11 @@ cache: cargo
 
 stages:
   - test
-  - doc
-  - deploy
+  - name: doc
+    if: branch = master
+  - name: deploy
+    if: branch =~ ^release\/.*$
+    
 
 jobs:
   include:
@@ -25,16 +28,13 @@ jobs:
         - rustc --version
         - cargo --version
         - cargo doc --no-deps
+      deploy:
+        provider: pages
+        skip_cleanup: true
+        local_dir: target/doc/
+        github_token: $GITHUB_TOKEN
+        on:
+          branch: master
     - stage: deploy
       script:
         - echo "HELLO"
-      on:
-        branch: /^release\/.*$/
-
-deploy:
-  provider: pages
-  skip_cleanup: true
-  local_dir: target/doc/
-  github_token: $GITHUB_TOKEN
-  on:
-    branch: master
