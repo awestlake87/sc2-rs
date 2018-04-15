@@ -5,16 +5,14 @@
 
 [Documentation (master)](https://awestlake87.gitlab.io/sc2-rs/sc2/)
 
-Rust implementation of StarCraft II Client API
-
-TODO: Provide links to s2client-api.
+This is my Rust implementation of the [StarCraft II Client API](https://github.com/Blizzard/s2client-api).
 
 This crate is still under heavy development, and I've only just decided the 
 direction it's going in regarding futures and streams. It currently relies on 
-the nightly `#[async]/await!` at the moment. If enough people push to support 
-stable futures, I'll consider moving this requirement into a feature, but at the 
-moment, it's *really* convenient to use the experimental instead of the stable
-combinators.
+the nightly `#[async]/await!`, but if enough people push to support stable 
+futures, I'll consider moving this requirement into a feature, but at the 
+moment, it's *really* convenient to use the experimental features instead of the 
+stable combinators.
 
 I tried to keep it close to the s2client-api in terms of the division of 
 functionality into interfaces such as the Action interface and Observer 
@@ -105,7 +103,8 @@ fn main() {
         )))
         .step_interval(1)
         .handle(&handle)
-        .create().unwrap();
+        .create()
+        .unwrap();
 
     // Run the match to completion on the event loop.
     core.run(melee.into_future()).unwrap();
@@ -123,6 +122,8 @@ debugging purposes, I've added support for Wine within the library for all of
 the people like me who are too lazy to dual-boot (or just prefer Linux in 
 general). The good news is that Wine actually supports SC2, the bad news is that
 last time I checked, the support requires newer (possibly staging versions) of 
-Wine. I'll try to provide links to guide users through it, though.
+Wine. 
 
-TODO: Provide links to Wine SC2 setup walkthrough.
+Here are some helpful links to get you started with that:
+- [SC2 Page on Wine HQ](https://appdb.winehq.org/objectManager.php?sClass=version&iId=20882)
+- [Ask Ubuntu thread on installing Wine Staging and SC2 for Ubuntu 16.04](https://askubuntu.com/questions/846651/installing-starcraft-2-playonlinux)
