@@ -25,7 +25,6 @@ extern crate tokio_timer;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate url;
-extern crate uuid;
 
 mod constants;
 mod instance;

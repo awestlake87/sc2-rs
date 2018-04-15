@@ -5,8 +5,8 @@ authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 description = "Rust implementation of the StarCraft II Client API"
 license = "MIT"
 documentation = "https://docs.rs/sc2-rs"
-homepage = "https://github.com/awestlake87/sc2-rs"
-repository = "https://github.com/awestlake87/sc2-rs"
+homepage = "https://gitlab.com/awestlake87/sc2-rs"
+repository = "https://gitlab.com/awestlake87/sc2-rs"
 
 [dependencies]
 bytes = "0"
@@ -25,7 +25,6 @@ tokio-timer = "0.1"
 tokio-tungstenite = "0.5"
 tungstenite = "0.5"
 url = "1.6"
-uuid = { version = "0.5", features = ["serde", "v4"] }
 
 [[example]]
 name = "bot-micro"
