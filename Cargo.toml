@@ -1,6 +1,6 @@
 [package]
 name = "sc2"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3"
 authors = ["Andrew J Westlake <kelixes@gmail.com>"]
 description = "Rust implementation of the StarCraft II Client API"
 license = "MIT"
