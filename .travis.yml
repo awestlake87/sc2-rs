@@ -9,20 +9,21 @@ stages:
   - doc
   - deploy
 
-script:
-  - rustup default nightly-2018-04-11 # temporary hack to get it working
-  - rustc --version
-  - cargo --version
-
 jobs:
   include:
     - stage: test
       script:
+        - rustup default nightly-2018-04-11 # temporary hack to get it working
+        - rustc --version
+        - cargo --version
         - cargo build --all --verbose
         - cargo build --examples --verbose
         - cargo test --verbose
     - stage: doc
       script:
+        - rustup default nightly-2018-04-11 # temporary hack to get it working
+        - rustc --version
+        - cargo --version
         - cargo doc --no-deps
     - stage: deploy
       script:
