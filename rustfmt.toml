@@ -1,5 +1,5 @@
 max_width = 80
-wrap_comments = true
+wrap_comments = false
 
 imports_indent = "Block"
 imports_layout = "HorizontalVertical"

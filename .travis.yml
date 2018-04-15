@@ -6,8 +6,10 @@ cache: cargo
 
 stages:
   - test
+  
   - name: doc
     if: branch = master
+
   - name: deploy
     if: branch =~ ^release\/.*$
     
@@ -22,6 +24,7 @@ jobs:
         - cargo build --all --verbose
         - cargo build --examples --verbose
         - cargo test --verbose
+
     - stage: doc
       script:
         - rustup default nightly-2018-04-11 # temporary hack to get it working
@@ -33,8 +36,7 @@ jobs:
         skip_cleanup: true
         local_dir: target/doc/
         github_token: $GITHUB_TOKEN
-        on:
-          branch: master
+      
     - stage: deploy
       script:
         - echo "HELLO"

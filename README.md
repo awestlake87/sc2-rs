@@ -28,6 +28,28 @@ channels to communicate between the bot and the API. Let's take a look at the
 creation of a simple bare-bones bot.
 
 ```rust
+#![feature(proc_macro, generators)]
+
+extern crate futures_await as futures;
+extern crate tokio_core;
+extern crate sc2;
+
+use futures::prelude::*;
+use futures::unsync::mpsc;
+use sc2::{
+    agent::{AgentBuilder},
+    ai::{OpponentBuilder},
+    data::{GameSetup, Map, Race},
+    observer::{Event, EventAck},
+    
+    LauncherSettings,
+    MeleeBuilder,
+
+    Result,
+    Error,
+};
+use tokio_core::reactor;
+
 struct SimpleBot;
 
 impl SimpleBot {
@@ -52,14 +74,12 @@ impl SimpleBot {
         // Loop over the game events.
         #[async]
         for (e, ack) in rx.map_err(|_| -> Error { unreachable!() }) {
-            self = await!(self.on_event(e))?;
-
             match e {
                 // Triggered once at the start of every game.
                 Event::GameStarted => println!("Started a new game!"),
                 // Triggered every time the game updates.
                 Event::Step => println!("Game Stepped!"),
-                
+            
                 // Ignore the other events for now.
                 _ => (),
             }
@@ -83,15 +103,15 @@ fn main() {
     // Create a new event loop.
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
-
+    
     // Create a new Agent and set the Race to Terran.
     let mut agent = AgentBuilder::new().race(Race::Terran);
-    
+
     // Instantiate our simple bot.
     let bot = SimpleBot::new();
 
     // Get the event stream from the Agent and spawn our bot's coroutine.
-    bot1.spawn(&handle, agent.take_event_stream().unwrap()).unwrap();
+    bot.spawn(&handle, agent.take_event_stream().unwrap()).unwrap();
 
     // Create a match between our bot and a default SC2 built-in AI Opponent.
     let melee = MeleeBuilder::new()
@@ -99,7 +119,7 @@ fn main() {
         .add_player(OpponentBuilder::new())
         .launcher_settings(LauncherSettings::new())
         .one_and_done(GameSetup::new(Map::LocalMap(
-            "maps/Ladder/(2)Bel'ShirVestigeLE (Void).SC2Map"
+            "maps/Ladder/(2)Bel'ShirVestigeLE (Void).SC2Map".into()
         )))
         .step_interval(1)
         .handle(&handle)
@@ -108,8 +128,6 @@ fn main() {
 
     // Run the match to completion on the event loop.
     core.run(melee.into_future()).unwrap();
-
-    Ok(())
 }
 ```
 
