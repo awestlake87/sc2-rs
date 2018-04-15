@@ -21,21 +21,21 @@ use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
 use rand::random;
-use sc2::data::{
-    Ability,
-    Alliance,
-    GameSetup,
-    Map,
-    MapInfo,
-    Point2,
-    Race,
-    Tag,
-    UnitType,
-    Vector2,
-};
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
     agent::AgentBuilder,
+    data::{
+        Ability,
+        Alliance,
+        GameSetup,
+        Map,
+        MapInfo,
+        Point2,
+        Race,
+        Tag,
+        UnitType,
+        Vector2,
+    },
     observer::{Event, EventAck, Observation, ObserverClient},
     Error,
     LauncherSettings,
@@ -59,10 +59,9 @@ Options:
   --wine                            Use Wine to run StarCraft II (for Linux).
   -d <path> --dir=<path>            Path to the StarCraft II installation.
   -p <port> --port=<port>           Port to make StarCraft II listen on.
-  -m <name> --map=<name>            Path to the StarCraft II map.
+  -m <path> --map=<path>            Path to the StarCraft II map.
   -r --realtime                     Run StarCraft II in real time
   -s <count> --step-size=<count>    How many steps to take per call.
-  --replay-dir=<path>               Path to a replay pack
 ";
 
 const TARGET_SCV_COUNT: usize = 15;
@@ -72,7 +71,6 @@ pub struct Args {
     pub flag_dir: Option<PathBuf>,
     pub flag_port: Option<u16>,
     pub flag_map: Option<PathBuf>,
-    pub flag_replay_dir: Option<PathBuf>,
     pub flag_wine: bool,
     pub flag_version: bool,
     pub flag_realtime: bool,

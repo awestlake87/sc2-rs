@@ -26,6 +26,11 @@ tokio-tungstenite = "0.5"
 tungstenite = "0.5"
 url = "1.6"
 
+[dev-dependencies]
+docopt = "0.8"
+serde = "1.0"
+serde_derive = "1.0"
+
 [[example]]
 name = "bot-micro"
 crate-type = ["bin"]
@@ -46,7 +51,7 @@ name = "debug"
 crate-type = ["bin"]
 path = "examples/debug.rs"
 
-[dev-dependencies]
-docopt = "0.8"
-serde = "1.0"
-serde_derive = "1.0"
+[[example]]
+name = "replay"
+crate-type = ["bin"]
+path = "examples/replay.rs"

@@ -20,10 +20,10 @@ use std::path::PathBuf;
 use docopt::Docopt;
 use futures::prelude::*;
 use futures::unsync::mpsc;
-use sc2::data::{Difficulty, GameSetup, Map, Point2, Race};
 use sc2::{
     agent::AgentBuilder,
     ai::OpponentBuilder,
+    data::{Difficulty, GameSetup, Map, Point2, Race},
     debug::{DebugClient, DebugCommand, DebugText, DebugTextTarget},
     observer::{Event, EventAck, ObserverClient},
     Error,
@@ -48,10 +48,9 @@ Options:
   --wine                            Use Wine to run StarCraft II (for Linux).
   -d <path> --dir=<path>            Path to the StarCraft II installation.
   -p <port> --port=<port>           Port to make StarCraft II listen on.
-  -m <name> --map=<name>            Path to the StarCraft II map.
+  -m <path> --map=<path>            Path to the StarCraft II map.
   -r --realtime                     Run StarCraft II in real time
   -s <count> --step-size=<count>    How many steps to take per call.
-  --replay-dir=<path>               Path to a replay pack
 ";
 
 #[derive(Debug, Deserialize)]
