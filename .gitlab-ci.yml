@@ -4,7 +4,7 @@ stages:
   - deploy
 
 test:cargo:
-  image: rustdocker/rust:6fe30f6172ca018e687fbe16e98e58236f11f21a9f31621a3f1fe55f5016087d
+  image: rustdocker/rust:nightly
   stage: test
   script:
     - rustc --version
