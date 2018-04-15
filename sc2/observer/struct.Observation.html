@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Observation` struct in crate `sc2`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Observation">
+
+    <title>sc2::observer::Observation - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css"
+          id="mainThemeStyle">
+    
+    <link rel="stylesheet" type="text/css" href="../../dark.css">
+    <link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle">
+    <script src="../../storage.js"></script>
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        <div class="sidebar-menu">&#9776;</div>
+        
+        <p class='location'>Struct Observation</p><div class="sidebar-elems"><div class="block items"><a class="sidebar-title" href="#methods">Methods</a><div class="sidebar-links"><a href="#method.get_player_id">get_player_id</a><a href="#method.get_previous_step">get_previous_step</a><a href="#method.get_current_step">get_current_step</a><a href="#method.get_camera_pos">get_camera_pos</a><a href="#method.get_units">get_units</a><a href="#method.get_power_sources">get_power_sources</a><a href="#method.get_effects">get_effects</a><a href="#method.get_upgrades">get_upgrades</a><a href="#method.get_minerals">get_minerals</a><a href="#method.get_vespene">get_vespene</a><a href="#method.get_food_cap">get_food_cap</a><a href="#method.get_food_used">get_food_used</a><a href="#method.get_food_army">get_food_army</a><a href="#method.get_food_workers">get_food_workers</a><a href="#method.get_idle_worker_count">get_idle_worker_count</a><a href="#method.get_army_count">get_army_count</a><a href="#method.get_warp_gate_count">get_warp_gate_count</a><a href="#method.get_larva_count">get_larva_count</a><a href="#method.get_creep">get_creep</a><a href="#method.get_visibility">get_visibility</a><a href="#method.get_score">get_score</a><a href="#method.filter_units">filter_units</a><a href="#method.sample_creep">sample_creep</a><a href="#method.sample_visibility">sample_visibility</a></div><a class="sidebar-title" href="#implementations">Trait Implementations</a><div class="sidebar-links"><a href="#impl-Debug">Debug</a><a href="#impl-Clone">Clone</a></div><a class="sidebar-title" href="#synthetic-implementations">Auto Trait Implementations</a><div class="sidebar-links"><a href="#impl-Send">!Send</a><a href="#impl-Sync">!Sync</a></div></div><p class='location'><a href='../index.html'>sc2</a>::<wbr><a href='index.html'>observer</a></p><script>window.sidebarCurrent = {name: 'Observation', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script></div>
+    </nav>
+
+    <div class="theme-picker">
+        <button id="theme-picker" aria-label="Pick another theme!">
+            <img src="../../brush.svg" width="18" alt="Pick another theme!">
+        </button>
+        <div id="theme-choices"></div>
+    </div>
+    <script src="../../theme.js"></script>
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>sc2</a>::<wbr><a href='index.html'>observer</a>::<wbr><a class="struct" href=''>Observation</a></span><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#39-66' title='goto source code'>[src]</a></span></h1><div class="docblock type-decl"><pre class='rust struct'>pub struct Observation { /* fields omitted */ }</pre></div><div class='docblock'><p>State of the game (changes every frame).</p>
+</div>
+                    <h2 id='methods' class='small-section-header'>
+                      Methods<a href='#methods' class='anchor'></a>
+                    </h2>
+                <h3 id='impl' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code><a href='#impl' class='anchor'></a></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#68-178' title='goto source code'>[src]</a></span></td></tr></tbody></table></h3><div class='impl-items'><h4 id='method.get_player_id' class="method"><span id='get_player_id.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_player_id' class='fnname'>get_player_id</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#70-72' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The player id associated with the participant.</p>
+</div><h4 id='method.get_previous_step' class="method"><span id='get_previous_step.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_previous_step' class='fnname'>get_previous_step</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#74-76' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The previous game step.</p>
+</div><h4 id='method.get_current_step' class="method"><span id='get_current_step.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_current_step' class='fnname'>get_current_step</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#78-80' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The current game step.</p>
+</div><h4 id='method.get_camera_pos' class="method"><span id='get_camera_pos.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_camera_pos' class='fnname'>get_camera_pos</a>(&amp;self) -&gt; <a class="type" href="../../sc2/data/type.Point2.html" title="type sc2::data::Point2">Point2</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#82-84' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Position of the center of the camera.</p>
+</div><h4 id='method.get_units' class="method"><span id='get_units.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_units' class='fnname'>get_units</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="struct" href="https://doc.rust-lang.org/nightly/alloc/rc/struct.Rc.html" title="struct alloc::rc::Rc">Rc</a>&lt;<a class="struct" href="../../sc2/data/struct.Unit.html" title="struct sc2::data::Unit">Unit</a>&gt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#87-89' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>A list of all known units at the moment.</p>
+</div><h4 id='method.get_power_sources' class="method"><span id='get_power_sources.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_power_sources' class='fnname'>get_power_sources</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="struct" href="../../sc2/data/struct.PowerSource.html" title="struct sc2::data::PowerSource">PowerSource</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#92-94' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>All power sources associated with the current player.</p>
+</div><h4 id='method.get_effects' class="method"><span id='get_effects.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_effects' class='fnname'>get_effects</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="struct" href="../../sc2/data/struct.Effect.html" title="struct sc2::data::Effect">Effect</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#96-98' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>All active effects in vision of the current player.</p>
+</div><h4 id='method.get_upgrades' class="method"><span id='get_upgrades.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_upgrades' class='fnname'>get_upgrades</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">&amp;[</a><a class="enum" href="../../sc2/data/enum.Upgrade.html" title="enum sc2::data::Upgrade">Upgrade</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.slice.html">]</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#100-102' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>All upgrades.</p>
+</div><h4 id='method.get_minerals' class="method"><span id='get_minerals.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_minerals' class='fnname'>get_minerals</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#105-107' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Current mineral count.</p>
+</div><h4 id='method.get_vespene' class="method"><span id='get_vespene.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_vespene' class='fnname'>get_vespene</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#109-111' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Current vespene count.</p>
+</div><h4 id='method.get_food_cap' class="method"><span id='get_food_cap.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_food_cap' class='fnname'>get_food_cap</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#113-115' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The total supply cap given the players max supply.</p>
+</div><h4 id='method.get_food_used' class="method"><span id='get_food_used.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_food_used' class='fnname'>get_food_used</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#117-119' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The total supply used by the player.</p>
+</div><h4 id='method.get_food_army' class="method"><span id='get_food_army.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_food_army' class='fnname'>get_food_army</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#121-123' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The total supply consumed by army units alone.</p>
+</div><h4 id='method.get_food_workers' class="method"><span id='get_food_workers.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_food_workers' class='fnname'>get_food_workers</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#125-127' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The total supply consumed by workers alone.</p>
+</div><h4 id='method.get_idle_worker_count' class="method"><span id='get_idle_worker_count.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_idle_worker_count' class='fnname'>get_idle_worker_count</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#129-131' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The number of workers that currently have no orders.</p>
+</div><h4 id='method.get_army_count' class="method"><span id='get_army_count.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_army_count' class='fnname'>get_army_count</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#133-135' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The number of army units.</p>
+</div><h4 id='method.get_warp_gate_count' class="method"><span id='get_warp_gate_count.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_warp_gate_count' class='fnname'>get_warp_gate_count</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#137-139' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The number of warp gates owned by the player.</p>
+</div><h4 id='method.get_larva_count' class="method"><span id='get_larva_count.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_larva_count' class='fnname'>get_larva_count</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u32.html">u32</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#141-143' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>The number of larva owned by the player.</p>
+</div><h4 id='method.get_creep' class="method"><span id='get_creep.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_creep' class='fnname'>get_creep</a>(&amp;self) -&gt; &amp;<a class="struct" href="../../sc2/data/struct.ImageData.html" title="struct sc2::data::ImageData">ImageData</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#146-148' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Creep image (sample pixels to find tiles with creep).</p>
+</div><h4 id='method.get_visibility' class="method"><span id='get_visibility.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_visibility' class='fnname'>get_visibility</a>(&amp;self) -&gt; &amp;<a class="struct" href="../../sc2/data/struct.ImageData.html" title="struct sc2::data::ImageData">ImageData</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#150-152' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Visibility image (sample pixels to find visible tiles).</p>
+</div><h4 id='method.get_score' class="method"><span id='get_score.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.get_score' class='fnname'>get_score</a>(&amp;self) -&gt; &amp;<a class="struct" href="../../sc2/data/struct.Score.html" title="struct sc2::data::Score">Score</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#155-157' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Detailed current set of scores.</p>
+</div><h4 id='method.filter_units' class="method"><span id='filter_units.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.filter_units' class='fnname'>filter_units</a>&lt;F&gt;(&amp;self, filter: F) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/rc/struct.Rc.html" title="struct alloc::rc::Rc">Rc</a>&lt;<a class="struct" href="../../sc2/data/struct.Unit.html" title="struct sc2::data::Unit">Unit</a>&gt;&gt; <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;F: <a class="trait" href="https://doc.rust-lang.org/nightly/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn">Fn</a>(&amp;<a class="struct" href="../../sc2/data/struct.Unit.html" title="struct sc2::data::Unit">Unit</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a>,&nbsp;</span></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#160-169' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Filter all units based on a custom condition.</p>
+</div><h4 id='method.sample_creep' class="method"><span id='sample_creep.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.sample_creep' class='fnname'>sample_creep</a>(&amp;self, _: <a class="type" href="../../sc2/data/type.Point2.html" title="type sc2::data::Point2">Point2</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.bool.html">bool</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#171-173' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Check if the given point contains creep.</p>
+</div><h4 id='method.sample_visibility' class="method"><span id='sample_visibility.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.sample_visibility' class='fnname'>sample_visibility</a>(&amp;self, _: <a class="type" href="../../sc2/data/type.Point2.html" title="type sc2::data::Point2">Point2</a>) -&gt; <a class="enum" href="../../sc2/data/enum.Visibility.html" title="enum sc2::data::Visibility">Visibility</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#175-177' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Get the visibility of the given point for the current player.</p>
+</div></div>
+                <h2 id='implementations' class='small-section-header'>
+                  Trait Implementations<a href='#implementations' class='anchor'></a>
+                </h2>
+                <div id='implementations-list'><h3 id='impl-Debug' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a> for <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code><a href='#impl-Debug' class='anchor'></a></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#38' title='goto source code'>[src]</a></span></td></tr></tbody></table></h3><div class='impl-items'><h4 id='method.fmt' class="method"><span id='fmt.v' class='invisible'><table class='table-display'><tbody><tr><td><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class="struct" href="https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html" title="struct core::fmt::Formatter">Formatter</a>) -&gt; <a class="type" href="https://doc.rust-lang.org/nightly/core/fmt/type.Result.html" title="type core::fmt::Result">Result</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#38' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Formats the value using the given formatter. <a href="https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt">Read more</a></p>
+</div></div><h3 id='impl-Clone' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl <a class="trait" href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> for <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code><a href='#impl-Clone' class='anchor'></a></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#38' title='goto source code'>[src]</a></span></td></tr></tbody></table></h3><div class='impl-items'><h4 id='method.clone' class="method"><span id='clone.v' class='invisible'><table class='table-display'><tbody><tr><td><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone' class='fnname'>clone</a>(&amp;self) -&gt; <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/observer_service.rs.html#38' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Returns a copy of the value. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone">Read more</a></p>
+</div><h4 id='method.clone_from' class="method"><span id='clone_from.v' class='invisible'><table class='table-display'><tbody><tr><td><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from' class='fnname'>clone_from</a>(&amp;mut self, source: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;</a>Self)</code></span></td><td><span class='out-of-band'><div class='ghost'></div><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div><a class='srclink' href='https://doc.rust-lang.org/nightly/src/core/clone.rs.html#130-132' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Performs copy-assignment from <code>source</code>. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from">Read more</a></p>
+</div></div></div>
+                <h2 id='synthetic-implementations' class='small-section-header'>
+                  Auto Trait Implementations<a href='#synthetic-implementations' class='anchor'></a>
+                </h2>
+                <div id='synthetic-implementations-list'>
+            <h3 id='impl-Send' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> for <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code><a href='#impl-Send' class='anchor'></a></span></td><td><span class='out-of-band'></span></td></tr></tbody></table></h3><div class='impl-items'></div><h3 id='impl-Sync' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> for <a class="struct" href="../../sc2/observer/struct.Observation.html" title="struct sc2::observer::Observation">Observation</a></code><a href='#impl-Sync' class='anchor'></a></span></td><td><span class='out-of-band'></span></td></tr></tbody></table></h3><div class='impl-items'></div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt><kbd>?</kbd></dt>
+                    <dd>Show this help dialog</dd>
+                    <dt><kbd>S</kbd></dt>
+                    <dd>Focus the search field</dd>
+                    <dt><kbd>↑</kbd></dt>
+                    <dd>Move up in search results</dd>
+                    <dt><kbd>↓</kbd></dt>
+                    <dd>Move down in search results</dd>
+                    <dt><kbd>↹</kbd></dt>
+                    <dd>Switch tab</dd>
+                    <dt><kbd>&#9166;</kbd></dt>
+                    <dd>Go to active search result</dd>
+                    <dt><kbd>+</kbd></dt>
+                    <dd>Expand all sections</dd>
+                    <dt><kbd>-</kbd></dt>
+                    <dd>Collapse all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "sc2";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

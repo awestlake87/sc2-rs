@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["OpponentBuilder","Build a built-in AI opponent."]]});

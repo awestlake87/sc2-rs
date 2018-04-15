@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `AgentBuilder` struct in crate `sc2`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, AgentBuilder">
+
+    <title>sc2::agent::AgentBuilder - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css"
+          id="mainThemeStyle">
+    
+    <link rel="stylesheet" type="text/css" href="../../dark.css">
+    <link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle">
+    <script src="../../storage.js"></script>
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        <div class="sidebar-menu">&#9776;</div>
+        
+        <p class='location'>Struct AgentBuilder</p><div class="sidebar-elems"><div class="block items"><a class="sidebar-title" href="#methods">Methods</a><div class="sidebar-links"><a href="#method.new">new</a><a href="#method.race">race</a><a href="#method.add_observer_client">add_observer_client</a><a href="#method.add_action_client">add_action_client</a><a href="#method.add_debug_client">add_debug_client</a><a href="#method.take_event_stream">take_event_stream</a></div><a class="sidebar-title" href="#synthetic-implementations">Auto Trait Implementations</a><div class="sidebar-links"><a href="#impl-Send">!Send</a><a href="#impl-Sync">!Sync</a></div></div><p class='location'><a href='../index.html'>sc2</a>::<wbr><a href='index.html'>agent</a></p><script>window.sidebarCurrent = {name: 'AgentBuilder', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script></div>
+    </nav>
+
+    <div class="theme-picker">
+        <button id="theme-picker" aria-label="Pick another theme!">
+            <img src="../../brush.svg" width="18" alt="Pick another theme!">
+        </button>
+        <div id="theme-choices"></div>
+    </div>
+    <script src="../../theme.js"></script>
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>sc2</a>::<wbr><a href='index.html'>agent</a>::<wbr><a class="struct" href=''>AgentBuilder</a></span><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#29-38' title='goto source code'>[src]</a></span></h1><div class="docblock type-decl"><pre class='rust struct'>pub struct AgentBuilder { /* fields omitted */ }</pre></div><div class='docblock'><p>Build an agent.</p>
+</div>
+                    <h2 id='methods' class='small-section-header'>
+                      Methods<a href='#methods' class='anchor'></a>
+                    </h2>
+                <h3 id='impl' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl <a class="struct" href="../../sc2/agent/struct.AgentBuilder.html" title="struct sc2::agent::AgentBuilder">AgentBuilder</a></code><a href='#impl' class='anchor'></a></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#40-99' title='goto source code'>[src]</a></span></td></tr></tbody></table></h3><div class='impl-items'><h4 id='method.new' class="method"><span id='new.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.new' class='fnname'>new</a>() -&gt; Self</code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#42-59' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Create a new AgentBuilder with the default settings.</p>
+</div><h4 id='method.race' class="method"><span id='race.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.race' class='fnname'>race</a>(self, race: <a class="enum" href="../../sc2/data/enum.Race.html" title="enum sc2::data::Race">Race</a>) -&gt; Self</code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#62-67' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Set the race of the player.</p>
+</div><h4 id='method.add_observer_client' class="method"><span id='add_observer_client.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.add_observer_client' class='fnname'>add_observer_client</a>(&amp;self) -&gt; <a class="struct" href="../../sc2/observer/struct.ObserverClient.html" title="struct sc2::observer::ObserverClient">ObserverClient</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#70-72' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Add an Observer client to observe the game state.</p>
+</div><h4 id='method.add_action_client' class="method"><span id='add_action_client.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.add_action_client' class='fnname'>add_action_client</a>(&amp;self) -&gt; <a class="struct" href="../../sc2/action/struct.ActionClient.html" title="struct sc2::action::ActionClient">ActionClient</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#75-80' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Add an Action client to dispatch commands.</p>
+</div><h4 id='method.add_debug_client' class="method"><span id='add_debug_client.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.add_debug_client' class='fnname'>add_debug_client</a>(&amp;self) -&gt; <a class="struct" href="../../sc2/debug/struct.DebugClient.html" title="struct sc2::debug::DebugClient">DebugClient</a></code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#83-85' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Add a Debug client to use debugging tools.</p>
+</div><h4 id='method.take_event_stream' class="method"><span id='take_event_stream.v' class='invisible'><table class='table-display'><tbody><tr><td><code>pub fn <a href='#method.take_event_stream' class='fnname'>take_event_stream</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://docs.rs/futures/0.1/futures/unsync/mpsc/struct.Receiver.html" title="struct futures::unsync::mpsc::Receiver">Receiver</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">(</a><a class="enum" href="../../sc2/observer/enum.Event.html" title="enum sc2::observer::Event">Event</a>, <a class="struct" href="../../sc2/observer/struct.EventAck.html" title="struct sc2::observer::EventAck">EventAck</a><a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.tuple.html">)</a>&gt;&gt;</code></span></td><td><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/sc2/services/agent_service.rs.html#94-98' title='goto source code'>[src]</a></td></tr></tbody></table></span></h4><div class='docblock'><p>Take the stream of game events to listen for.</p>
+<p>This should be called only once per builder! Subsequent calls will
+return None because Streams should not be shared.</p>
+<p>The stream item is a tuple containing the event, and a promise to be
+fulfilled once the user is done with the event.</p>
+</div></div>
+                <h2 id='synthetic-implementations' class='small-section-header'>
+                  Auto Trait Implementations<a href='#synthetic-implementations' class='anchor'></a>
+                </h2>
+                <div id='synthetic-implementations-list'>
+            <h3 id='impl-Send' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> for <a class="struct" href="../../sc2/agent/struct.AgentBuilder.html" title="struct sc2::agent::AgentBuilder">AgentBuilder</a></code><a href='#impl-Send' class='anchor'></a></span></td><td><span class='out-of-band'></span></td></tr></tbody></table></h3><div class='impl-items'></div><h3 id='impl-Sync' class='impl'><span class='in-band'><table class='table-display'><tbody><tr><td><code>impl !<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> for <a class="struct" href="../../sc2/agent/struct.AgentBuilder.html" title="struct sc2::agent::AgentBuilder">AgentBuilder</a></code><a href='#impl-Sync' class='anchor'></a></span></td><td><span class='out-of-band'></span></td></tr></tbody></table></h3><div class='impl-items'></div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt><kbd>?</kbd></dt>
+                    <dd>Show this help dialog</dd>
+                    <dt><kbd>S</kbd></dt>
+                    <dd>Focus the search field</dd>
+                    <dt><kbd>↑</kbd></dt>
+                    <dd>Move up in search results</dd>
+                    <dt><kbd>↓</kbd></dt>
+                    <dd>Move down in search results</dd>
+                    <dt><kbd>↹</kbd></dt>
+                    <dd>Switch tab</dd>
+                    <dt><kbd>&#9166;</kbd></dt>
+                    <dd>Go to active search result</dd>
+                    <dt><kbd>+</kbd></dt>
+                    <dd>Expand all sections</dd>
+                    <dt><kbd>-</kbd></dt>
+                    <dd>Collapse all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "sc2";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

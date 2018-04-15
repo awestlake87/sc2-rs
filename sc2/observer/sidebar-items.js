@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Event","An event from the game."]],"struct":[["EventAck","Notify the coordinator that we are done with this event."],["Observation","State of the game (changes every frame)."],["ObserverClient","An interface used to observer the game state."]]});

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `sc2` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, sc2">
+
+    <title>sc2 - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css"
+          id="mainThemeStyle">
+    
+    <link rel="stylesheet" type="text/css" href="../dark.css">
+    <link rel="stylesheet" type="text/css" href="../light.css" id="themeStyle">
+    <script src="../storage.js"></script>
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        <div class="sidebar-menu">&#9776;</div>
+        
+        <p class='location'>Crate sc2</p><div class="sidebar-elems"><div class="block items"><ul><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#traits">Traits</a></li><li><a href="#types">Type Definitions</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'sc2', ty: 'mod', relpath: '../'};</script></div>
+    </nav>
+
+    <div class="theme-picker">
+        <button id="theme-picker" aria-label="Pick another theme!">
+            <img src="../brush.svg" width="18" alt="Pick another theme!">
+        </button>
+        <div id="theme-choices"></div>
+    </div>
+    <script src="../theme.js"></script>
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><h1 class='fqn'><span class='in-band'>Crate <a class="mod" href=''>sc2</a></span><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../src/sc2/lib.rs.html#1-308' title='goto source code'>[src]</a></span></h1><div class='docblock'><p><a href="https://travis-ci.org/awestlake87/sc2-rs"><img src="https://travis-ci.org/awestlake87/sc2-rs.svg?branch=master" alt="Build Status" /></a>
+<a href="https://crates.io/crates/sc2"><img src="https://img.shields.io/crates/v/sc2.svg" alt="Crates Version" /></a>
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+<a href="https://docs.rs/crate/sc2"><img src="https://docs.rs/sc2/badge.svg" alt="Documentation" /></a></p>
+<p><a href="https://awestlake87.github.io/sc2-rs/sc2/">Documentation (master)</a></p>
+<p>This is my Rust implementation of the <a href="https://github.com/Blizzard/s2client-api">StarCraft II Client API</a>.</p>
+<p>This crate is still under heavy development, and I've only just decided the
+direction it's going in regarding futures and streams. It currently relies on
+the nightly <code>#[async]/await!</code>, but if enough people push to support stable
+futures, I'll consider moving this requirement into a feature, but at the
+moment, it's <em>really</em> convenient to use the experimental features instead of the
+stable combinators.</p>
+<p>I tried to keep it close to the s2client-api in terms of the division of
+functionality into interfaces such as the Action interface and Observer
+interface, however there are several differences because for one idiomatic C++
+and idiomatic Rust don't play well together (and for good reason too!), and also
+I was very interested in the work done with futures-rs and thought that neat
+asynchronous programming was a good fit for this library. In particular, one of
+the core differences between s2client-api and this library is the creation of
+bots and the consumption of events.</p>
+<p>s2client-api employs polymorphism to define bots, sc2-rs on the other hand uses
+channels to communicate between the bot and the API. Let's take a look at the
+creation of a simple bare-bones bot.</p>
+<p>This bot is simply designed to take a stream of game events and print messages
+for GameStarted and GameStepped. Normally, you would use these events as
+opportunities to observe the game state and/or dispatch orders to units. For
+now, though, a message is good enough.</p>
+
+<pre class="rust rust-example-rendered">
+<span class="attribute">#![<span class="ident">feature</span>(<span class="ident">proc_macro</span>, <span class="ident">generators</span>)]</span>
+
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">futures_await</span> <span class="kw">as</span> <span class="ident">futures</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">tokio_core</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">sc2</span>;
+
+<span class="kw">use</span> <span class="ident">futures</span>::<span class="ident">prelude</span>::<span class="kw-2">*</span>;
+<span class="kw">use</span> <span class="ident">futures</span>::<span class="ident">unsync</span>::<span class="ident">mpsc</span>;
+<span class="kw">use</span> <span class="ident">sc2</span>::{
+    <span class="ident">agent</span>::{<span class="ident">AgentBuilder</span>},
+    <span class="ident">ai</span>::{<span class="ident">OpponentBuilder</span>},
+    <span class="ident">data</span>::{<span class="ident">GameSetup</span>, <span class="ident">Map</span>, <span class="ident">Race</span>},
+    <span class="ident">observer</span>::{<span class="ident">Event</span>, <span class="ident">EventAck</span>},
+
+    <span class="ident">LauncherSettings</span>,
+    <span class="ident">MeleeBuilder</span>,
+
+    <span class="prelude-ty">Result</span>,
+    <span class="ident">Error</span>,
+};
+<span class="kw">use</span> <span class="ident">tokio_core</span>::<span class="ident">reactor</span>;
+
+<span class="kw">struct</span> <span class="ident">SimpleBot</span>;
+
+<span class="kw">impl</span> <span class="ident">SimpleBot</span> {
+    <span class="kw">fn</span> <span class="ident">new</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span> { }
+    }
+
+    <span class="doccomment">/// Spawn our bot&#39;s coroutine on the event loop.</span>
+    <span class="kw">fn</span> <span class="ident">spawn</span>(
+        <span class="self">self</span>,
+        <span class="ident">handle</span>: <span class="kw-2">&amp;</span><span class="ident">reactor</span>::<span class="ident">Handle</span>,
+        <span class="ident">rx</span>: <span class="ident">mpsc</span>::<span class="ident">Receiver</span><span class="op">&lt;</span>(<span class="ident">Event</span>, <span class="ident">EventAck</span>)<span class="op">&gt;</span>,
+    ) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="ident">handle</span>.<span class="ident">spawn</span>(<span class="self">self</span>.<span class="ident">run</span>(<span class="ident">rx</span>).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">panic</span><span class="macro">!</span>(<span class="string">&quot;{:#?}&quot;</span>, <span class="ident">e</span>)));
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Run the bot.</span>
+    <span class="attribute">#[<span class="ident">async</span>]</span>
+    <span class="kw">fn</span> <span class="ident">run</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rx</span>: <span class="ident">mpsc</span>::<span class="ident">Receiver</span><span class="op">&lt;</span>(<span class="ident">Event</span>, <span class="ident">EventAck</span>)<span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="comment">// Loop over the game events.</span>
+        <span class="attribute">#[<span class="ident">async</span>]</span>
+        <span class="kw">for</span> (<span class="ident">e</span>, <span class="ident">ack</span>) <span class="kw">in</span> <span class="ident">rx</span>.<span class="ident">map_err</span>(<span class="op">|</span><span class="kw">_</span><span class="op">|</span> <span class="op">-&gt;</span> <span class="ident">Error</span> { <span class="macro">unreachable</span><span class="macro">!</span>() }) {
+            <span class="kw">match</span> <span class="ident">e</span> {
+                <span class="comment">// Triggered once at the start of every game.</span>
+                <span class="ident">Event</span>::<span class="ident">GameStarted</span> <span class="op">=&gt;</span> <span class="macro">println</span><span class="macro">!</span>(<span class="string">&quot;Started a new game!&quot;</span>),
+                <span class="comment">// Triggered every time the game updates.</span>
+                <span class="ident">Event</span>::<span class="ident">Step</span> <span class="op">=&gt;</span> <span class="macro">println</span><span class="macro">!</span>(<span class="string">&quot;Game Stepped!&quot;</span>),
+             
+                <span class="comment">// Ignore the other events for now.</span>
+                <span class="kw">_</span> <span class="op">=&gt;</span> (),
+            }
+
+            <span class="comment">// Notify the coordinator that we have consumed this event.</span>
+            <span class="macro">await</span><span class="macro">!</span>(<span class="ident">ack</span>.<span class="ident">done</span>())<span class="question-mark">?</span>;
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="kw">fn</span> <span class="ident">main</span>() {
+    <span class="comment">// Create a new event loop.</span>
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">core</span> <span class="op">=</span> <span class="ident">reactor</span>::<span class="ident">Core</span>::<span class="ident">new</span>().<span class="ident">unwrap</span>();
+    <span class="kw">let</span> <span class="ident">handle</span> <span class="op">=</span> <span class="ident">core</span>.<span class="ident">handle</span>();
+    <span class="comment">// Create a new Agent and set the Race to Terran.</span>
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">agent</span> <span class="op">=</span> <span class="ident">AgentBuilder</span>::<span class="ident">new</span>().<span class="ident">race</span>(<span class="ident">Race</span>::<span class="ident">Terran</span>);
+
+    <span class="comment">// Instantiate our simple bot.</span>
+    <span class="kw">let</span> <span class="ident">bot</span> <span class="op">=</span> <span class="ident">SimpleBot</span>::<span class="ident">new</span>();
+
+    <span class="comment">// Get the event stream from the Agent and spawn our bot&#39;s coroutine.</span>
+    <span class="ident">bot</span>.<span class="ident">spawn</span>(<span class="kw-2">&amp;</span><span class="ident">handle</span>, <span class="ident">agent</span>.<span class="ident">take_event_stream</span>().<span class="ident">unwrap</span>()).<span class="ident">unwrap</span>();
+
+    <span class="comment">// Create a match between our bot and a default SC2 built-in AI Opponent.</span>
+    <span class="kw">let</span> <span class="ident">melee</span> <span class="op">=</span> <span class="ident">MeleeBuilder</span>::<span class="ident">new</span>()
+        .<span class="ident">add_player</span>(<span class="ident">agent</span>)
+        .<span class="ident">add_player</span>(<span class="ident">OpponentBuilder</span>::<span class="ident">new</span>())
+        .<span class="ident">launcher_settings</span>(<span class="ident">LauncherSettings</span>::<span class="ident">new</span>())
+        .<span class="ident">one_and_done</span>(<span class="ident">GameSetup</span>::<span class="ident">new</span>(<span class="ident">Map</span>::<span class="ident">LocalMap</span>(
+            <span class="string">&quot;maps/Ladder/(2)Bel&#39;ShirVestigeLE (Void).SC2Map&quot;</span>.<span class="ident">into</span>()
+        )))
+        .<span class="ident">step_interval</span>(<span class="number">1</span>)
+        .<span class="ident">handle</span>(<span class="kw-2">&amp;</span><span class="ident">handle</span>)
+        .<span class="ident">create</span>()
+        .<span class="ident">unwrap</span>();
+
+    <span class="comment">// Run the match to completion on the event loop.</span>
+    <span class="ident">core</span>.<span class="ident">run</span>(<span class="ident">melee</span>.<span class="ident">into_future</span>()).<span class="ident">unwrap</span>();
+}</pre>
+<p>Here we create an event loop, spawn our bot as a coroutine and listen for events
+from a Melee (PvP) match against a built-in SC2 AI opponent.</p>
+<p>An important thing to note is that the default LauncherSettings will only find
+your SC2 on Windows. However, since the headless Linux version is not ideal for
+debugging purposes, I've added support for Wine within the library for all of
+the people like me who are too lazy to dual-boot (or just prefer Linux in
+general). The good news is that Wine actually supports SC2, the bad news is that
+last time I checked, the support requires newer (possibly staging versions) of
+Wine.</p>
+<p>Here are some helpful links to get you started with that:</p>
+<ul>
+<li><a href="https://appdb.winehq.org/objectManager.php?sClass=version&amp;iId=20882">SC2 Page on Wine HQ</a></li>
+<li><a href="https://askubuntu.com/questions/846651/installing-starcraft-2-playonlinux">Ask Ubuntu thread on installing Wine Staging and SC2 for Ubuntu 16.04</a></li>
+</ul>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="action/index.html"
+                                  title='mod sc2::action'>action</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the public API for all structures dealing directly with the SC2
+Actions. These are used to give orders to units and perform upgrades in the
+game.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="agent/index.html"
+                                  title='mod sc2::agent'>agent</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the public API of the structs that interact with SC2 Agents.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="ai/index.html"
+                                  title='mod sc2::ai'>ai</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains public API for creating built-in SC2 AI opponents.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="data/index.html"
+                                  title='mod sc2::data'>data</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains useful data exposed through interfaces to the game instance.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="debug/index.html"
+                                  title='mod sc2::debug'>debug</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the public API of the SC2 Debug commands.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="observer/index.html"
+                                  title='mod sc2::observer'>observer</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the public API of the structs that interact with the Observer.</p>
+
+                           </td>
+                       </tr></table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Error.html"
+                                  title='struct sc2::Error'>Error</a></td>
+                           <td class='docblock-short'>
+                                <p>The Error type.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.LauncherSettings.html"
+                                  title='struct sc2::LauncherSettings'>LauncherSettings</a></td>
+                           <td class='docblock-short'>
+                                <p>Builder used to create launcher.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.MeleeBuilder.html"
+                                  title='struct sc2::MeleeBuilder'>MeleeBuilder</a></td>
+                           <td class='docblock-short'>
+                                <p>Build a Melee coordinator.</p>
+
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.ErrorKind.html"
+                                  title='enum sc2::ErrorKind'>ErrorKind</a></td>
+                           <td class='docblock-short'>
+                                <p>The kind of an error.</p>
+
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="trait" href="trait.ResultExt.html"
+                                  title='trait sc2::ResultExt'>ResultExt</a></td>
+                           <td class='docblock-short'>
+                                <p>Additional methods for <code>Result</code>, for easy interaction with this crate.</p>
+
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Result.html"
+                                  title='type sc2::Result'>Result</a></td>
+                           <td class='docblock-short'>
+                                <p>Convenient wrapper around <code>std::Result</code>.</p>
+
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt><kbd>?</kbd></dt>
+                    <dd>Show this help dialog</dd>
+                    <dt><kbd>S</kbd></dt>
+                    <dd>Focus the search field</dd>
+                    <dt><kbd>↑</kbd></dt>
+                    <dd>Move up in search results</dd>
+                    <dt><kbd>↓</kbd></dt>
+                    <dd>Move down in search results</dd>
+                    <dt><kbd>↹</kbd></dt>
+                    <dd>Switch tab</dd>
+                    <dt><kbd>&#9166;</kbd></dt>
+                    <dd>Go to active search result</dd>
+                    <dt><kbd>+</kbd></dt>
+                    <dd>Expand all sections</dd>
+                    <dt><kbd>-</kbd></dt>
+                    <dd>Collapse all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "sc2";
+    </script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

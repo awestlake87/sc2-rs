@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ActionTarget","Action target."]],"struct":[["Action","An action (command or ability) applied to a unit or set of units."],["ActionClient","Action interface for a game instance."]]});

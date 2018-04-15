@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `data` mod in crate `sc2`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, data">
+
+    <title>sc2::data - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css"
+          id="mainThemeStyle">
+    
+    <link rel="stylesheet" type="text/css" href="../../dark.css">
+    <link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle">
+    <script src="../../storage.js"></script>
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        <div class="sidebar-menu">&#9776;</div>
+        
+        <p class='location'>Module data</p><div class="sidebar-elems"><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#types">Type Definitions</a></li></ul></div><p class='location'><a href='../index.html'>sc2</a></p><script>window.sidebarCurrent = {name: 'data', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script></div>
+    </nav>
+
+    <div class="theme-picker">
+        <button id="theme-picker" aria-label="Pick another theme!">
+            <img src="../../brush.svg" width="18" alt="Pick another theme!">
+        </button>
+        <div id="theme-choices"></div>
+    </div>
+    <script src="../../theme.js"></script>
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content"><h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>sc2</a>::<wbr><a class="mod" href=''>data</a></span><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../../src/sc2/data/mod.rs.html#1-254' title='goto source code'>[src]</a></span></h1><div class='docblock'><p>Contains useful data exposed through interfaces to the game instance.</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.AbilityData.html"
+                                  title='struct sc2::data::AbilityData'>AbilityData</a></td>
+                           <td class='docblock-short'>
+                                <p>Data about an ability.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.BuffData.html"
+                                  title='struct sc2::data::BuffData'>BuffData</a></td>
+                           <td class='docblock-short'>
+                                <p>Buff data.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Effect.html"
+                                  title='struct sc2::data::Effect'>Effect</a></td>
+                           <td class='docblock-short'>
+                                <p>Visuals of a persistent ability on the map (eg. PsiStorm).</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.EffectData.html"
+                                  title='struct sc2::data::EffectData'>EffectData</a></td>
+                           <td class='docblock-short'>
+                                <p>Effect data.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.GameSetup.html"
+                                  title='struct sc2::data::GameSetup'>GameSetup</a></td>
+                           <td class='docblock-short'>
+                                <p>Settings for a game.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.ImageData.html"
+                                  title='struct sc2::data::ImageData'>ImageData</a></td>
+                           <td class='docblock-short'>
+                                <p>Data used to sample the current state of the map at certain points.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.MapInfo.html"
+                                  title='struct sc2::data::MapInfo'>MapInfo</a></td>
+                           <td class='docblock-short'>
+                                <p>Info about the terrain.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.PlayerResult.html"
+                                  title='struct sc2::data::PlayerResult'>PlayerResult</a></td>
+                           <td class='docblock-short'>
+                                <p>Game result tied to a specific player id.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.PowerSource.html"
+                                  title='struct sc2::data::PowerSource'>PowerSource</a></td>
+                           <td class='docblock-short'>
+                                <p>Power source information for Protoss.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Rect.html"
+                                  title='struct sc2::data::Rect'>Rect</a></td>
+                           <td class='docblock-short'>
+                                <p>Generic structure to represent a 2D rectangle.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Rect2.html"
+                                  title='struct sc2::data::Rect2'>Rect2</a></td>
+                           <td class='docblock-short'>
+                                <p>2D rectangle represented by two points.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Rect2I.html"
+                                  title='struct sc2::data::Rect2I'>Rect2I</a></td>
+                           <td class='docblock-short'>
+                                <p>2D integer rectangle represented by two points.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.ReplayInfo.html"
+                                  title='struct sc2::data::ReplayInfo'>ReplayInfo</a></td>
+                           <td class='docblock-short'>
+                                <p>Information about a replay file.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.ReplayPlayerInfo.html"
+                                  title='struct sc2::data::ReplayPlayerInfo'>ReplayPlayerInfo</a></td>
+                           <td class='docblock-short'>
+                                <p>Information about a player in a replay.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Score.html"
+                                  title='struct sc2::data::Score'>Score</a></td>
+                           <td class='docblock-short'>
+                                <p>Score evaluated at the end of a game.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Unit.html"
+                                  title='struct sc2::data::Unit'>Unit</a></td>
+                           <td class='docblock-short'>
+                                <p>A unit (could be structure, a worker, or military).</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.UnitTypeData.html"
+                                  title='struct sc2::data::UnitTypeData'>UnitTypeData</a></td>
+                           <td class='docblock-short'>
+                                <p>Data about a unit type.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.UpgradeData.html"
+                                  title='struct sc2::data::UpgradeData'>UpgradeData</a></td>
+                           <td class='docblock-short'>
+                                <p>Upgrade data.</p>
+
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Ability.html"
+                                  title='enum sc2::data::Ability'>Ability</a></td>
+                           <td class='docblock-short'>
+                                <p>A list of known StarCraft II abilities</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Alliance.html"
+                                  title='enum sc2::data::Alliance'>Alliance</a></td>
+                           <td class='docblock-short'>
+                                <p>Relationship to this player.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Buff.html"
+                                  title='enum sc2::data::Buff'>Buff</a></td>
+                           <td class='docblock-short'>
+                                <p>A list of known StarCraft II buffs.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Difficulty.html"
+                                  title='enum sc2::data::Difficulty'>Difficulty</a></td>
+                           <td class='docblock-short'>
+                                <p>Difficulty setting for built-in StarCraft II AI.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.DisplayType.html"
+                                  title='enum sc2::data::DisplayType'>DisplayType</a></td>
+                           <td class='docblock-short'>
+                                <p>Whether the unit is shown on screen or not.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.GameResult.html"
+                                  title='enum sc2::data::GameResult'>GameResult</a></td>
+                           <td class='docblock-short'>
+                                <p>Result of the game.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Map.html"
+                                  title='enum sc2::data::Map'>Map</a></td>
+                           <td class='docblock-short'>
+                                <p>Different ways of specifying a map.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.PlayerSetup.html"
+                                  title='enum sc2::data::PlayerSetup'>PlayerSetup</a></td>
+                           <td class='docblock-short'>
+                                <p>Settings for players.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Race.html"
+                                  title='enum sc2::data::Race'>Race</a></td>
+                           <td class='docblock-short'>
+                                <p>Race of the player.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.UnitType.html"
+                                  title='enum sc2::data::UnitType'>UnitType</a></td>
+                           <td class='docblock-short'>
+                                <p>list of known StarCraft II unit types</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Upgrade.html"
+                                  title='enum sc2::data::Upgrade'>Upgrade</a></td>
+                           <td class='docblock-short'>
+                                <p>A list of known StarCraft II upgrades.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.Visibility.html"
+                                  title='enum sc2::data::Visibility'>Visibility</a></td>
+                           <td class='docblock-short'>
+                                <p>Visibility of a point on the terrain.</p>
+
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Color.html"
+                                  title='type sc2::data::Color'>Color</a></td>
+                           <td class='docblock-short'>
+                                <p>Color type for debug commands.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Point2.html"
+                                  title='type sc2::data::Point2'>Point2</a></td>
+                           <td class='docblock-short'>
+                                <p>2D point used to specify location.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Point3.html"
+                                  title='type sc2::data::Point3'>Point3</a></td>
+                           <td class='docblock-short'>
+                                <p>3D point used to specify location.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Point2I.html"
+                                  title='type sc2::data::Point2I'>Point2I</a></td>
+                           <td class='docblock-short'>
+                                <p>2D integer point used to specify a location.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Tag.html"
+                                  title='type sc2::data::Tag'>Tag</a></td>
+                           <td class='docblock-short'>
+                                <p>Unique tag for a unit instance.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Vector2.html"
+                                  title='type sc2::data::Vector2'>Vector2</a></td>
+                           <td class='docblock-short'>
+                                <p>2D vector used to specify direction.</p>
+
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Vector3.html"
+                                  title='type sc2::data::Vector3'>Vector3</a></td>
+                           <td class='docblock-short'>
+                                <p>3D vector used to specify direction.</p>
+
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt><kbd>?</kbd></dt>
+                    <dd>Show this help dialog</dd>
+                    <dt><kbd>S</kbd></dt>
+                    <dd>Focus the search field</dd>
+                    <dt><kbd>↑</kbd></dt>
+                    <dd>Move up in search results</dd>
+                    <dt><kbd>↓</kbd></dt>
+                    <dd>Move down in search results</dd>
+                    <dt><kbd>↹</kbd></dt>
+                    <dd>Switch tab</dd>
+                    <dt><kbd>&#9166;</kbd></dt>
+                    <dd>Go to active search result</dd>
+                    <dt><kbd>+</kbd></dt>
+                    <dd>Expand all sections</dd>
+                    <dt><kbd>-</kbd></dt>
+                    <dd>Collapse all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "sc2";
+    </script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>
