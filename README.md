@@ -1,6 +1,7 @@
-[![pipeline status](https://gitlab.com/awestlake87/sc2-rs/badges/master/pipeline.svg)](https://gitlab.com/awestlake87/sc2-rs/commits/master)
-[![crates version](https://img.shields.io/crates/v/sc2.svg)]()
+[![Pipeline Status](https://gitlab.com/awestlake87/sc2-rs/badges/master/pipeline.svg)](https://gitlab.com/awestlake87/sc2-rs/commits/master)
+[![Crates Version](https://img.shields.io/crates/v/sc2.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://docs.rs/sc2/badge.svg)](https://docs.rs/crate/sc2)
 
 [Documentation (master)](https://awestlake87.gitlab.io/sc2-rs/sc2/)
 
