@@ -37,4 +37,4 @@ deploy:crates:
     - cargo login $CRATES_API_TOKEN
     - cargo publish
     - git tag `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
-    - git push origin ttps://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs.git `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
+    - git push https://awestlake87:$GITLAB_TOKEN@gitlab.com/awestlake87/sc2-rs.git `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
