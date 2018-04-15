@@ -1,0 +1,39 @@
+image: rustdocker/rust:nightly
+before_script:
+  - rustup default nightly-2018-04-11
+
+stages:
+  - test
+  - deploy
+
+test:cargo:
+  stage: test
+  script:
+    - rustc --version
+    - cargo --version
+    - cargo build --all --verbose
+    - cargo build --examples --verbose
+    - cargo test --verbose
+  
+pages:
+  stage: deploy
+  only:
+    - master
+  script:
+    - cargo doc --no-deps
+    - rm -rf public
+    - mkdir public
+    - cp -R target/doc/* public
+  artifacts:
+    paths:
+      - public
+
+deploy:crates:
+  stage: deploy
+  only:
+    - pre-release
+    - release
+  when: manual
+  script:
+    - cargo login $CRATES_API_TOKEN
+    - cargo publish
