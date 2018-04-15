@@ -1,9 +1,9 @@
-[![Pipeline Status](https://gitlab.com/awestlake87/sc2-rs/badges/master/pipeline.svg)](https://gitlab.com/awestlake87/sc2-rs/commits/master)
+[![Build Status](https://travis-ci.org/awestlake87/sc2-rs.svg?branch=master)](https://travis-ci.org/awestlake87/sc2-rs)
 [![Crates Version](https://img.shields.io/crates/v/sc2.svg)](https://crates.io/crates/sc2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Documentation](https://docs.rs/sc2/badge.svg)](https://docs.rs/crate/sc2)
 
-[Documentation (master)](https://awestlake87.gitlab.io/sc2-rs/sc2/)
+[Documentation (master)](https://awestlake87.github.io/sc2-rs/sc2/)
 
 This is my Rust implementation of the [StarCraft II Client API](https://github.com/Blizzard/s2client-api).
 

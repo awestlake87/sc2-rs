@@ -4,14 +4,31 @@ rust:
 
 cache: cargo
 
+stages:
+  - test
+  - doc
+  - deploy
+
 script:
   - rustup default nightly-2018-04-11 # temporary hack to get it working
   - rustc --version
   - cargo --version
-  - cargo build --all --verbose
-  - cargo build --examples --verbose
-  - cargo test --verbose
-  - cargo doc --no-deps
+
+jobs:
+  include:
+    - stage: test
+      script:
+        - cargo build --all --verbose
+        - cargo build --examples --verbose
+        - cargo test --verbose
+    - stage: doc
+      script:
+        - cargo doc --no-deps
+    - stage: deploy
+      script:
+        - echo "HELLO"
+      on:
+        branch: /^release\/.*$/
 
 deploy:
   provider: pages
