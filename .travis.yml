@@ -11,7 +11,7 @@ stages:
     if: branch = master
 
   - name: deploy
-    if: branch =~ ^release\/.*$
+    if: branch =~ ^release\/.*$ AND type = push
     
 
 jobs:
