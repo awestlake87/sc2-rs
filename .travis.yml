@@ -1,0 +1,13 @@
+language: rust
+rust:
+  - nightly
+
+cache: cargo
+
+script:
+  - rustc --version
+  - cargo --version
+  - cargo build --all --verbose
+  - cargo build --examples --verbose
+  - cargo test --verbose
+
