@@ -33,7 +33,7 @@ impl ComputerService {
                     })?;
                 },
 
-                MeleeRequest::CreateGame(_, _, tx) => {
+                MeleeRequest::CreateGame(_, _, _, tx) => {
                     tx.send(()).map_err(|_| -> Error {
                         unreachable!(
                             "{}: Unable to ack create game",

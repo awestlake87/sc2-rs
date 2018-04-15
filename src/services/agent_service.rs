@@ -201,8 +201,8 @@ impl Agent {
                     })?;
                 },
 
-                MeleeRequest::CreateGame(game, players, tx) => {
-                    await!(self.create_game(game, players))?;
+                MeleeRequest::CreateGame(game, players, update_scheme, tx) => {
+                    await!(self.create_game(game, players, update_scheme))?;
                     tx.send(()).map_err(|_| -> Error {
                         unreachable!("{}: Unable to create game", sc2_bug_tag())
                     })?;
@@ -261,6 +261,7 @@ impl Agent {
         &self,
         settings: GameSetup,
         players: Vec<PlayerSetup>,
+        update_scheme: UpdateScheme,
     ) -> impl Future<Item = (), Error = Error> {
         let client = self.client.clone();
 
@@ -312,7 +313,15 @@ impl Agent {
                     .push(setup);
             }
 
-            req.mut_create_game().set_realtime(false);
+            match update_scheme {
+                UpdateScheme::Realtime => {
+                    req.mut_create_game().set_realtime(true);
+                },
+                _ => {
+                    req.mut_create_game().set_realtime(false);
+                },
+            }
+
             await!(client.request(req))?;
 
             Ok(())

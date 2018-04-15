@@ -56,17 +56,18 @@ Options:
 ";
 
 #[derive(Debug, Deserialize)]
-pub struct Args {
-    pub flag_dir: Option<PathBuf>,
-    pub flag_port: Option<u16>,
-    pub flag_map: Option<PathBuf>,
-    pub flag_replay_dir: Option<PathBuf>,
-    pub flag_wine: bool,
-    pub flag_version: bool,
-    pub flag_step_size: Option<u32>,
+struct Args {
+    flag_dir: Option<PathBuf>,
+    flag_port: Option<u16>,
+    flag_map: Option<PathBuf>,
+    flag_replay_dir: Option<PathBuf>,
+    flag_wine: bool,
+    flag_version: bool,
+    flag_realtime: bool,
+    flag_step_size: Option<u32>,
 }
 
-pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
@@ -80,13 +81,28 @@ pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     Ok(settings)
 }
 
-pub fn get_game_setup(args: &Args) -> Result<GameSetup> {
+fn create_melee(args: &Args) -> Result<MeleeBuilder> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
     };
 
-    Ok(GameSetup::new(map))
+    let mut melee = MeleeBuilder::new()
+        .launcher_settings(create_launcher_settings(&args)?)
+        .one_and_done(GameSetup::new(map))
+        .break_on_ctrlc(args.flag_wine);
+
+    if args.flag_realtime && args.flag_step_size.is_some() {
+        bail!("Realtime and Step Size flags are incompatible")
+    } else {
+        if args.flag_realtime {
+            melee = melee.step_realtime();
+        } else if let Some(ref step_size) = args.flag_step_size {
+            melee = melee.step_interval(*step_size);
+        }
+    }
+
+    Ok(melee)
 }
 
 struct SimpleBot {
@@ -208,13 +224,9 @@ quick_main!(|| -> sc2::Result<()> {
     bot1.spawn(&handle, agent1.take_event_stream().unwrap())?;
     bot2.spawn(&handle, agent2.take_event_stream().unwrap())?;
 
-    let melee = MeleeBuilder::new()
+    let melee = create_melee(&args)?
         .add_player(agent1)
         .add_player(agent2)
-        .launcher_settings(create_launcher_settings(&args)?)
-        .repeat_forever(get_game_setup(&args)?)
-        .step_interval(args.flag_step_size.unwrap_or(1))
-        .break_on_ctrlc(args.flag_wine)
         .handle(&handle)
         .create()?;
 

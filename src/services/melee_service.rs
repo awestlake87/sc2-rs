@@ -283,11 +283,11 @@ impl Melee {
                     await!(connect1.join(connect2))?;
                 }
 
-                await!(
-                    self.agents[0]
-                        .clone()
-                        .create_game(game.clone(), vec![player1, player2])
-                )?;
+                await!(self.agents[0].clone().create_game(
+                    game.clone(),
+                    vec![player1, player2],
+                    self.update_scheme
+                ))?;
 
                 {
                     let join1 = self.agents[0]
@@ -349,12 +349,11 @@ impl Melee {
                 assert!(player.1.is_player() && computer.1.is_computer());
 
                 await!(player.0.clone().connect(instance1.get_url()?))?;
-                await!(
-                    player
-                        .0
-                        .clone()
-                        .create_game(game.clone(), vec![player.1, computer.1])
-                )?;
+                await!(player.0.clone().create_game(
+                    game.clone(),
+                    vec![player.1, computer.1],
+                    self.update_scheme
+                ))?;
                 await!(player.0.clone().join_game(player.1, None))?;
 
                 await!(player.0.clone().run_game(self.update_scheme))?;
@@ -374,7 +373,12 @@ pub enum MeleeRequest {
     PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
     Connect(Url, oneshot::Sender<()>),
 
-    CreateGame(GameSetup, Vec<PlayerSetup>, oneshot::Sender<()>),
+    CreateGame(
+        GameSetup,
+        Vec<PlayerSetup>,
+        UpdateScheme,
+        oneshot::Sender<()>,
+    ),
     JoinGame(
         PlayerSetup,
         Option<GamePorts>,
@@ -447,12 +451,18 @@ impl MeleeClient {
         self,
         game: GameSetup,
         players: Vec<PlayerSetup>,
+        update_scheme: UpdateScheme,
     ) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
         await!(
             self.tx
-                .send(MeleeRequest::CreateGame(game, players, tx))
+                .send(MeleeRequest::CreateGame(
+                    game,
+                    players,
+                    update_scheme,
+                    tx,
+                ))
                 .map_err(|_| -> Error {
                     unreachable!("{}: Unable to create game", sc2_bug_tag())
                 })
