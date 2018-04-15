@@ -31,8 +31,7 @@ pages:
 deploy:crates:
   stage: deploy
   only:
-    - pre-release
-    - release
+    - release/*
   when: manual
   script:
     - cargo login $CRATES_API_TOKEN
