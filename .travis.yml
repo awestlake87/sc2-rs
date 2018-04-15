@@ -39,4 +39,15 @@ jobs:
       
     - stage: deploy
       script:
-        - echo "HELLO"
+        - rustup default nightly-2018-04-11 # temporary hack to get it working
+        - rustc --version
+        - cargo --version
+
+        # Publish the crate to crates.io
+        - cargo publish --token $CRATES_API_TOKEN
+
+        # Generate a tag with the version we just deployed
+        - git tag `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
+
+        # Push the tag back to the repository
+        - git push https://awestlake87:$GITHUB_TOKEN@github.com/awestlake87/sc2-rs.git `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
