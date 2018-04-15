@@ -77,7 +77,7 @@ struct Args {
     flag_step_size: Option<u32>,
 }
 
-pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
@@ -91,7 +91,7 @@ pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     Ok(settings)
 }
 
-pub fn create_melee(args: &Args) -> Result<MeleeBuilder> {
+fn create_melee(args: &Args) -> Result<MeleeBuilder> {
     let map = match args.flag_map {
         Some(ref map) => Map::LocalMap(map.clone()),
         None => bail!("no map specified"),
