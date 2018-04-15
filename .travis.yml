@@ -44,7 +44,7 @@ jobs:
         - cargo --version
 
         # Publish the crate to crates.io
-        - cargo publish --token $CRATES_API_TOKEN
+        - cargo publish --token $CARGO_TOKEN
 
         # Generate a tag with the version we just deployed
         - git tag `cargo pkgid | sed -E 's/.*#(.*:)?(.+)/\2/'`
