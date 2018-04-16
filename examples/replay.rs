@@ -18,7 +18,9 @@ extern crate sc2;
 use std::path::PathBuf;
 
 use docopt::Docopt;
-use sc2::{LauncherSettings, Result};
+use futures::prelude::*;
+use sc2::{LauncherSettings, ReplayBuilder, Result};
+use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const USAGE: &'static str = "
@@ -30,25 +32,27 @@ Usage:
   example --version
 
 Options:
-  -h --help                         Show this screen.
-  --version                         Show version.
-  --wine                            Use Wine to run StarCraft II (for Linux).
-  -d <path> --dir=<path>            Path to the StarCraft II installation.
-  -p <port> --port=<port>           Port to make StarCraft II listen on.
-  -m <path> --map=<path>            Path to the StarCraft II map.
-  -s <count> --step-size=<count>    How many steps to take per call.
+  -h --help                             Show this screen.
+  --version                             Show version.
+  --wine                                Use Wine to run StarCraft II (for Linux).
+  -d <path> --dir=<path>                Path to the StarCraft II installation.
+  -p <port> --port=<port>               Port to make StarCraft II listen on.
+  -m <path> --map=<path>                Path to the StarCraft II map.
+  -s <count> --step-size=<count>        How many steps to take per call.
+  -i <count> --max-instances=<count>    Max number of instances to use at once.
 ";
 
 #[derive(Debug, Deserialize)]
-pub struct Args {
-    pub flag_dir: Option<PathBuf>,
-    pub flag_port: Option<u16>,
-    pub flag_wine: bool,
-    pub flag_version: bool,
-    pub flag_step_size: Option<u32>,
+struct Args {
+    flag_dir: Option<PathBuf>,
+    flag_port: Option<u16>,
+    flag_wine: bool,
+    flag_version: bool,
+    flag_step_size: Option<u32>,
+    flag_max_instances: Option<usize>,
 }
 
-pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
+fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     let mut settings = LauncherSettings::new().use_wine(args.flag_wine);
 
     if let Some(dir) = args.flag_dir.clone() {
@@ -62,6 +66,15 @@ pub fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
     Ok(settings)
 }
 
+fn create_replay(args: &Args) -> Result<ReplayBuilder> {
+    let replay = ReplayBuilder::new()
+        .launcher_settings(create_launcher_settings(args)?)
+        .break_on_ctrlc(args.flag_wine)
+        .max_instances(args.flag_max_instances.unwrap_or(2));
+
+    Ok(replay)
+}
+
 quick_main!(|| -> sc2::Result<()> {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
@@ -72,5 +85,12 @@ quick_main!(|| -> sc2::Result<()> {
         return Ok(());
     }
 
-    unimplemented!()
+    let mut core = reactor::Core::new().unwrap();
+    let handle = core.handle();
+
+    let replay = create_replay(&args)?.handle(&handle).create()?;
+
+    core.run(replay.into_future())?;
+
+    Ok(())
 });

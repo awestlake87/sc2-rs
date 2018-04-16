@@ -178,9 +178,13 @@ pub mod ai;
 pub mod data;
 pub mod debug;
 pub mod observer;
+pub mod spectator;
 
 pub use self::launcher::LauncherSettings;
-pub use self::services::melee_service::MeleeBuilder;
+pub use self::services::{
+    melee_service::MeleeBuilder,
+    replay_service::ReplayBuilder,
+};
 
 use std::path::PathBuf;
 

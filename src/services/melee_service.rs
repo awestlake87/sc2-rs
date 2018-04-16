@@ -9,16 +9,8 @@ use url::Url;
 use constants::{sc2_bug_tag, warning_tag};
 use data::{GameSetup, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
+use services::UpdateScheme;
 use {Error, ErrorKind, Result};
-
-/// Update scheme for the agents to use.
-#[derive(Debug, Copy, Clone)]
-pub enum UpdateScheme {
-    /// Update as fast as possible.
-    Realtime,
-    /// Step the game with a fixed interval.
-    Interval(u32),
-}
 
 pub trait MeleeCompetitor {
     fn spawn(

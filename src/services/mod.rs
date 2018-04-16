@@ -10,3 +10,13 @@ pub mod client_service;
 pub mod computer_service;
 pub mod melee_service;
 pub mod observer_service;
+pub mod replay_service;
+
+/// Update scheme for the agents to use.
+#[derive(Debug, Copy, Clone)]
+pub enum UpdateScheme {
+    /// Update as fast as possible.
+    Realtime,
+    /// Step the game with a fixed interval.
+    Interval(u32),
+}

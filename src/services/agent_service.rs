@@ -10,18 +10,21 @@ use constants::sc2_bug_tag;
 use data::{GameSetup, Map, PlayerSetup, Race};
 use launcher::GamePorts;
 use observer::{Event, EventAck};
-use services::action_service::{
-    ActionBuilder,
-    ActionClient,
-    ActionControlClient,
-    DebugClient,
-};
-use services::client_service::{ProtoClient, ProtoClientBuilder};
-use services::melee_service::{MeleeCompetitor, MeleeRequest, UpdateScheme};
-use services::observer_service::{
-    ObserverBuilder,
-    ObserverClient,
-    ObserverControlClient,
+use services::{
+    action_service::{
+        ActionBuilder,
+        ActionClient,
+        ActionControlClient,
+        DebugClient,
+    },
+    client_service::{ProtoClient, ProtoClientBuilder},
+    melee_service::{MeleeCompetitor, MeleeRequest},
+    observer_service::{
+        ObserverBuilder,
+        ObserverClient,
+        ObserverControlClient,
+    },
+    UpdateScheme,
 };
 use {Error, ErrorKind, IntoProto, Result};
 
