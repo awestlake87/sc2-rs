@@ -79,10 +79,15 @@ fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
 }
 
 fn create_melee(args: &Args) -> Result<MeleeBuilder> {
-    let map = match args.flag_map {
-        Some(ref map) => Map::LocalMap(map.clone()),
-        None => bail!("no map specified"),
-    };
+    static DEFAULT_MAP: &str =
+        "./maps/Ladder/(2)Bel'ShirVestigeLE (Void).SC2Map";
+    const DEFAULT_STEP: u32 = 1;
+
+    let map = Map::LocalMap(
+        args.flag_map
+            .clone()
+            .unwrap_or(PathBuf::from(DEFAULT_MAP)),
+    );
 
     let mut melee = MeleeBuilder::new()
         .launcher_settings(create_launcher_settings(&args)?)
@@ -94,8 +99,9 @@ fn create_melee(args: &Args) -> Result<MeleeBuilder> {
     } else {
         if args.flag_realtime {
             melee = melee.step_realtime();
-        } else if let Some(ref step_size) = args.flag_step_size {
-            melee = melee.step_interval(*step_size);
+        } else {
+            melee = melee
+                .step_interval(args.flag_step_size.unwrap_or(DEFAULT_STEP));
         }
     }
 
