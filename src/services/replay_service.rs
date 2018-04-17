@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::VecDeque, path::PathBuf, rc::Rc};
 
 use ctrlc;
 use futures::{
@@ -12,7 +12,7 @@ use tokio_core::reactor;
 
 use constants::{sc2_bug_tag, warning_tag};
 use launcher::{Launcher, LauncherSettings};
-use replay::{Replay, ReplayInfo};
+use replay::{Replay, ReplayInfo, SpectatorChoice};
 use services::client_service::{ProtoClient, ProtoClientBuilder};
 use wine_utils::convert_to_wine_path;
 use {Error, ErrorKind, FromProto, Result};
@@ -20,8 +20,46 @@ use {Error, ErrorKind, FromProto, Result};
 pub type ReplaySink = mpsc::Sender<Replay>;
 type ReplayStream = mpsc::Receiver<Replay>;
 
-pub trait ReplayObserver {
-    fn spawn(&mut self, handle: &reactor::Handle) -> Result<()>;
+pub trait ReplaySpectator {
+    fn spawn(&mut self, handle: &reactor::Handle) -> Result<SpectatorClient>;
+}
+
+pub enum SpectatorRequest {
+    WhichPlayer(Rc<ReplayInfo>, oneshot::Sender<SpectatorChoice>),
+}
+
+pub struct SpectatorClient {
+    tx: mpsc::Sender<SpectatorRequest>,
+}
+
+impl SpectatorClient {
+    pub fn wrap(tx: mpsc::Sender<SpectatorRequest>) -> Self {
+        Self { tx: tx }
+    }
+
+    fn which_player(
+        &self,
+        replay_info: Rc<ReplayInfo>,
+    ) -> impl Future<Item = SpectatorChoice, Error = Error> {
+        let (tx, rx) = oneshot::channel();
+        let future = self.tx
+            .clone()
+            .send(SpectatorRequest::WhichPlayer(replay_info, tx))
+            .map_err(|_| -> Error {
+                unreachable!(
+                    "{}: Unable to send SpectatorRequest",
+                    sc2_bug_tag()
+                )
+            });
+
+        async_block! {
+            await!(future)?;
+
+            await!(rx.map_err(|_| -> Error {
+                unreachable!("{}: Unable to recv SpectatorChoice", sc2_bug_tag())
+            }))
+        }
+    }
 }
 
 /// Build a Replay coordinator.
@@ -34,6 +72,8 @@ pub struct ReplayBuilder {
 
     replay_tx: ReplaySink,
     replay_rx: ReplayStream,
+
+    spectators: Vec<Box<ReplaySpectator>>,
 }
 
 impl ReplayBuilder {
@@ -49,6 +89,8 @@ impl ReplayBuilder {
             num_instances: 1,
             replay_tx: tx,
             replay_rx: rx,
+
+            spectators: vec![],
         }
     }
 
@@ -74,9 +116,11 @@ impl ReplayBuilder {
     /// Add a spectator to the replay coordinator.
     pub fn add_spectator<T>(mut self, spectator: T) -> Self
     where
-        T: ReplayObserver + Sized + 'static,
+        T: ReplaySpectator + Sized + 'static,
     {
-        unimplemented!()
+        self.spectators.push(Box::new(spectator));
+
+        self
     }
 
     /// The number of instances to create for replays.
@@ -121,6 +165,12 @@ impl ReplayBuilder {
         let launcher =
             Launcher::create(self.launcher_settings.unwrap(), handle.clone())?;
 
+        let mut spectator_clients = VecDeque::new();
+
+        for mut spectator in self.spectators {
+            spectator_clients.push_back(spectator.spawn(&handle)?);
+        }
+
         Ok(ReplayCoordinator {
             handle: handle,
             launcher: launcher,
@@ -128,6 +178,8 @@ impl ReplayBuilder {
             num_instances: self.num_instances,
 
             replay_rx: self.replay_rx,
+
+            spectators: spectator_clients,
         })
     }
 }
@@ -139,6 +191,8 @@ pub struct ReplayCoordinator {
     num_instances: usize,
 
     replay_rx: ReplayStream,
+
+    spectators: VecDeque<SpectatorClient>,
 }
 
 impl IntoFuture for ReplayCoordinator {
@@ -245,6 +299,19 @@ impl ReplayCoordinator {
 
                 let replay_info = await!(client.get_replay_info(replay, true))?;
 
+                while let Some(spectator) = self.spectators.pop_front() {
+                    let choice = await!(
+                        spectator.which_player(Rc::clone(&replay_info))
+                    )?;
+
+                    match choice {
+                        SpectatorChoice::WatchPlayer(player_id) => {
+                            println!("watch player {}", player_id)
+                        },
+                        SpectatorChoice::Pass => println!("pass"),
+                    }
+                }
+
                 println!("got replay info {:#?}", replay_info);
             };
 
@@ -273,7 +340,7 @@ impl ReplayClient {
         &self,
         replay: Replay,
         download_data: bool,
-    ) -> impl Future<Item = ReplayInfo, Error = Error> {
+    ) -> impl Future<Item = Rc<ReplayInfo>, Error = Error> {
         let mut req = sc2api::Request::new();
 
         match replay {
@@ -289,7 +356,7 @@ impl ReplayClient {
         async_block! {
             let mut rsp = await!(future)?;
 
-            ReplayInfo::from_proto(rsp.take_replay_info())
+            Ok(Rc::from(ReplayInfo::from_proto(rsp.take_replay_info())?))
         }
     }
 }
