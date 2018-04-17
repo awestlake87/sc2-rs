@@ -21,7 +21,13 @@ use docopt::Docopt;
 use futures::prelude::*;
 use glob::glob;
 use sc2::{
-    replay::{Replay, ReplayBuilder, ReplaySink},
+    replay::{
+        Replay,
+        ReplayBuilder,
+        ReplaySink,
+        SpectatorBuilder,
+        SpectatorChoice,
+    },
     Error,
     LauncherSettings,
     Result,
@@ -144,7 +150,19 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let replay = create_replay(&args)?.handle(&handle);
+    let replay = create_replay(&args)?
+        .add_spectator(
+            SpectatorBuilder::new().player_picker(|replay_info| {
+                if replay_info.get_players().len() != 0 {
+                    SpectatorChoice::WatchPlayer(
+                        replay_info.get_players()[0].get_player_id(),
+                    )
+                } else {
+                    SpectatorChoice::Pass
+                }
+            }),
+        )
+        .handle(&handle);
 
     if args.flag_replay_dir.is_none() {
         bail!("Replay Directory is required")

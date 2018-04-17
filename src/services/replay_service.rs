@@ -24,10 +24,12 @@ pub trait ReplaySpectator {
     fn spawn(&mut self, handle: &reactor::Handle) -> Result<SpectatorClient>;
 }
 
+#[derive(Debug)]
 pub enum SpectatorRequest {
     WhichPlayer(Rc<ReplayInfo>, oneshot::Sender<SpectatorChoice>),
 }
 
+#[derive(Debug, Clone)]
 pub struct SpectatorClient {
     tx: mpsc::Sender<SpectatorRequest>,
 }
@@ -165,10 +167,10 @@ impl ReplayBuilder {
         let launcher =
             Launcher::create(self.launcher_settings.unwrap(), handle.clone())?;
 
-        let mut spectator_clients = VecDeque::new();
+        let mut spectator_clients = vec![];
 
         for mut spectator in self.spectators {
-            spectator_clients.push_back(spectator.spawn(&handle)?);
+            spectator_clients.push(spectator.spawn(&handle)?);
         }
 
         Ok(ReplayCoordinator {
@@ -192,7 +194,7 @@ pub struct ReplayCoordinator {
 
     replay_rx: ReplayStream,
 
-    spectators: VecDeque<SpectatorClient>,
+    spectators: Vec<SpectatorClient>,
 }
 
 impl IntoFuture for ReplayCoordinator {
@@ -243,7 +245,12 @@ impl ReplayCoordinator {
             "Replay coordinator needs at least 1 instance"
         );
 
-        let (idle_tx, idle_rx) = mpsc::channel(self.num_instances);
+        let num_spectators = self.spectators.len();
+
+        let (idle_instances_tx, mut idle_instances_rx) =
+            mpsc::channel(self.num_instances);
+        let (idle_spectators_tx, mut idle_spectators_rx) =
+            mpsc::channel(num_spectators);
 
         let mut connect_futures = vec![];
 
@@ -257,7 +264,7 @@ impl ReplayCoordinator {
             connect_futures.push(client.connect(instance.get_url()?));
 
             await!(
-                idle_tx
+                idle_instances_tx
                     .clone()
                     .send((instance, ReplayClient::wrap(client)))
                     .map_err(|_| -> Error {
@@ -269,56 +276,111 @@ impl ReplayCoordinator {
             )?;
         }
 
+        for spectator in self.spectators {
+            await!(
+                idle_spectators_tx
+                    .clone()
+                    .send(spectator)
+                    .map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to queue idle spectator",
+                            sc2_bug_tag()
+                        )
+                    })
+            )?;
+        }
+
         await!(join_all(connect_futures))?;
 
-        #[async]
-        for (instance, client) in
-            idle_rx.map_err(|_| -> Error { unreachable!() })
-        {
-            println!("got idle instance");
+        let mut exhausted_spectators = 0;
+        let mut buffered_replays = vec![];
 
-            let more_replays = loop {
-                let item = await_item!(self.replay_rx)
-                    .map_err(|_| -> Error { unreachable!() })?;
+        while exhausted_spectators < num_spectators {
+            let (instance, client) = await_item!(idle_instances_rx)
+                .map_err(|_| -> Error { unreachable!() })?
+                .unwrap_or_else(|| {
+                    unreachable!("idle instances stream should not end")
+                });
+            let spectator = await_item!(idle_spectators_rx)
+                .map_err(|_| -> Error { unreachable!() })?
+                .unwrap_or_else(|| {
+                    unreachable!("because of loop precondition")
+                });
 
-                let replay = match item {
-                    Some(Replay::LocalReplay(path)) => {
-                        if self.launcher.using_wine() {
-                            Replay::LocalReplay(await!(convert_to_wine_path(
-                                path,
-                                self.handle.clone()
-                            ))?)
-                        } else {
-                            Replay::LocalReplay(path)
-                        }
+            let mut handled = false;
+
+            for i in 0..buffered_replays.len() {
+                let replay_info = Rc::clone(&buffered_replays[0]);
+
+                let choice =
+                    await!(spectator.which_player(Rc::clone(&replay_info)))?;
+
+                match choice {
+                    SpectatorChoice::WatchPlayer(player_id) => {
+                        handled = true;
+                        buffered_replays.swap_remove(i);
+                        break;
                     },
+                    SpectatorChoice::Pass => continue,
+                }
+            }
 
-                    // Replay stream ended, so no more replays.
-                    None => break false,
-                };
+            if !handled {
+                while let Some(replay) = await_item!(self.replay_rx)
+                    .map_err(|_| -> Error { unreachable!() })?
+                {
+                    let replay = match replay {
+                        Replay::LocalReplay(path) => {
+                            if self.launcher.using_wine() {
+                                Replay::LocalReplay(await!(
+                                    convert_to_wine_path(
+                                        path,
+                                        self.handle.clone()
+                                    )
+                                )?)
+                            } else {
+                                Replay::LocalReplay(path)
+                            }
+                        },
+                    };
 
-                let replay_info = await!(client.get_replay_info(replay, true))?;
+                    let replay_info =
+                        await!(client.get_replay_info(replay, true))?;
 
-                while let Some(spectator) = self.spectators.pop_front() {
                     let choice = await!(
                         spectator.which_player(Rc::clone(&replay_info))
                     )?;
 
                     match choice {
                         SpectatorChoice::WatchPlayer(player_id) => {
-                            println!("watch player {}", player_id)
+                            println!("run game for {:#?}", replay_info);
+                            handled = true;
+                            break;
                         },
-                        SpectatorChoice::Pass => println!("pass"),
+                        SpectatorChoice::Pass => {
+                            buffered_replays.push(replay_info)
+                        },
                     }
                 }
-
-                println!("got replay info {:#?}", replay_info);
-            };
-
-            if !more_replays {
-                // No more replays, exit loop.
-                break;
             }
+
+            if !handled {
+                exhausted_spectators += 1;
+            } else {
+                await!(
+                    idle_spectators_tx
+                        .clone()
+                        .send(spectator)
+                        .map_err(|_| -> Error { unreachable!() })
+                )?;
+            }
+
+            await!(
+                idle_instances_tx
+                    .clone()
+                    .send((instance, client))
+                    .map_err(|_| -> Error { unreachable!() })
+            )?;
         }
 
         Ok(())

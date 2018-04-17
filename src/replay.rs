@@ -26,19 +26,45 @@ pub enum Replay {
 /// Information about a player in a replay.
 #[derive(Debug, Copy, Clone)]
 pub struct ReplayPlayerInfo {
-    /// Id of the player.
     player_id: u32,
-    /// Player ranking.
     mmr: i32,
-    /// Player actions per minute.
     apm: i32,
 
-    /// Actual player race.
     race: Race,
-    /// Selected player race (if Random or None, race will be different).
     race_selected: Option<Race>,
-    /// If the player won or lost.
     game_result: Option<GameResult>,
+}
+
+impl ReplayPlayerInfo {
+    /// Id of the player.
+    pub fn get_player_id(&self) -> u32 {
+        self.player_id
+    }
+
+    /// Player ranking.
+    pub fn get_mmr(&self) -> i32 {
+        self.mmr
+    }
+
+    /// Player actions per minute.
+    pub fn get_apm(&self) -> i32 {
+        self.apm
+    }
+
+    /// Actual player race.
+    pub fn get_race(&self) -> Race {
+        self.race
+    }
+
+    /// Selected player race (if Random or None, race will be different).
+    pub fn get_race_selected(&self) -> Option<Race> {
+        self.race_selected
+    }
+
+    /// If the player won or lost.
+    pub fn get_game_result(&self) -> Option<GameResult> {
+        self.game_result
+    }
 }
 
 impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
@@ -83,27 +109,65 @@ impl FromProto<sc2api::PlayerInfoExtra> for ReplayPlayerInfo {
 /// Information about a replay file.
 #[derive(Debug, Clone)]
 pub struct ReplayInfo {
-    /// Name of the map.
     map_name: String,
-    /// Path to the map.
     map_path: String,
-    /// Version of the game.
     game_version: String,
-    /// Data version of the game.
     data_version: String,
 
-    /// Duration in seconds.
     duration: f32,
-    /// Duration in game steps.
     duration_steps: u32,
 
-    /// Data build of the game.
     data_build: u32,
-    /// Required base build of the game.
     base_build: u32,
 
-    /// Information about specific players.
     players: Vec<ReplayPlayerInfo>,
+}
+
+impl ReplayInfo {
+    /// Name of the map.
+    pub fn get_map_name(&self) -> &str {
+        &*self.map_name
+    }
+
+    /// Path to the map.
+    pub fn get_map_path(&self) -> &str {
+        &*self.map_path
+    }
+
+    /// Version of the game.
+    pub fn get_game_version(&self) -> &str {
+        &*self.game_version
+    }
+
+    /// Data version of the game.
+    pub fn get_data_version(&self) -> &str {
+        &*self.data_version
+    }
+
+    /// Duration in seconds.
+    pub fn get_duration(&self) -> f32 {
+        self.duration
+    }
+
+    /// Duration in game steps.
+    pub fn get_duration_in_steps(&self) -> u32 {
+        self.duration_steps
+    }
+
+    /// Data build of the game.
+    pub fn get_data_build(&self) -> u32 {
+        self.data_build
+    }
+
+    /// Required base build of the game.
+    pub fn get_base_build(&self) -> u32 {
+        self.base_build
+    }
+
+    /// Information about specific players.
+    pub fn get_players(&self) -> &[ReplayPlayerInfo] {
+        &*self.players
+    }
 }
 
 impl FromProto<sc2api::ResponseReplayInfo> for ReplayInfo {
@@ -133,6 +197,7 @@ impl FromProto<sc2api::ResponseReplayInfo> for ReplayInfo {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum SpectatorChoice {
     WatchPlayer(u32),
     Pass,
