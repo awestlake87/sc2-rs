@@ -11,9 +11,7 @@ test:cargo:
   script:
     - rustc --version
     - cargo --version
-    - cargo build --all --verbose
-    - cargo build --examples --verbose
-    - cargo test --verbose
+    - cargo test --all --verbose
   
 pages:
   stage: deploy

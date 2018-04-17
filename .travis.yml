@@ -21,9 +21,7 @@ jobs:
         - rustup default nightly-2018-04-11 # temporary hack to get it working
         - rustc --version
         - cargo --version
-        - cargo build --all --verbose
-        - cargo build --examples --verbose
-        - cargo test --verbose
+        - cargo test --all --verbose
 
     - stage: doc
       script:
