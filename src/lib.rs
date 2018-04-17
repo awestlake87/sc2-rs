@@ -42,13 +42,12 @@
 //! use futures::prelude::*;
 //! use futures::unsync::mpsc;
 //! use sc2::{
-//!     agent::{AgentBuilder},
+//!     melee::{AgentBuilder, MeleeSetup, MeleeBuilder},
 //!     ai::{OpponentBuilder},
-//!     data::{GameSetup, Map, Race},
+//!     data::{Map, Race},
 //!     observer::{Event, EventAck},
 //!
 //!     LauncherSettings,
-//!     MeleeBuilder,
 //!
 //!     Result,
 //!     Error,
@@ -116,7 +115,7 @@
 //!         .add_player(agent)
 //!         .add_player(OpponentBuilder::new())
 //!         .launcher_settings(LauncherSettings::new())
-//!         .one_and_done(GameSetup::new(Map::LocalMap(
+//!         .one_and_done(MeleeSetup::new(Map::LocalMap(
 //!             "maps/Ladder/(2)Bel'ShirVestigeLE (Void).SC2Map".into()
 //!         )))
 //!         .step_interval(1)
@@ -162,6 +161,7 @@ extern crate rand;
 extern crate regex;
 extern crate sc2_proto;
 extern crate tokio_core;
+extern crate tokio_process;
 extern crate tokio_timer;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
@@ -171,26 +171,24 @@ mod constants;
 mod instance;
 mod launcher;
 mod services;
+mod wine_utils;
 
 pub mod action;
-pub mod agent;
 pub mod ai;
 pub mod data;
 pub mod debug;
+pub mod melee;
 pub mod observer;
-pub mod spectator;
+pub mod replay;
 
 pub use self::launcher::LauncherSettings;
-pub use self::services::{
-    melee_service::MeleeBuilder,
-    replay_service::ReplayBuilder,
-};
 
 use std::path::PathBuf;
 
 error_chain! {
     foreign_links {
         Io(std::io::Error) #[doc="Link io errors."];
+        FromUtf8(std::string::FromUtf8Error) #[doc="Link UTF-8 errors"];
 
         Ctrlc(ctrlc::Error) #[doc="Link to Ctrl-C errors."];
         FutureCanceled(futures::Canceled) #[doc="Link to futures."];

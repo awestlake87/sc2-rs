@@ -65,9 +65,18 @@ impl ProtoClient {
                     })
             )?;
 
-            await!(rx.map_err(|_| -> Error {
+            let mut rsp = await!(rx.map_err(|_| -> Error {
                 unreachable!("{}: Request ack failed", sc2_bug_tag())
-            }))?
+            }))??;
+
+            if rsp.get_error().len() != 0 {
+                bail!(ErrorKind::GameErrors(
+                    rsp.take_error().into_iter().collect()
+                ))
+            }
+            else {
+                Ok(rsp)
+            }
         }
     }
 

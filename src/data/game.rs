@@ -52,21 +52,3 @@ pub enum Map {
     /// Specify a known blizzard map.
     BlizzardMap(String),
 }
-
-/// Settings for a game.
-#[derive(Debug, Clone)]
-pub struct GameSetup {
-    map: Map,
-}
-
-impl GameSetup {
-    /// Create a game setup for the given map.
-    pub fn new(map: Map) -> Self {
-        Self { map: map }
-    }
-
-    /// Get the map.
-    pub fn get_map(&self) -> &Map {
-        &self.map
-    }
-}

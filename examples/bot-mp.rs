@@ -23,11 +23,9 @@ use futures::unsync::mpsc;
 use rand::random;
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
-    agent::AgentBuilder,
     data::{
         Ability,
         Alliance,
-        GameSetup,
         Map,
         MapInfo,
         Point2,
@@ -36,10 +34,10 @@ use sc2::{
         UnitType,
         Vector2,
     },
+    melee::{AgentBuilder, MeleeBuilder, MeleeSetup},
     observer::{Event, EventAck, Observation, ObserverClient},
     Error,
     LauncherSettings,
-    MeleeBuilder,
     Result,
 };
 use tokio_core::reactor;
@@ -99,7 +97,7 @@ fn create_melee(args: &Args) -> Result<MeleeBuilder> {
 
     let mut melee = MeleeBuilder::new()
         .launcher_settings(create_launcher_settings(&args)?)
-        .repeat_forever(GameSetup::new(map))
+        .repeat_forever(MeleeSetup::new(map))
         .break_on_ctrlc(args.flag_wine);
 
     if args.flag_realtime && args.flag_step_size.is_some() {

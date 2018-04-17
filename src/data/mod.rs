@@ -19,7 +19,7 @@ use {FromProto, IntoSc2, Result};
 
 pub use self::ability::{Ability, AbilityData};
 pub use self::buff::{Buff, BuffData};
-pub use self::game::{GameResult, GameSetup, Map, PlayerResult};
+pub use self::game::{GameResult, Map, PlayerResult};
 pub use self::image::ImageData;
 pub use self::map_info::MapInfo;
 pub use self::player::{Difficulty, PlayerSetup, Race};

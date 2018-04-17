@@ -25,23 +25,12 @@ use futures::prelude::*;
 use futures::unsync::mpsc;
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
-    agent::AgentBuilder,
     ai::OpponentBuilder,
-    data::{
-        Ability,
-        Alliance,
-        Difficulty,
-        GameSetup,
-        Map,
-        Point2,
-        Race,
-        Unit,
-        Vector2,
-    },
+    data::{Ability, Alliance, Difficulty, Map, Point2, Race, Unit, Vector2},
+    melee::{AgentBuilder, MeleeBuilder, MeleeSetup},
     observer::{Event, EventAck, Observation, ObserverClient},
     Error,
     LauncherSettings,
-    MeleeBuilder,
     Result,
 };
 use tokio_core::reactor;
@@ -99,7 +88,7 @@ fn create_melee(args: &Args) -> Result<MeleeBuilder> {
 
     let mut melee = MeleeBuilder::new()
         .launcher_settings(create_launcher_settings(&args)?)
-        .one_and_done(GameSetup::new(map))
+        .one_and_done(MeleeSetup::new(map))
         .break_on_ctrlc(args.flag_wine);
 
     if args.flag_realtime && args.flag_step_size.is_some() {

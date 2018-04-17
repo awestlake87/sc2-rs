@@ -7,10 +7,41 @@ use tokio_core::reactor;
 use url::Url;
 
 use constants::{sc2_bug_tag, warning_tag};
-use data::{GameSetup, PlayerSetup};
+use data::{Map, PlayerSetup};
 use launcher::{GamePorts, Launcher, LauncherSettings};
 use services::UpdateScheme;
+use wine_utils::convert_to_wine_path;
 use {Error, ErrorKind, Result};
+
+/// Settings for a game.
+#[derive(Debug, Clone)]
+pub struct MeleeSetup {
+    map: Map,
+}
+
+impl MeleeSetup {
+    /// Create a game setup for the given map.
+    pub fn new(map: Map) -> Self {
+        Self { map: map }
+    }
+
+    /// Get the map.
+    pub fn get_map(&self) -> &Map {
+        &self.map
+    }
+
+    #[async]
+    pub fn into_wine(self, handle: reactor::Handle) -> Result<MeleeSetup> {
+        match self.map {
+            Map::LocalMap(path) => {
+                let map = await!(convert_to_wine_path(path, handle))?;
+
+                Ok(MeleeSetup::new(Map::LocalMap(map)))
+            },
+            _ => Ok(self),
+        }
+    }
+}
 
 pub trait MeleeCompetitor {
     fn spawn(
@@ -54,7 +85,7 @@ impl MeleeBuilder {
     }
 
     /// Play one game with the given settings.
-    pub fn one_and_done(self, game: GameSetup) -> Self {
+    pub fn one_and_done(self, game: MeleeSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::OneAndDone(game)),
             ..self
@@ -62,7 +93,7 @@ impl MeleeBuilder {
     }
 
     /// Keep restarting game with the given settings.
-    pub fn repeat_forever(self, game: GameSetup) -> Self {
+    pub fn repeat_forever(self, game: MeleeSetup) -> Self {
         Self {
             suite: Some(MeleeSuite::EndlessRepeat(game)),
             ..self
@@ -144,9 +175,13 @@ impl MeleeBuilder {
         assert!(melee_clients.len() == 2);
 
         Ok(Melee {
+            handle: handle.clone(),
             suite: self.suite.unwrap(),
             update_scheme: self.update_scheme,
-            launcher: Launcher::create(self.launcher_settings.unwrap())?,
+            launcher: Launcher::create(
+                self.launcher_settings.unwrap(),
+                handle.clone(),
+            )?,
             agents: melee_clients,
 
             break_on_ctrlc: self.break_on_ctrlc,
@@ -155,11 +190,12 @@ impl MeleeBuilder {
 }
 
 enum MeleeSuite {
-    OneAndDone(GameSetup),
-    EndlessRepeat(GameSetup),
+    OneAndDone(MeleeSetup),
+    EndlessRepeat(MeleeSetup),
 }
 
 pub struct Melee {
+    handle: reactor::Handle,
     suite: MeleeSuite,
     agents: Vec<MeleeClient>,
     update_scheme: UpdateScheme,
@@ -174,28 +210,33 @@ impl IntoFuture for Melee {
     type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
 
     fn into_future(self) -> Self::Future {
-        Box::new(async_block! {
-            if self.break_on_ctrlc {
-                let (tx, rx) = sync::mpsc::channel(1);
+        let break_on_ctrlc = self.break_on_ctrlc;
+        let (tx, rx) = sync::mpsc::channel(1);
+        let future = self.run()
+            .select2(rx.into_future())
+            .then(|result| match result {
+                Ok(_) => Ok(()),
+                Err(Either::A((e, _))) => Err(e),
+                Err(Either::B((_, _))) => {
+                    panic!("{}: CTRL-C handler failed", sc2_bug_tag());
+                },
+            });
 
+        Box::new(async_block! {
+            if break_on_ctrlc {
                 ctrlc::set_handler(move || {
                     if let Err(e) = tx.clone().send(()).wait() {
-                        println!("{}: Unable to send Ctrl-C signal {:?}", warning_tag(), e);
+                        println!(
+                            "{}: Unable to send Ctrl-C signal {:?}",
+                            warning_tag(),
+                            e
+                        );
                     }
                 })?;
-
-                await!(
-                    self.run().select2(rx.into_future(),).then(
-                        |result| match result {
-                            Ok(_) => Ok(()),
-                            Err(Either::A((e, _))) => Err(e),
-                            Err(Either::B((_, _))) => {
-                                panic!("{}: CTRL-C handler failed", sc2_bug_tag());
-                            },
-                        },
-                    )
-                )?;
             }
+
+            await!(future)?;
+
             Ok(())
         })
     }
@@ -204,6 +245,7 @@ impl IntoFuture for Melee {
 impl Melee {
     #[async]
     fn run(mut self) -> Result<()> {
+        let handle = self.handle;
         let instance1 = self.launcher.launch()?;
         let mut maybe_instance2 = None;
         let mut maybe_ports = None;
@@ -211,26 +253,26 @@ impl Melee {
         let mut suite = Some(self.suite);
 
         while suite.is_some() {
-            let game = match suite.unwrap() {
-                MeleeSuite::OneAndDone(game) => {
+            let mut setup = match suite.unwrap() {
+                MeleeSuite::OneAndDone(setup) => {
                     suite = None;
-                    game
+                    setup
                 },
-                MeleeSuite::EndlessRepeat(game) => {
-                    suite = Some(MeleeSuite::EndlessRepeat(game.clone()));
-                    game
+                MeleeSuite::EndlessRepeat(setup) => {
+                    suite = Some(MeleeSuite::EndlessRepeat(setup.clone()));
+                    setup
                 },
             };
 
             let player1 = await!(
                 self.agents[0]
                     .clone()
-                    .get_player_setup(game.clone())
+                    .get_player_setup(setup.clone())
             )?;
             let player2 = await!(
                 self.agents[1]
                     .clone()
-                    .get_player_setup(game.clone())
+                    .get_player_setup(setup.clone())
             )?;
 
             let is_pvp = match (player1, player2) {
@@ -275,8 +317,17 @@ impl Melee {
                     await!(connect1.join(connect2))?;
                 }
 
+                // Potential race condition with Wine when called before
+                // connecting to the instance!!!
+                //
+                // Something about launching SC2 and executing winepath at the
+                // same time causes program to lock up.
+                if self.launcher.using_wine() {
+                    setup = await!(setup.into_wine(handle.clone()))?;
+                }
+
                 await!(self.agents[0].clone().create_game(
-                    game.clone(),
+                    setup.clone(),
                     vec![player1, player2],
                     self.update_scheme
                 ))?;
@@ -341,8 +392,18 @@ impl Melee {
                 assert!(player.1.is_player() && computer.1.is_computer());
 
                 await!(player.0.clone().connect(instance1.get_url()?))?;
+
+                // Potential race condition with Wine when called before
+                // connecting to the instance!!!
+                //
+                // Something about launching SC2 and executing winepath at the
+                // same time causes program to lock up.
+                if self.launcher.using_wine() {
+                    setup = await!(setup.into_wine(handle.clone()))?;
+                }
+
                 await!(player.0.clone().create_game(
-                    game.clone(),
+                    setup.clone(),
                     vec![player.1, computer.1],
                     self.update_scheme
                 ))?;
@@ -362,11 +423,11 @@ impl Melee {
 
 #[derive(Debug)]
 pub enum MeleeRequest {
-    PlayerSetup(GameSetup, oneshot::Sender<PlayerSetup>),
+    PlayerSetup(MeleeSetup, oneshot::Sender<PlayerSetup>),
     Connect(Url, oneshot::Sender<()>),
 
     CreateGame(
-        GameSetup,
+        MeleeSetup,
         Vec<PlayerSetup>,
         UpdateScheme,
         oneshot::Sender<()>,
@@ -391,7 +452,7 @@ pub struct MeleeClient {
 impl MeleeClient {
     /// Get a player setup from the agent.
     #[async]
-    pub fn get_player_setup(self, game: GameSetup) -> Result<PlayerSetup> {
+    pub fn get_player_setup(self, game: MeleeSetup) -> Result<PlayerSetup> {
         let (tx, rx) = oneshot::channel();
 
         await!(
@@ -441,7 +502,7 @@ impl MeleeClient {
     #[async]
     pub fn create_game(
         self,
-        game: GameSetup,
+        game: MeleeSetup,
         players: Vec<PlayerSetup>,
         update_scheme: UpdateScheme,
     ) -> Result<()> {

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::process;
 
+use tokio_core::reactor;
+use tokio_process::{Child, CommandExt};
 use url::Url;
 
 use constants::warning_tag;
@@ -26,17 +28,21 @@ pub struct InstanceSettings {
 
 #[derive(Debug)]
 pub struct Instance {
+    handle: reactor::Handle,
     kind: InstanceKind,
     exe: PathBuf,
     pwd: Option<PathBuf>,
     address: (String, u16),
     window_rect: Rect<u32>,
-    child: Option<process::Child>,
+    child: Option<Child>,
     pub ports: PortSet,
 }
 
 impl Instance {
-    pub fn from_settings(settings: InstanceSettings) -> Result<Self> {
+    pub fn launch(
+        settings: InstanceSettings,
+        handle: &reactor::Handle,
+    ) -> Result<Self> {
         let exe = match settings.exe {
             Some(exe) => {
                 if !exe.as_path().is_file() {
@@ -49,6 +55,7 @@ impl Instance {
         };
 
         Ok(Self {
+            handle: handle.clone(),
             kind: settings.kind,
             exe: exe,
             pwd: settings.pwd,
@@ -94,7 +101,7 @@ impl Instance {
             .arg("-windowHeight")
             .arg(window.h.to_string());
 
-        self.child = Some(cmd.spawn()?);
+        self.child = Some(cmd.spawn_async(&self.handle)?);
 
         Ok(())
     }
@@ -115,17 +122,5 @@ impl Instance {
         self.child = None;
 
         Ok(())
-    }
-}
-
-impl Drop for Instance {
-    fn drop(&mut self) {
-        if let Err(e) = self.kill() {
-            println!(
-                "{}: Unable to drop instance {:?}",
-                warning_tag(),
-                e
-            );
-        }
     }
 }

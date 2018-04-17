@@ -4,6 +4,7 @@ use std::path::{PathBuf, MAIN_SEPARATOR};
 use colored::Colorize;
 use glob::glob;
 use regex::Regex;
+use tokio_core::reactor;
 
 use constants::{sc2_bug_tag, warning_tag};
 use data::Rect;
@@ -29,6 +30,7 @@ pub struct GamePorts {
 
 /// Launches game instances upon request.
 pub struct Launcher {
+    handle: reactor::Handle,
     exe: PathBuf,
     pwd: Option<PathBuf>,
     current_port: u16,
@@ -81,7 +83,10 @@ impl LauncherSettings {
 
 impl Launcher {
     /// Build the settings object.
-    pub fn create(settings: LauncherSettings) -> Result<Self> {
+    pub fn create(
+        settings: LauncherSettings,
+        handle: reactor::Handle,
+    ) -> Result<Self> {
         let use_wine = if cfg!(target_os = "windows") && settings.use_wine {
             println!(
                 "{}: {}",
@@ -106,6 +111,7 @@ impl Launcher {
         let pwd = select_pwd(&dir, arch);
 
         Ok(Self {
+            handle: handle,
             exe: exe,
             pwd: pwd,
             current_port: settings.base_port,
@@ -114,28 +120,31 @@ impl Launcher {
     }
 
     pub fn launch(&mut self) -> Result<Instance> {
-        let mut instance = Instance::from_settings(InstanceSettings {
-            kind: {
-                if self.use_wine {
-                    InstanceKind::Wine
-                } else {
-                    InstanceKind::Native
-                }
+        let mut instance = Instance::launch(
+            InstanceSettings {
+                kind: {
+                    if self.use_wine {
+                        InstanceKind::Wine
+                    } else {
+                        InstanceKind::Native
+                    }
+                },
+                exe: Some(self.exe.clone()),
+                pwd: self.pwd.clone(),
+                address: ("127.0.0.1".into(), self.current_port),
+                window_rect: Rect::<u32> {
+                    x: 10,
+                    y: 10,
+                    w: 1024,
+                    h: 768,
+                },
+                ports: PortSet {
+                    game_port: self.current_port + 1,
+                    base_port: self.current_port + 2,
+                },
             },
-            exe: Some(self.exe.clone()),
-            pwd: self.pwd.clone(),
-            address: ("127.0.0.1".into(), self.current_port),
-            window_rect: Rect::<u32> {
-                x: 10,
-                y: 10,
-                w: 1024,
-                h: 768,
-            },
-            ports: PortSet {
-                game_port: self.current_port + 1,
-                base_port: self.current_port + 2,
-            },
-        })?;
+            &self.handle,
+        )?;
 
         self.current_port += 3;
 
@@ -158,6 +167,11 @@ impl Launcher {
         self.current_port += 3;
 
         ports
+    }
+
+    /// Check if we are using wine
+    pub fn using_wine(&self) -> bool {
+        self.use_wine
     }
 }
 

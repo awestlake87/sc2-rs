@@ -15,11 +15,17 @@ extern crate tokio_core;
 
 extern crate sc2;
 
-use std::path::PathBuf;
+use std::path::{PathBuf, MAIN_SEPARATOR};
 
 use docopt::Docopt;
 use futures::prelude::*;
-use sc2::{LauncherSettings, ReplayBuilder, Result};
+use glob::glob;
+use sc2::{
+    replay::{Replay, ReplayBuilder, ReplaySink},
+    Error,
+    LauncherSettings,
+    Result,
+};
 use tokio_core::reactor;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -40,6 +46,7 @@ Options:
   -m <path> --map=<path>                Path to the StarCraft II map.
   -s <count> --step-size=<count>        How many steps to take per call.
   -i <count> --max-instances=<count>    Max number of instances to use at once.
+  -r <path> --replay-dir=<path>         Path to a replay pack.
 ";
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +57,7 @@ struct Args {
     flag_version: bool,
     flag_step_size: Option<u32>,
     flag_max_instances: Option<usize>,
+    flag_replay_dir: Option<PathBuf>,
 }
 
 fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
@@ -75,6 +83,49 @@ fn create_replay(args: &Args) -> Result<ReplayBuilder> {
     Ok(replay)
 }
 
+#[async]
+fn glob_replays(replay_dir: PathBuf, sink: ReplaySink) -> Result<()> {
+    let pattern = format!(
+        "{}{}*.SC2Replay",
+        replay_dir.to_string_lossy(),
+        MAIN_SEPARATOR
+    );
+    let replay_glob = glob(&pattern).unwrap();
+
+    let mut at_least_one = false;
+    let mut num = 0;
+
+    for replay in replay_glob {
+        match replay {
+            Ok(path) => {
+                await!(
+                    sink.clone()
+                        .send(Replay::LocalReplay(path))
+                        .map_err(|_| Error::from("unable to send replay"))
+                )?;
+            },
+            Err(e) => eprintln!("{:?}", e),
+        }
+
+        at_least_one = true;
+
+        num += 1;
+
+        if num > 10 {
+            break;
+        }
+    }
+
+    if !at_least_one {
+        bail!(
+            "No replays matching the pattern {:?} were found",
+            pattern
+        )
+    }
+
+    Ok(())
+}
+
 quick_main!(|| -> sc2::Result<()> {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
@@ -88,9 +139,20 @@ quick_main!(|| -> sc2::Result<()> {
     let mut core = reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let replay = create_replay(&args)?.handle(&handle).create()?;
+    let replay = create_replay(&args)?.handle(&handle);
 
-    core.run(replay.into_future())?;
+    if args.flag_replay_dir.is_none() {
+        bail!("Replay Directory is required")
+    }
+
+    handle.spawn(
+        glob_replays(
+            args.flag_replay_dir.unwrap(),
+            replay.add_replay_sink(),
+        ).map_err(|e| panic!("glob failed! - {:#?}", e)),
+    );
+
+    core.run(replay.create()?.into_future())?;
 
     Ok(())
 });

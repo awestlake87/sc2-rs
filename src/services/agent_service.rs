@@ -7,8 +7,9 @@ use tokio_core::reactor;
 use url::Url;
 
 use constants::sc2_bug_tag;
-use data::{GameSetup, Map, PlayerSetup, Race};
+use data::{Map, PlayerSetup, Race};
 use launcher::GamePorts;
+use melee::MeleeSetup;
 use observer::{Event, EventAck};
 use services::{
     action_service::{
@@ -243,7 +244,7 @@ impl Agent {
 
     fn get_player_setup(
         &self,
-        game: GameSetup,
+        game: MeleeSetup,
     ) -> impl Future<Item = PlayerSetup, Error = Error> {
         let future = self.agent.get_player_setup(game);
 
@@ -262,7 +263,7 @@ impl Agent {
 
     fn create_game(
         &self,
-        settings: GameSetup,
+        settings: MeleeSetup,
         players: Vec<PlayerSetup>,
         update_scheme: UpdateScheme,
     ) -> impl Future<Item = (), Error = Error> {
@@ -479,7 +480,7 @@ pub struct AgentTerminal {
 impl AgentTerminal {
     fn get_player_setup(
         &self,
-        _game: GameSetup,
+        _game: MeleeSetup,
     ) -> impl Future<Item = PlayerSetup, Error = Error> {
         let race = self.race;
 

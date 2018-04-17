@@ -37,9 +37,9 @@ extern crate sc2;
 use futures::prelude::*;
 use futures::unsync::mpsc;
 use sc2::{
-    agent::{AgentBuilder},
+    melee::{AgentBuilder, MeleeSetup},
     ai::{OpponentBuilder},
-    data::{GameSetup, Map, Race},
+    data::{Map, Race},
     observer::{Event, EventAck},
     
     LauncherSettings,
@@ -118,7 +118,7 @@ fn main() {
         .add_player(agent)
         .add_player(OpponentBuilder::new())
         .launcher_settings(LauncherSettings::new())
-        .one_and_done(GameSetup::new(Map::LocalMap(
+        .one_and_done(MeleeSetup::new(Map::LocalMap(
             "maps/Ladder/(2)Bel'ShirVestigeLE (Void).SC2Map".into()
         )))
         .step_interval(1)

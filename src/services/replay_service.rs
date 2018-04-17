@@ -9,16 +9,13 @@ use tokio_core::reactor;
 use url::Url;
 
 use constants::{sc2_bug_tag, warning_tag};
-use data::{GameSetup, PlayerSetup};
+use data::PlayerSetup;
 use instance::Instance;
 use launcher::{GamePorts, Launcher, LauncherSettings};
+use replay::Replay;
 use services::UpdateScheme;
+use wine_utils::convert_to_wine_path;
 use {Error, ErrorKind, Result};
-
-#[derive(Debug, Clone)]
-pub enum Replay {
-    LocalReplay(PathBuf),
-}
 
 pub type ReplaySink = mpsc::Sender<Replay>;
 type ReplayStream = mpsc::Receiver<Replay>;
@@ -120,22 +117,24 @@ impl ReplayBuilder {
         }
 
         let handle = self.handle.unwrap();
+        let launcher =
+            Launcher::create(self.launcher_settings.unwrap(), handle.clone())?;
 
         Ok(ReplayCoordinator {
-            launcher: Launcher::create(self.launcher_settings.unwrap())?,
-
+            handle: handle,
+            launcher: launcher,
             break_on_ctrlc: self.break_on_ctrlc,
             max_instances: self.max_instances,
+
             replay_rx: self.replay_rx,
         })
     }
 }
 
 pub struct ReplayCoordinator {
+    handle: reactor::Handle,
     launcher: Launcher,
-
     break_on_ctrlc: bool,
-
     max_instances: usize,
 
     replay_rx: ReplayStream,
@@ -147,28 +146,34 @@ impl IntoFuture for ReplayCoordinator {
     type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
 
     fn into_future(self) -> Self::Future {
-        Box::new(async_block! {
-            if self.break_on_ctrlc {
-                let (tx, rx) = sync::mpsc::channel(1);
+        let break_on_ctrlc = self.break_on_ctrlc;
 
+        let (tx, rx) = sync::mpsc::channel(1);
+        let future = self.run()
+            .select2(rx.into_future())
+            .then(|result| match result {
+                Ok(_) => Ok(()),
+                Err(Either::A((e, _))) => Err(e),
+                Err(Either::B((_, _))) => {
+                    panic!("{}: CTRL-C handler failed", sc2_bug_tag());
+                },
+            });
+
+        Box::new(async_block! {
+            if break_on_ctrlc {
                 ctrlc::set_handler(move || {
                     if let Err(e) = tx.clone().send(()).wait() {
-                        println!("{}: Unable to send Ctrl-C signal {:?}", warning_tag(), e);
+                        println!(
+                            "{}: Unable to send Ctrl-C signal {:?}",
+                            warning_tag(),
+                            e
+                        );
                     }
                 })?;
-
-                await!(
-                    self.run().select2(rx.into_future(),).then(
-                        |result| match result {
-                            Ok(_) => Ok(()),
-                            Err(Either::A((e, _))) => Err(e),
-                            Err(Either::B((_, _))) => {
-                                panic!("{}: CTRL-C handler failed", sc2_bug_tag());
-                            },
-                        },
-                    )
-                )?;
             }
+
+            await!(future)?;
+
             Ok(())
         })
     }
@@ -185,7 +190,19 @@ impl ReplayCoordinator {
             .map_err(|_| -> Error { unreachable!() })
         {
             match replay {
-                Replay::LocalReplay(replay) => println!("{:?}", replay),
+                Replay::LocalReplay(replay) => {
+                    if self.launcher.using_wine() {
+                        println!(
+                            "{:?}",
+                            await!(convert_to_wine_path(
+                                replay,
+                                self.handle.clone()
+                            ))?
+                        )
+                    } else {
+                        println!("{:?}", replay)
+                    }
+                },
             }
         }
 
