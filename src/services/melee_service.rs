@@ -31,7 +31,7 @@ impl MeleeSetup {
     }
 
     #[async]
-    pub fn into_wine(self, handle: reactor::Handle) -> Result<MeleeSetup> {
+    fn into_wine(self, handle: reactor::Handle) -> Result<MeleeSetup> {
         match self.map {
             Map::LocalMap(path) => {
                 let map = await!(convert_to_wine_path(path, handle))?;

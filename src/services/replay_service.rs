@@ -1,31 +1,27 @@
 use std::path::PathBuf;
 
 use ctrlc;
-use futures::future::Either;
-use futures::prelude::*;
-use futures::sync;
-use futures::unsync::{mpsc, oneshot};
+use futures::{
+    future::{join_all, Either},
+    prelude::*,
+    sync,
+    unsync::{mpsc, oneshot},
+};
+use sc2_proto::sc2api;
 use tokio_core::reactor;
-use url::Url;
 
 use constants::{sc2_bug_tag, warning_tag};
-use data::PlayerSetup;
-use instance::Instance;
-use launcher::{GamePorts, Launcher, LauncherSettings};
-use replay::Replay;
-use services::UpdateScheme;
+use launcher::{Launcher, LauncherSettings};
+use replay::{Replay, ReplayInfo};
+use services::client_service::{ProtoClient, ProtoClientBuilder};
 use wine_utils::convert_to_wine_path;
-use {Error, ErrorKind, Result};
+use {Error, ErrorKind, FromProto, Result};
 
 pub type ReplaySink = mpsc::Sender<Replay>;
 type ReplayStream = mpsc::Receiver<Replay>;
 
 pub trait ReplayObserver {
-    fn spawn(
-        &mut self,
-        handle: &reactor::Handle,
-        controller: mpsc::Receiver<ReplayRequest>,
-    ) -> Result<()>;
+    fn spawn(&mut self, handle: &reactor::Handle) -> Result<()>;
 }
 
 /// Build a Replay coordinator.
@@ -34,7 +30,7 @@ pub struct ReplayBuilder {
     break_on_ctrlc: bool,
     handle: Option<reactor::Handle>,
 
-    max_instances: usize,
+    num_instances: usize,
 
     replay_tx: ReplaySink,
     replay_rx: ReplayStream,
@@ -50,7 +46,7 @@ impl ReplayBuilder {
             break_on_ctrlc: false,
             handle: None,
 
-            max_instances: 1,
+            num_instances: 1,
             replay_tx: tx,
             replay_rx: rx,
         }
@@ -83,10 +79,15 @@ impl ReplayBuilder {
         unimplemented!()
     }
 
-    /// Set the maximum number of instances the Replay coordinator can create.
-    pub fn max_instances(self, max: usize) -> Self {
+    /// The number of instances to create for replays.
+    pub fn num_instances(self, num: usize) -> Self {
+        assert!(
+            num > 0,
+            "Replay coordinator needs at least 1 instance"
+        );
+
         Self {
-            max_instances: max,
+            num_instances: num,
             ..self
         }
     }
@@ -124,7 +125,7 @@ impl ReplayBuilder {
             handle: handle,
             launcher: launcher,
             break_on_ctrlc: self.break_on_ctrlc,
-            max_instances: self.max_instances,
+            num_instances: self.num_instances,
 
             replay_rx: self.replay_rx,
         })
@@ -135,7 +136,7 @@ pub struct ReplayCoordinator {
     handle: reactor::Handle,
     launcher: Launcher,
     break_on_ctrlc: bool,
-    max_instances: usize,
+    num_instances: usize,
 
     replay_rx: ReplayStream,
 }
@@ -182,27 +183,74 @@ impl IntoFuture for ReplayCoordinator {
 impl ReplayCoordinator {
     #[async]
     fn run(mut self) -> Result<()> {
-        let mut max_instances: Vec<Instance> =
-            Vec::with_capacity(self.max_instances);
+        // Sanity check because we should have checked for this earlier.
+        debug_assert!(
+            self.num_instances > 0,
+            "Replay coordinator needs at least 1 instance"
+        );
+
+        let (idle_tx, idle_rx) = mpsc::channel(self.num_instances);
+
+        let mut connect_futures = vec![];
+
+        for _ in 0..self.num_instances {
+            let instance = self.launcher.launch()?;
+            let client_service = ProtoClientBuilder::new();
+            let client = client_service.add_client();
+
+            client_service.spawn(&self.handle)?;
+
+            connect_futures.push(client.connect(instance.get_url()?));
+
+            await!(
+                idle_tx
+                    .clone()
+                    .send((instance, ReplayClient::wrap(client)))
+                    .map_err(|_| -> Error {
+                        unreachable!(
+                            "{}: Unable to queue idle instance",
+                            sc2_bug_tag()
+                        )
+                    })
+            )?;
+        }
+
+        await!(join_all(connect_futures))?;
 
         #[async]
-        for replay in self.replay_rx
-            .map_err(|_| -> Error { unreachable!() })
+        for (instance, client) in
+            idle_rx.map_err(|_| -> Error { unreachable!() })
         {
-            match replay {
-                Replay::LocalReplay(replay) => {
-                    if self.launcher.using_wine() {
-                        println!(
-                            "{:?}",
-                            await!(convert_to_wine_path(
-                                replay,
+            println!("got idle instance");
+
+            let more_replays = loop {
+                let item = await_item!(self.replay_rx)
+                    .map_err(|_| -> Error { unreachable!() })?;
+
+                let replay = match item {
+                    Some(Replay::LocalReplay(path)) => {
+                        if self.launcher.using_wine() {
+                            Replay::LocalReplay(await!(convert_to_wine_path(
+                                path,
                                 self.handle.clone()
-                            ))?
-                        )
-                    } else {
-                        println!("{:?}", replay)
-                    }
-                },
+                            ))?)
+                        } else {
+                            Replay::LocalReplay(path)
+                        }
+                    },
+
+                    // Replay stream ended, so no more replays.
+                    None => break false,
+                };
+
+                let replay_info = await!(client.get_replay_info(replay, true))?;
+
+                println!("got replay info {:#?}", replay_info);
+            };
+
+            if !more_replays {
+                // No more replays, exit loop.
+                break;
             }
         }
 
@@ -210,14 +258,44 @@ impl ReplayCoordinator {
     }
 }
 
-#[derive(Debug)]
-pub enum ReplayRequest {
-}
-
-/// Wrapper around a sender to provide a replay interface.
+/// Wrapper around a ProtoClient to communicate with game instance.
 #[derive(Debug, Clone)]
-pub struct ReplayClient {
-    tx: mpsc::Sender<ReplayRequest>,
+struct ReplayClient {
+    client: ProtoClient,
 }
 
-impl ReplayClient {}
+impl ReplayClient {
+    fn wrap(client: ProtoClient) -> Self {
+        Self { client: client }
+    }
+
+    fn get_replay_info(
+        &self,
+        replay: Replay,
+        download_data: bool,
+    ) -> impl Future<Item = ReplayInfo, Error = Error> {
+        let mut req = sc2api::Request::new();
+
+        match replay {
+            Replay::LocalReplay(path) => req.mut_replay_info()
+                .set_replay_path(path.to_string_lossy().to_string()),
+        }
+
+        req.mut_replay_info()
+            .set_download_data(download_data);
+
+        let future = self.client.request(req);
+
+        async_block! {
+            let mut rsp = await!(future)?;
+
+            ReplayInfo::from_proto(rsp.take_replay_info())
+        }
+    }
+}
+
+impl Into<ProtoClient> for ReplayClient {
+    fn into(self) -> ProtoClient {
+        self.client
+    }
+}

@@ -75,10 +75,15 @@ fn create_launcher_settings(args: &Args) -> Result<LauncherSettings> {
 }
 
 fn create_replay(args: &Args) -> Result<ReplayBuilder> {
+    const DEFAULT_MAX_INSTANCES: usize = 2;
+
     let replay = ReplayBuilder::new()
         .launcher_settings(create_launcher_settings(args)?)
         .break_on_ctrlc(args.flag_wine)
-        .max_instances(args.flag_max_instances.unwrap_or(2));
+        .num_instances(
+            args.flag_max_instances
+                .unwrap_or(DEFAULT_MAX_INSTANCES),
+        );
 
     Ok(replay)
 }
