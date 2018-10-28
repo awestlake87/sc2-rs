@@ -1,4 +1,4 @@
-#![feature(proc_macro, generators)]
+#![feature(generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::unsync::mpsc;
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
