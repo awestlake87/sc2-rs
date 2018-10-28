@@ -246,9 +246,7 @@ impl MarineMicroBot {
 
                 self.move_back = true;
                 self.backup_start = Some(marine_pos);
-                self.backup_target = Some(Point2::from_coordinates(
-                    marine_pos.coords + direction * 3.0,
-                ));
+                self.backup_target = Some(Point2::from(marine_pos.coords + direction * 3.0));
             }
         }
         Ok(self)
@@ -265,9 +263,7 @@ fn get_center_of_mass(units: &[Rc<Unit>]) -> Option<Point2> {
                 acc + u.get_pos_2d().coords
             });
 
-        Some(Point2::from_coordinates(
-            sum / (units.len() as f32),
-        ))
+        Some(Point2::from(sum / (units.len() as f32)))
     }
 }
 

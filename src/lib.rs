@@ -155,6 +155,7 @@ extern crate error_chain;
 extern crate bytes;
 extern crate colored;
 extern crate ctrlc;
+extern crate dirs;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;

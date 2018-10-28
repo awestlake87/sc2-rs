@@ -25,6 +25,7 @@ tokio-timer = "0.1"
 tokio-tungstenite = "0.5"
 tungstenite = "0.5"
 url = "1.6"
+dirs = "1.0.4"
 
 [dev-dependencies]
 docopt = "0.8"
