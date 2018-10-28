@@ -33,13 +33,14 @@
 //! now, though, a message is good enough.
 //!
 //! ```no_run
-//! #![feature(proc_macro, generators)]
+//! #![feature(generators)]
 //!
 //! extern crate futures_await as futures;
 //! extern crate tokio_core;
 //! extern crate sc2;
 //!
 //! use futures::prelude::*;
+//! use futures::prelude::await;
 //! use futures::unsync::mpsc;
 //! use sc2::{
 //!     agent::{AgentBuilder},
@@ -146,7 +147,7 @@
 
 #![warn(missing_docs)]
 #![recursion_limit = "1024"]
-#![feature(proc_macro, generators)]
+#![feature(proc_macro_hygiene, generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -154,6 +155,7 @@ extern crate error_chain;
 extern crate bytes;
 extern crate colored;
 extern crate ctrlc;
+extern crate dirs;
 extern crate futures_await as futures;
 extern crate glob;
 extern crate nalgebra as na;

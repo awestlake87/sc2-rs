@@ -1,4 +1,4 @@
-#![feature(proc_macro, generators)]
+#![feature(generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::unsync::mpsc;
 use rand::random;
 use sc2::{

@@ -1,6 +1,7 @@
 use std::mem;
 
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::unsync::{mpsc, oneshot};
 use sc2_proto::sc2api;
 use tokio_core::reactor;

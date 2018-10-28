@@ -2,6 +2,7 @@ use std::{io, mem, time};
 
 use bytes::{Buf, BufMut};
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::unsync::{mpsc, oneshot};
 use protobuf::{self, parse_from_reader, Message};
 use sc2_proto::sc2api::{Request, Response};

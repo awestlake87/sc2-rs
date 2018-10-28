@@ -1,4 +1,4 @@
-#![feature(proc_macro, generators)]
+#![feature(generators)]
 
 #[macro_use]
 extern crate error_chain;
@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 use docopt::Docopt;
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::unsync::mpsc;
 use sc2::{
     action::{Action, ActionClient, ActionTarget},
@@ -245,9 +246,7 @@ impl MarineMicroBot {
 
                 self.move_back = true;
                 self.backup_start = Some(marine_pos);
-                self.backup_target = Some(Point2::from_coordinates(
-                    marine_pos.coords + direction * 3.0,
-                ));
+                self.backup_target = Some(Point2::from(marine_pos.coords + direction * 3.0));
             }
         }
         Ok(self)
@@ -264,9 +263,7 @@ fn get_center_of_mass(units: &[Rc<Unit>]) -> Option<Point2> {
                 acc + u.get_pos_2d().coords
             });
 
-        Some(Point2::from_coordinates(
-            sum / (units.len() as f32),
-        ))
+        Some(Point2::from(sum / (units.len() as f32)))
     }
 }
 

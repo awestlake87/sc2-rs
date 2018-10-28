@@ -1,4 +1,4 @@
-#![feature(proc_macro, generators)]
+#![feature(generators)]
 
 #[macro_use]
 extern crate error_chain;

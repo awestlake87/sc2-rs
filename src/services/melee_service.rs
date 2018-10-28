@@ -1,6 +1,7 @@
 use ctrlc;
 use futures::future::Either;
 use futures::prelude::*;
+use futures::prelude::await;
 use futures::sync;
 use futures::unsync::{mpsc, oneshot};
 use tokio_core::reactor;
